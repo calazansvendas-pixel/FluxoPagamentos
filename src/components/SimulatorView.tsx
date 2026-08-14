@@ -347,61 +347,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         </button>
                       </div>
 
-                      {/* RESUMO INSTANTÂNEO COM AS 2 SEÇÕES OBRIGATÓRIAS (Sem Ato Premiado) */}
-                      {calcPreview && (
-                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 text-xs space-y-3 mt-4 animate-fade-in">
-                          
-                          {/* Bloco 1: DADOS DA APROVAÇÃO */}
-                          <div className="grid grid-cols-2 gap-3 border-b border-slate-200/60 pb-3">
-                            <div>
-                              <span className="text-slate-500 font-medium block">Sinal Total</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.sinalTotal || 0)}</strong>
-                            </div>
-                            <div>
-                              <span className="text-slate-500 font-medium block">Sinal Total com ITBI</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.totalComITBI || 0)}</strong>
-                            </div>
-                          </div>
-
-                          {/* Bloco 2: FLUXO MORAR CONSTRUTORA */}
-                          <div className="grid grid-cols-2 gap-3 border-b border-slate-200/60 pb-3">
-                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
-                              <span className="text-slate-500 font-medium block text-[11px] mb-0.5">Pagamento Ato (Imóvel)</span>
-                              <strong className="text-sky-700 font-extrabold text-sm block">{formatCurrency(calcPreview.pagamentoAto || 0)}</strong>
-                            </div>
-                            <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 shadow-sm flex flex-col justify-center">
-                              <span className="text-amber-700 font-semibold block text-[11px] flex items-center gap-1 mb-0.5">
-                                <Sparkles className="w-3.5 h-3.5" /> Ato Premiado (Desconto)
-                              </span>
-                              <strong className="text-amber-800 font-extrabold text-sm block">{formatCurrency(calcPreview.atoPremiado || 0)}</strong>
-                            </div>
-                          </div>
-
-                          {/* Bloco 3: PARCELAMENTO PRÓ-SOLUTO */}
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <span className="text-slate-500 font-medium block">Pró-Soluto (Sinal Restante)</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.proSolutoRestante || 0)}</strong>
-                            </div>
-                            <div>
-                              <span className="text-slate-500 font-medium block">Despesas Cartorárias & ITBI</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.propertyITBI || 0)}</strong>
-                            </div>
-                            <div>
-                              {/* EXIGÊNCIA EXPLÍCITA: PRO SOLUTO TOTAL C/ ITBI = proSolutoTotal */}
-                              <span className="text-slate-500 font-medium block">Pró-Soluto Total c/ ITBI</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.proSolutoTotal || 0)}</strong>
-                            </div>
-                            <div>
-                              <span className="text-slate-600 font-semibold block flex items-center gap-1 mb-0.5">
-                                <Coins className="w-3.5 h-3.5 text-emerald-600" /> 1ª e Última Parcela
-                              </span>
-                              <strong className="text-emerald-700 font-extrabold text-[13px]">{formatCurrency(calcPreview.parcelaPrice || 0)}</strong>
-                            </div>
-                          </div>
-
-                        </div>
-                      )}
+                      {/* The financial summary block was removed per user request */}
 
                     </div>
                   );

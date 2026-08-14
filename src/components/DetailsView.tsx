@@ -42,9 +42,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [selectedTorre, setSelectedTorre] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
 
-  const [valAto, setValAto] = useState<number>(0);
+  const [valAtoManual, setValAtoManual] = useState<number | null>(null);
+  const [atoInputText, setAtoInputText] = useState<string>('');
+  const [isEditingAto, setIsEditingAto] = useState<boolean>(false);
   const [valAtoITBI, setValAtoITBI] = useState<number>(0);
   const [valAtoPremiado, setValAtoPremiado] = useState<number>(0);
+  const [isAtoPremiadoEnabled, setIsAtoPremiadoEnabled] = useState<boolean>(true);
   const [valParc2, setValParc2] = useState<number>(0);
   const [valParc3, setValParc3] = useState<number>(0);
 
@@ -70,12 +73,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // Garante a limpeza do estado residual na memória e o reset dinâmico da Qtd. Mensais para o teto do produto selecionado.
   useEffect(() => {
     if (currentProd && currentCond) {
-      setValAto(0);
+      setValAtoManual(null);
+      setAtoInputText('');
+      setIsEditingAto(false);
       setValAtoITBI(0);
       setValAtoPremiado(0);
       setValParc2(0);
       setValParc3(0);
       setQtdMensais(limiteMaximoParcelas);
+      setIsAtoPremiadoEnabled(true);
     }
   }, [currentProd?.id, currentCond?.id, limiteMaximoParcelas]);
 
@@ -158,9 +164,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const handleResetFicha = () => {
     setSelectedTorre('');
     setSelectedUnidade('');
-    setValAto(0);
+    setValAtoManual(null);
+    setAtoInputText('');
+    setIsEditingAto(false);
     setValAtoITBI(0);
     setValAtoPremiado(0);
+    setIsAtoPremiadoEnabled(true);
     setValParc2(0);
     setValParc3(0);
     if (currentCond) {
@@ -308,7 +317,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - riscoMaximoApuradoBruto);
 
       // j) novoAtoPremiado = Exatamente 10% do Pagamento Ato (Sinal Efetivo), caso o Ato Bruto seja >= 5000
-      const novoAtoPremiado = (atoBrutoCalculado >= 5000) 
+      const novoAtoPremiado = (isAtoPremiadoEnabled && atoBrutoCalculado >= 5000) 
         ? Math.min(pagamentoAtoSinalEfetivo * 0.10, 5000) 
         : 0;
 
@@ -340,22 +349,21 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const mens30d = valParc2 || 0;
   const mens60d = valParc3 || 0;
   const somaMensais = mens30d + mens60d;
+
+  const atoImovelDigitado = (valAtoManual !== null && valAtoManual >= atoMinimoCalculado)
+    ? valAtoManual
+    : atoMinimoCalculado;
+
+  // Se o usuário digitou mensais 30d/60d, abate primeiro do Ato (até o piso de 2k)
   let saldoParaAbater = somaMensais;
-
-  const atoImovelDigitado = valAto > 0 ? valAto : atoMinimoCalculado;
-
-  // 2. EXECUÇÃO DA FILA SEQUENCIAL DE ABATIMENTO (ETAPAS 1, 2, 3 E 4)
-
-  // ETAPA 1 (ATO / SINAL - PISO 2K):
-  // Abata o SaldoParaAbater do PagamentoAtoImovel, mas NUNCA permita que ele fique menor que R$ 2.000,00.
   const disponivelAbatimentoAto = Math.max(0, atoImovelDigitado - 2000);
   const atoAbsorvido = Math.min(disponivelAbatimentoAto, saldoParaAbater);
   let atoAposMensais = atoImovelDigitado - atoAbsorvido;
   saldoParaAbater -= atoAbsorvido;
 
-  // Recalculo do Ato Premiado (desconto da Construtora) para o novo Ato do Imóvel
+  // Recálculo do Ato Premiado (desconto da Construtora) para o novo Ato do Imóvel
   let novoAtoPremiado = 0;
-  if (atoAposMensais >= 4500) {
+  if (isAtoPremiadoEnabled && atoAposMensais >= 4500) {
     let currAtoEfetivo = atoAposMensais;
     let currAtoPremiado = 0;
     for (let iter = 0; iter < 100; iter++) {
@@ -372,116 +380,70 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     novoAtoPremiado = currAtoPremiado;
   }
 
-  // ETAPA 2 (PRÓ-SOLUTO - SINAL RESTANTE / DIRETO):
-  // SE SaldoParaAbater > 0, abata do Pró-Soluto do Sinal Restante até zerá-lo.
-  // Note: O ITBI permanece intacto isolado em seu próprio saldo neste momento.
-  const proSolutoSinalRestanteBase = Math.max(0, gapInicial - (atoAposMensais + novoAtoPremiado));
-  let proSolutoAbsorvido = 0;
-  let novoProSolutoSinalRestante = proSolutoSinalRestanteBase;
+  // CASCATA OBRIGATÓRIA DE AMORTIZAÇÃO DO SALDO EXCEDENTE:
+  // Saldo Excedente = (Valor Digitado no Ato - Valor Sugerido Inicial) + sobras de mensais
+  const excedenteAto = Math.max(0, atoImovelDigitado - atoMinimoCalculado);
+  let saldoExcedente = excedenteAto + saldoParaAbater;
 
-  if (saldoParaAbater > 0) {
-    proSolutoAbsorvido = Math.min(proSolutoSinalRestanteBase, saldoParaAbater);
-    novoProSolutoSinalRestante = proSolutoSinalRestanteBase - proSolutoAbsorvido;
-    saldoParaAbater -= proSolutoAbsorvido;
+  // Base do Pró-Soluto do Imóvel (apenas a parcela da construtora, excluindo ITBI)
+  const proSolutoImovelBase = hasUnitSelected 
+    ? Math.max(0, riscoMaximoApuradoBruto - despCartorias) 
+    : 0;
+
+  // a) 1º Nível - Abater o Pró-Soluto do Imóvel
+  let proSolutoImovelAbatido = 0;
+  let novoProSolutoImovel = proSolutoImovelBase;
+  if (saldoExcedente > 0) {
+    proSolutoImovelAbatido = Math.min(proSolutoImovelBase, saldoExcedente);
+    novoProSolutoImovel = proSolutoImovelBase - proSolutoImovelAbatido;
+    saldoExcedente -= proSolutoImovelAbatido;
   }
 
-  // ETAPA 3 (FINANCIAMENTO BANCÁRIO - MAX FINANC):
-  // SE SaldoParaAbater > 0 (ou seja, o Pró-Soluto do Sinal Restante já está em R$ 0,00), abata do Financiamento Bancário.
+  // b) 2º Nível - Abater o Financiamento Bancário
   let maxFinancEfetivo = maxFinanc;
-  let bancoAbsorvido = 0;
-
-  if (saldoParaAbater > 0) {
-    bancoAbsorvido = Math.min(maxFinancEfetivo, saldoParaAbater);
-    maxFinancEfetivo -= bancoAbsorvido;
-    saldoParaAbater -= bancoAbsorvido;
+  let bancoAbatido = 0;
+  if (saldoExcedente > 0) {
+    bancoAbatido = Math.min(maxFinancEfetivo, saldoExcedente);
+    maxFinancEfetivo -= bancoAbatido;
+    saldoExcedente -= bancoAbatido;
   }
 
-  // ETAPA 4 (FGTS / SUBSÍDIO):
-  // SE SaldoParaAbater > 0 (Financiamento zerado), abata a sobra do FGTS até zerar e, em seguida, do Subsídio.
+  // c) 3º Nível - Abater o FGTS e Subsídio
   let fgtsEfetivo = fgts;
+  let fgtsAbatido = 0;
+  if (saldoExcedente > 0) {
+    fgtsAbatido = Math.min(fgtsEfetivo, saldoExcedente);
+    fgtsEfetivo -= fgtsAbatido;
+    saldoExcedente -= fgtsAbatido;
+  }
+
   let subsidyEfetivo = subsidy;
-
-  if (saldoParaAbater > 0) {
-    const fgtsAbsorvido = Math.min(fgtsEfetivo, saldoParaAbater);
-    fgtsEfetivo -= fgtsAbsorvido;
-    saldoParaAbater -= fgtsAbsorvido;
+  let subsidyAbatido = 0;
+  if (saldoExcedente > 0) {
+    subsidyAbatido = Math.min(subsidyEfetivo, saldoExcedente);
+    subsidyEfetivo -= subsidyAbatido;
+    saldoExcedente -= subsidyAbatido;
   }
 
-  if (saldoParaAbater > 0) {
-    const subsidyAbsorvido = Math.min(subsidyEfetivo, saldoParaAbater);
-    subsidyEfetivo -= subsidyAbsorvido;
-    saldoParaAbater -= subsidyAbsorvido;
-  }
-
-  const poderDePagamentoImovel = atoAposMensais + novoAtoPremiado;
-  const novoSinalTotal = Math.max(0, price - (maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo));
-
-  // 2. CAMPO 2: "PAGAMENTO ITBI NO ATO" - valAtoITBI
+  // 3. REGRA ISOLADA PARA DESPESAS CARTORÁRIAS & ITBI:
+  // O saldo de ITBI e Despesas Cartorárias NUNCA deve ser amortizado pelo excedente do Pagamento do Ato.
+  // O ITBI/Despesas só é reduzido/abatido se o usuário preencher expressamente o campo "PAGAMENTO ITBI NO ATO".
   const valorTotalITBI = despCartorias;
   const atoITBIValidado = Math.min(valAtoITBI, valorTotalITBI);
   const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
-  const sobrasITBI = saldoITBI;
+  const despCartoriasEfetivas = saldoITBI;
 
-  // 3. NOVO FECHAMENTO DIRETO E MATEMÁTICO DO PRÓ-SOLUTO LÍQUIDO:
-  // NovoProSolutoLiquido = (PrecoTabela + SaldoITBI) - (MaxFinanc + Subsidio + FGTS + AtoImovel + AtoPremiado + Mensal30D + Mensal60D + AtoITBI)
-  const proSolutoTetoMaximo = hasUnitSelected ? riscoMaximoApuradoBruto : 0;
-  const precoTabelaComITBI = price + valorTotalITBI;
-  const totalRecursosAplicados = maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo + atoAposMensais + novoAtoPremiado + mens30d + mens60d + atoITBIValidado;
-  let proSolutoTotalLiquido = Math.max(0, precoTabelaComITBI - totalRecursosAplicados);
-
-  // 4. TRAVA RIGOROSA DO PRÓ-SOLUTO LÍQUIDO & REDIRECIONAMENTO AUTOMÁTICO DO EXCESSO PARA O ATO
-  if (hasUnitSelected && proSolutoTetoMaximo > 0 && proSolutoTotalLiquido > proSolutoTetoMaximo + 0.0001) {
-    const excessoCredito = proSolutoTotalLiquido - proSolutoTetoMaximo;
-    const metaEntradaComposto = (atoAposMensais + novoAtoPremiado) + excessoCredito;
-
-    let currAtoEfetivo = Math.max(2000, metaEntradaComposto);
-    let currAtoPremiado = 0;
-
-    if (metaEntradaComposto < 2000) {
-      currAtoEfetivo = 2000;
-      currAtoPremiado = 0;
-    } else {
-      // Loop de equalização e convergência iterativa entre Ato Efetivo e Ato Premiado para o excesso
-      for (let iter = 0; iter < 100; iter++) {
-        const atoBrutoCalculado = currAtoEfetivo + currAtoPremiado;
-        const novoDesc = (atoBrutoCalculado >= 5000 && currAtoEfetivo >= 4500)
-          ? Math.min(currAtoEfetivo * 0.10, 5000)
-          : 0;
-
-        const lacuna = metaEntradaComposto - (currAtoEfetivo + novoDesc);
-        currAtoPremiado = novoDesc;
-
-        if (Math.abs(lacuna) < 0.0001) {
-          break;
-        }
-        currAtoEfetivo += lacuna;
-      }
-    }
-
-    atoAposMensais = currAtoEfetivo;
-    novoAtoPremiado = currAtoPremiado;
-
-    // Recalcula total de recursos e fixa Pró-Soluto no teto máximo
-    const totalRecursosAtualizado = maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo + atoAposMensais + novoAtoPremiado + mens30d + mens60d + atoITBIValidado;
-    proSolutoTotalLiquido = Math.min(proSolutoTetoMaximo, Math.max(0, precoTabelaComITBI - totalRecursosAtualizado));
-  }
-
-  // Sobra do Imóvel (Sinal Restante do Imóvel)
-  const sobrasImovel = Math.max(0, proSolutoTotalLiquido - sobrasITBI);
-
-  // Recalculo do Pró-Soluto Bruto (Risco Máximo) revertendo a taxa bancária de 0,20029%
-  const proSolutoTotalBruto = proSolutoTotalLiquido > 0 ? (proSolutoTotalLiquido / (1 - 0.0020029)) : 0;
-  const taxaBancariaEfetiva = proSolutoTotalBruto * 0.0020029;
+  // Pró-Soluto Total Parcelado = Pró-Soluto do Imóvel (após amortização do excedente) + Saldo de ITBI
+  const proSolutoTotalParcelado = hasUnitSelected ? (novoProSolutoImovel + saldoITBI) : 0;
+  const proSolutoTotalPainel = proSolutoTotalParcelado;
+  const proSoluto = novoProSolutoImovel;
 
   const totalNegocEfetivo = hasUnitSelected ? (maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo) : 0;
-  const sinalTotal = novoSinalTotal;
+  const sinalTotal = Math.max(0, price - totalNegocEfetivo);
   const descontoAto = novoAtoPremiado;
-  const despCartoriasEfetivas = saldoITBI;
 
   const atoEfetivo = atoAposMensais + atoITBIValidado;
   const atoBruto = atoEfetivo + descontoAto;
-
-  const tetoMinimo = hasUnitSelected ? riscoMaximoApuradoBruto : 0;
 
   // Sync valAtoPremiado com descontoAto diretamente no campo "ATO PREMIADO"
   useEffect(() => {
@@ -492,26 +454,81 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   }, [hasUnitSelected, descontoAto]);
 
-  // Sync valAto inicial/elevado quando unidade é selecionada ou necessidade de Ato aumenta
-  useEffect(() => {
-    if (hasUnitSelected) {
-      const minAto = Math.max(atoMinimoCalculado, atoAposMensais);
-      if (valAto === 0 || valAto < minAto) {
-        setValAto(minAto);
+  // Função utilitária para converter inputs flexíveis em número monetário
+  const parseFlexibleCurrency = (input: string | number): number => {
+    if (input === null || input === undefined || input === '') return 0;
+    if (typeof input === 'number') return isNaN(input) ? 0 : input;
+
+    let str = String(input).trim();
+    str = str.replace(/^R\$\s*/i, '').trim();
+    if (!str) return 0;
+
+    if (str.includes(',')) {
+      const clean = str.replace(/\./g, '').replace(',', '.');
+      const val = parseFloat(clean);
+      return isNaN(val) ? 0 : val;
+    }
+
+    if (str.includes('.')) {
+      const parts = str.split('.');
+      if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+        const clean = str.replace(/\./g, '');
+        const val = parseFloat(clean);
+        return isNaN(val) ? 0 : val;
+      }
+      const val = parseFloat(str);
+      return isNaN(val) ? 0 : val;
+    }
+
+    const val = parseFloat(str);
+    return isNaN(val) ? 0 : val;
+  };
+
+  // Gatilho executado exclusivamente ao término da digitação (onBlur ou Enter)
+  const handleFinishAtoEdit = (rawText: string) => {
+    setIsEditingAto(false);
+    const inputVal = parseFlexibleCurrency(rawText);
+    const maxAtoPermitido = price > 0 ? Math.max(0, price - descontoAto) : 0;
+
+    if (rawText.trim() === '' || inputVal === 0) {
+      setValAtoManual(null);
+      setAtoInputText('');
+      return;
+    }
+
+    if (hasUnitSelected && atoMinimoCalculado > 0) {
+      if (inputVal < atoMinimoCalculado - 0.01) {
+        if (onShowToast) {
+          onShowToast(`O valor digitado (${formatCurrency(inputVal)}) é menor que o piso sugerido (${formatCurrency(atoMinimoCalculado)}). Valor restaurado.`);
+        }
+        setValAtoManual(null);
+        setAtoInputText('');
+      } else if (maxAtoPermitido > 0 && inputVal > maxAtoPermitido + 0.01) {
+        if (onShowToast) {
+          onShowToast(`O valor digitado excede o saldo total. O Ato foi ajustado para ${formatCurrency(maxAtoPermitido)}.`);
+        }
+        setValAtoManual(maxAtoPermitido);
+        setAtoInputText(formatCurrency(maxAtoPermitido));
+      } else {
+        setValAtoManual(inputVal);
+        setAtoInputText(formatCurrency(inputVal));
       }
     } else {
-      setValAto(0);
-      setValAtoITBI(0);
+      setValAtoManual(inputVal > 0 ? inputVal : null);
+      setAtoInputText(inputVal > 0 ? formatCurrency(inputVal) : '');
     }
-  }, [hasUnitSelected, atoMinimoCalculado, atoAposMensais]);
+  };
 
   // Função para resetar exclusivamente o Fluxo de Pagamento (Quadros 2 e 3)
   const limparFluxoPagamento = () => {
-    setValAto(atoMinimoCalculado);
+    setValAtoManual(null);
+    setAtoInputText('');
+    setIsEditingAto(false);
     setValAtoITBI(0);
     setValParc2(0);
     setValParc3(0);
     setQtdMensais(limiteMaximoParcelas);
+    setIsAtoPremiadoEnabled(true);
     if (onShowToast) {
       onShowToast('Fluxo de pagamento redefinido para as condições padrão.');
     }
@@ -523,23 +540,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const taxa2 = currentCond?.taxaJuros2 !== undefined ? currentCond.taxaJuros2 : 1.9;
   const appliedRatePct = (qtdMensais <= meses1) ? taxa1 : taxa2;
 
-  // ALGORITMO MATEMÁTICO DE CÁLCULO (RIGOROSO)
-  // 1. DEFINIÇÃO DA MAIOR BASE:
-  const maiorBase = Math.max(price, evaluation);
-
-  // 2. CÁLCULO DA BASE BRUTA COM ITBI E ATO PREMIADO:
-  const baseBruta = maiorBase + valorTotalITBI - novoAtoPremiado;
-
-  // 3. CÁLCULO DO PRÓ-SOLUTO TOTAL (VALOR DO PAINEL / RISCO MÁXIMO):
-  const proSolutoTotalPainel = hasUnitSelected ? riscoMaximoApuradoBruto : 0;
-
-  // Pró-Soluto (Sinal Restante Imóvel) - subtrai o saldo do ITBI para exibir a porção do imóvel
-  const proSoluto = Math.max(0, proSolutoTotalPainel - saldoITBI);
-
   // 4. CÁLCULO DA BASE LÍQUIDA PARA A PARCELA (DESCONTO DO FATOR DE TAXA):
-  const baseCalculoParcela = proSolutoTotalPainel * 0.997997;
+  const baseCalculoParcela = proSolutoTotalParcelado * 0.997997;
 
-  // 5. CÁLCULO DA PARCELA MENSUAL (TABELA PRICE):
+  // 5. CÁLCULO DA PARCELA MENSAL (TABELA PRICE COM TAXA APLICADA):
   const parcela = (hasUnitSelected && baseCalculoParcela > 0 && qtdMensais > 0)
     ? calcularParcelaPrice(appliedRatePct, qtdMensais, baseCalculoParcela)
     : 0;
@@ -890,41 +894,21 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </div>
                   <input
                     type="text"
-                    value={atoAposMensais > 0 ? formatCurrency(atoAposMensais) : ''}
-                    onChange={(e) => {
-                      const inputVal = parseCurrency(e.target.value);
-                      const saldoDevedorTotal = sinalTotalOriginal + maxFinanc;
-                      let maxAtoPermitido = saldoDevedorTotal;
-                      if (saldoDevedorTotal >= 55000) {
-                        maxAtoPermitido = saldoDevedorTotal - 5000;
-                      } else if (saldoDevedorTotal >= 5500) {
-                        maxAtoPermitido = saldoDevedorTotal / 1.10;
-                      }
-
-                      if (hasUnitSelected && saldoDevedorTotal > 0 && inputVal > maxAtoPermitido + 0.01) {
-                        alert("O valor digitado excede o saldo devedor total (Construtora + Banco). O Ato foi ajustado para o valor exato necessário para quitar 100% do financiamento.");
-                        setValAto(maxAtoPermitido);
-                      } else {
-                        setValAto(inputVal);
-                      }
+                    value={isEditingAto ? atoInputText : (atoAposMensais > 0 ? formatCurrency(atoAposMensais) : '')}
+                    onFocus={() => {
+                      setIsEditingAto(true);
+                      setAtoInputText(atoAposMensais > 0 ? formatCurrency(atoAposMensais) : '');
                     }}
-                    onBlur={() => {
-                      if (hasUnitSelected && (sinalTotalOriginal > 0 || maxFinanc > 0)) {
-                        const saldoDevedorTotal = sinalTotalOriginal + maxFinanc;
-                        let maxAtoPermitido = saldoDevedorTotal;
-                        if (saldoDevedorTotal >= 55000) {
-                          maxAtoPermitido = saldoDevedorTotal - 5000;
-                        } else if (saldoDevedorTotal >= 5500) {
-                          maxAtoPermitido = saldoDevedorTotal / 1.10;
-                        }
-
-                        if (valAto > maxAtoPermitido + 0.01) {
-                          alert("O valor digitado excede o saldo devedor total (Construtora + Banco). O Ato foi ajustado para o valor exato necessário para quitar 100% do financiamento.");
-                          setValAto(maxAtoPermitido);
-                        } else if (valAto < atoMinimoCalculado - 0.01) {
-                          alert("Não existe a possibilidade de diminuir o valor do Ato (Imóvel), pois ele já está no limite do risco calculated.");
-                          setValAto(atoMinimoCalculado);
-                        }
+                    onChange={(e) => {
+                      setAtoInputText(e.target.value);
+                    }}
+                    onBlur={(e) => {
+                      handleFinishAtoEdit(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleFinishAtoEdit(atoInputText);
+                        (e.target as HTMLInputElement).blur();
                       }
                     }}
                     placeholder="R$ 0,00"
@@ -967,19 +951,33 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 </div>
 
                 {/* ATO PREMIADO */}
-                <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/80">
+                <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/80 flex flex-col justify-between">
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-[10px] font-bold text-amber-800 uppercase">
                       Ato Premiado
                     </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValAtoManual(null);
+                        setAtoInputText('');
+                        setIsEditingAto(false);
+                        setIsAtoPremiadoEnabled(!isAtoPremiadoEnabled);
+                      }}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors ${
+                        isAtoPremiadoEnabled 
+                          ? 'bg-amber-200 text-amber-900 hover:bg-amber-300' 
+                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                      }`}
+                    >
+                      {isAtoPremiadoEnabled ? 'Zerar' : 'Aplicar'}
+                    </button>
                   </div>
-                  <input
-                    type="text"
-                    value={valAtoPremiado > 0 ? formatCurrency(valAtoPremiado) : ''}
-                    onChange={(e) => setValAtoPremiado(parseCurrency(e.target.value))}
-                    placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-lg border border-amber-300 font-extrabold text-amber-800 text-center focus:outline-none focus:border-amber-500 text-xs transition-all"
-                  />
+                  <div className="mt-auto">
+                    <span className="font-extrabold text-amber-800 text-sm">
+                      {isAtoPremiadoEnabled && valAtoPremiado > 0 ? formatCurrency(valAtoPremiado) : 'R$ 0,00'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1094,11 +1092,17 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       const rawVal = e.target.value;
                       if (rawVal === '') {
                         setQtdMensais(0);
+                        setValAtoManual(null);
+                        setAtoInputText('');
+                        setIsEditingAto(false);
                         return;
                       }
                       const val = parseInt(rawVal, 10);
                       if (isNaN(val)) return;
 
+                      setValAtoManual(null);
+                      setAtoInputText('');
+                      setIsEditingAto(false);
                       if (val > limiteMaximoParcelas) {
                         setQtdMensais(limiteMaximoParcelas);
                         alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
@@ -1111,6 +1115,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       setQtdMensais(val);
                     }}
                     onBlur={() => {
+                      setValAtoManual(null);
+                      setAtoInputText('');
+                      setIsEditingAto(false);
                       if (!qtdMensais || qtdMensais < 1) {
                         setQtdMensais(1);
                       } else if (qtdMensais > limiteMaximoParcelas) {
