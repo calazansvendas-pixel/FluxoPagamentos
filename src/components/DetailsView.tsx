@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT } from '../utils/calculations';
 
 interface DetailsViewProps {
   product: Product | null;
@@ -29,15 +29,16 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const currentCond = condition || (currentProd ? ensureProductConditions({ ...currentProd }).conditions[0] : null);
 
   // LÓGICA DE DEFINIÇÃO DO PRAZO PADRÃO (INITIAL SUGGESTION / TETO MÁXIMO)
-  // 1. VINCULAÇÃO ESTRITA À POLÍTICA DO PRODUTO ATUAL:
-  // Carrega EXATAMENTE os valores de Prazo Faixa 1 e Prazo Faixa 2 do produto/condição selecionado.
-  const prazoFaixa1 = Number(currentCond?.mesesTabela1) || 0;
-  const prazoFaixa2 = Number(currentCond?.mesesTabela2) || 0;
+  // a) SE Prazo Faixa 2 estiver cadastrada e > 0: valor padrão = Faixa 2 (ex: 72x)
+  // b) SE apenas Prazo Faixa 1 estiver cadastrada (ou Faixa 2 for 0/vazia): valor padrão = Faixa 1 (ex: 60x)
+  const faixa1Meses = currentCond?.mesesTabela1;
+  const faixa2Meses = currentCond?.mesesTabela2;
+  const temFaixa2 = faixa2Meses !== undefined && faixa2Meses !== null && Number(faixa2Meses) > 0;
+  const temFaixa1 = faixa1Meses !== undefined && faixa1Meses !== null && Number(faixa1Meses) > 0;
 
-  // Se o produto define Faixa 1 = 60 e Faixa 2 = 60, o teto máximo é 60.
-  const limiteMaximoParcelas = (prazoFaixa1 > 0 || prazoFaixa2 > 0)
-    ? Math.max(prazoFaixa1, prazoFaixa2)
-    : (currentCond?.numParcelas || currentProd?.numParcelas || 60);
+  const limiteMaximoParcelas = temFaixa2
+    ? Number(faixa2Meses)
+    : (temFaixa1 ? Number(faixa1Meses) : (currentCond?.numParcelas || currentProd?.numParcelas || 60));
 
   const [selectedTorre, setSelectedTorre] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
@@ -64,20 +65,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         setValParc3(0);
       }
     }
-  }, [currentProd?.id, selectedUnits]);
+  }, [currentProd, selectedUnits]);
 
-  // 2. FUNÇÃO E EFFECT DISPARADOS AO TROCAR DE EMPREENDIMENTO (ON CHANGE):
-  // Garante a limpeza do estado residual na memória e o reset dinâmico da Qtd. Mensais para o teto do produto selecionado.
   useEffect(() => {
-    if (currentProd && currentCond) {
-      setValAto(0);
-      setValAtoITBI(0);
-      setValAtoPremiado(0);
-      setValParc2(0);
-      setValParc3(0);
+    if (currentCond) {
       setQtdMensais(limiteMaximoParcelas);
     }
-  }, [currentProd?.id, currentCond?.id, limiteMaximoParcelas]);
+  }, [currentCond, limiteMaximoParcelas]);
 
   if (!currentProd || !currentCond) {
     return (
@@ -253,11 +247,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     price,
     despCartorias,
     evaluation,
-    0,
-    inputFinancing,
-    rawSubsidy,
-    rawFGTS,
-    percent
+    0
   );
   const vpValRiscoRenda = riskCalcInitial.vpVal;
   const riscoImovelPctDec = (currentCond?.riscoImovelPct !== undefined ? currentCond.riscoImovelPct : 25) / 100;
@@ -336,81 +326,80 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const atoMinimoCalculado = hasUnitSelected ? Math.max(2000, pagamentoAtoSinalEfetivo) : 0;
   const sinalTotalOriginal = gapInicial;
 
-  // 1. LEITURA DO APORTE DAS MENSAIS (1ª MENSAL 30D / 2ª MENSAL 60D)
+  // 1. CAMPO 1: "PAGAMENTO ATO (IMÓVEL)" - valAto
   const mens30d = valParc2 || 0;
   const mens60d = valParc3 || 0;
   const somaMensais = mens30d + mens60d;
-  let saldoParaAbater = somaMensais;
 
   const atoImovelDigitado = valAto > 0 ? valAto : atoMinimoCalculado;
+  const descontoImovelDigitado = (atoImovelDigitado >= 5000) ? Math.min(atoImovelDigitado * 0.10, 5000) : 0;
+  const necessidadeTotalEntrada = atoImovelDigitado + descontoImovelDigitado;
 
-  // 2. EXECUÇÃO DA FILA SEQUENCIAL DE ABATIMENTO (ETAPAS 1, 2, 3 E 4)
+  // As mensais absorvem parte da entrada requerida. Target restante para (AtoEfetivo + AtoPremiado):
+  const targetAtoEComposto = Math.max(0, necessidadeTotalEntrada - somaMensais);
 
-  // ETAPA 1 (ATO / SINAL - PISO 2K):
-  // Abata o SaldoParaAbater do PagamentoAtoImovel, mas NUNCA permita que ele fique menor que R$ 2.000,00.
-  const disponivelAbatimentoAto = Math.max(0, atoImovelDigitado - 2000);
-  const atoAbsorvido = Math.min(disponivelAbatimentoAto, saldoParaAbater);
-  let atoAposMensais = atoImovelDigitado - atoAbsorvido;
-  saldoParaAbater -= atoAbsorvido;
-
-  // Recalculo do Ato Premiado (desconto da Construtora) para o novo Ato do Imóvel
+  let atoAposMensais = 2000;
   let novoAtoPremiado = 0;
-  if (atoAposMensais >= 4500) {
-    let currAtoEfetivo = atoAposMensais;
+  let atoAbsorvido = 0;
+  let sobraParaAmortizar = 0;
+
+  if (targetAtoEComposto < 2000) {
+    // Trava de R$ 2.000,00 do Ato Mínimo
+    atoAposMensais = 2000;
+    novoAtoPremiado = 0;
+    atoAbsorvido = Math.min(Math.max(0, atoImovelDigitado - 2000), somaMensais);
+    sobraParaAmortizar = somaMensais - atoAbsorvido;
+  } else {
+    // Loop de equalização e convergência iterativa entre Ato Efetivo e Ato Premiado
+    let currAtoEfetivo = targetAtoEComposto;
     let currAtoPremiado = 0;
+
     for (let iter = 0; iter < 100; iter++) {
-      const atoBrutoCalculado = currAtoEfetivo + currAtoPremiado;
-      const novoDesc = (atoBrutoCalculado >= 5000 && currAtoEfetivo >= 4500)
+      const atoBruto = currAtoEfetivo + currAtoPremiado;
+      const novoDesc = (atoBruto >= 5000 && currAtoEfetivo >= 4500)
         ? Math.min(currAtoEfetivo * 0.10, 5000)
         : 0;
 
-      const lacuna = atoAposMensais - currAtoEfetivo;
+      const lacuna = targetAtoEComposto - (currAtoEfetivo + novoDesc);
       currAtoPremiado = novoDesc;
-      if (Math.abs(lacuna) < 0.0001) break;
+
+      if (Math.abs(lacuna) < 0.0001) {
+        break;
+      }
       currAtoEfetivo += lacuna;
     }
+
+    if (currAtoEfetivo < 2000) {
+      currAtoEfetivo = 2000;
+      currAtoPremiado = 0;
+    }
+
+    atoAposMensais = currAtoEfetivo;
     novoAtoPremiado = currAtoPremiado;
+    atoAbsorvido = necessidadeTotalEntrada - (atoAposMensais + novoAtoPremiado);
+    sobraParaAmortizar = 0;
   }
 
-  // ETAPA 2 (PRÓ-SOLUTO - SINAL RESTANTE / DIRETO):
-  // SE SaldoParaAbater > 0, abata do Pró-Soluto do Sinal Restante até zerá-lo.
-  // Note: O ITBI permanece intacto isolado em seu próprio saldo neste momento.
-  const proSolutoSinalRestanteBase = Math.max(0, gapInicial - (atoAposMensais + novoAtoPremiado));
-  let proSolutoAbsorvido = 0;
-  let novoProSolutoSinalRestante = proSolutoSinalRestanteBase;
-
-  if (saldoParaAbater > 0) {
-    proSolutoAbsorvido = Math.min(proSolutoSinalRestanteBase, saldoParaAbater);
-    novoProSolutoSinalRestante = proSolutoSinalRestanteBase - proSolutoAbsorvido;
-    saldoParaAbater -= proSolutoAbsorvido;
-  }
-
-  // ETAPA 3 (FINANCIAMENTO BANCÁRIO - MAX FINANC):
-  // SE SaldoParaAbater > 0 (ou seja, o Pró-Soluto do Sinal Restante já está em R$ 0,00), abata do Financiamento Bancário.
+  // Abatimento 2 & 3 (Excesso das mensais vai para Financiamento, FGTS e Subsídio):
   let maxFinancEfetivo = maxFinanc;
-  let bancoAbsorvido = 0;
-
-  if (saldoParaAbater > 0) {
-    bancoAbsorvido = Math.min(maxFinancEfetivo, saldoParaAbater);
-    maxFinancEfetivo -= bancoAbsorvido;
-    saldoParaAbater -= bancoAbsorvido;
-  }
-
-  // ETAPA 4 (FGTS / SUBSÍDIO):
-  // SE SaldoParaAbater > 0 (Financiamento zerado), abata a sobra do FGTS até zerar e, em seguida, do Subsídio.
   let fgtsEfetivo = fgts;
   let subsidyEfetivo = subsidy;
 
-  if (saldoParaAbater > 0) {
-    const fgtsAbsorvido = Math.min(fgtsEfetivo, saldoParaAbater);
-    fgtsEfetivo -= fgtsAbsorvido;
-    saldoParaAbater -= fgtsAbsorvido;
-  }
+  if (sobraParaAmortizar > 0) {
+    if (sobraParaAmortizar <= maxFinancEfetivo) {
+      maxFinancEfetivo -= sobraParaAmortizar;
+    } else {
+      const sobraAposFinanc = sobraParaAmortizar - maxFinancEfetivo;
+      maxFinancEfetivo = 0;
 
-  if (saldoParaAbater > 0) {
-    const subsidyAbsorvido = Math.min(subsidyEfetivo, saldoParaAbater);
-    subsidyEfetivo -= subsidyAbsorvido;
-    saldoParaAbater -= subsidyAbsorvido;
+      if (sobraAposFinanc <= fgtsEfetivo) {
+        fgtsEfetivo -= sobraAposFinanc;
+      } else {
+        const sobraAposFGTS = sobraAposFinanc - fgtsEfetivo;
+        fgtsEfetivo = 0;
+        subsidyEfetivo = Math.max(0, subsidyEfetivo - sobraAposFGTS);
+      }
+    }
   }
 
   const poderDePagamentoImovel = atoAposMensais + novoAtoPremiado;
@@ -517,32 +506,19 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   };
 
+  // Pró-Soluto (Sinal Restante Imóvel)
+  const proSoluto = sobrasImovel;
+
   // Taxa de juros da política de crédito (a.m.)
   const meses1 = currentCond?.mesesTabela1 || 36;
   const taxa1 = currentCond?.taxaJuros1 !== undefined ? currentCond.taxaJuros1 : 0;
   const taxa2 = currentCond?.taxaJuros2 !== undefined ? currentCond.taxaJuros2 : 1.9;
   const appliedRatePct = (qtdMensais <= meses1) ? taxa1 : taxa2;
 
-  // ALGORITMO MATEMÁTICO DE CÁLCULO (RIGOROSO)
-  // 1. DEFINIÇÃO DA MAIOR BASE:
-  const maiorBase = Math.max(price, evaluation);
-
-  // 2. CÁLCULO DA BASE BRUTA COM ITBI E ATO PREMIADO:
-  const baseBruta = maiorBase + valorTotalITBI - novoAtoPremiado;
-
-  // 3. CÁLCULO DO PRÓ-SOLUTO TOTAL (VALOR DO PAINEL / RISCO MÁXIMO):
-  const percentualPolitica = currentCond?.riscoImovelPct !== undefined ? currentCond.riscoImovelPct : 25;
-  const proSolutoTotalPainel = baseBruta * (percentualPolitica / 100);
-
-  // Pró-Soluto (Sinal Restante Imóvel) - subtrai o saldo do ITBI para exibir a porção do imóvel
-  const proSoluto = Math.max(0, proSolutoTotalPainel - saldoITBI);
-
-  // 4. CÁLCULO DA BASE LÍQUIDA PARA A PARCELA (DESCONTO DO FATOR DE TAXA):
-  const baseCalculoParcela = proSolutoTotalPainel * 0.997997;
-
-  // 5. CÁLCULO DA PARCELA MENSUAL (TABELA PRICE):
-  const parcela = (hasUnitSelected && baseCalculoParcela > 0 && qtdMensais > 0)
-    ? calcularParcelaPrice(appliedRatePct, qtdMensais, baseCalculoParcela)
+  // Cálculo das parcelas mensais utilizando a fórmula da Tabela Price (PGTO Excel):
+  // PMT = PGTO(appliedRatePct, qtdMensais, -proSolutoTotalBruto)
+  const parcela = (hasUnitSelected && proSolutoTotalBruto > 0 && qtdMensais > 0)
+    ? calculatePricePMT(proSolutoTotalBruto, appliedRatePct, qtdMensais)
     : 0;
 
   const limiteRenda = (income && income > 0) ? income * 0.35 : 0;
@@ -1102,7 +1078,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
                       if (val > limiteMaximoParcelas) {
                         setQtdMensais(limiteMaximoParcelas);
-                        alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
+                        alert("A quantidade máxima de parcelas permitida pela política de vendas para este empreendimento é de " + limiteMaximoParcelas + "x.");
                         return;
                       }
                       if (val < 1) {
@@ -1116,7 +1092,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                         setQtdMensais(1);
                       } else if (qtdMensais > limiteMaximoParcelas) {
                         setQtdMensais(limiteMaximoParcelas);
-                        alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
+                        alert("A quantidade máxima de parcelas permitida pela política de vendas para este empreendimento é de " + limiteMaximoParcelas + "x.");
                       }
                     }}
                     className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-sky-600 text-center focus:outline-none focus:border-sky-600 text-xs"
@@ -1154,8 +1130,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
 
               <div className="flex justify-between items-center pt-2 text-sm bg-sky-50/80 p-3.5 rounded-xl border border-sky-100">
-                <span className="font-bold text-slate-900">Pró-Soluto Total c/ ITBI (Risco Máx):</span>
-                <strong className="font-extrabold text-sky-600 text-base">{formatCurrency(proSolutoTotalPainel)}</strong>
+                <span className="font-bold text-slate-900">Pró-Soluto Líquido c/ ITBI:</span>
+                <strong className="font-extrabold text-sky-600 text-base">{formatCurrency(proSolutoTotalLiquido)}</strong>
               </div>
 
 
