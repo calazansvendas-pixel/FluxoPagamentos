@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
@@ -554,6 +554,166 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   const totalEntradaMorar = atoAposMensais + atoITBIValidado + mens30d + mens60d + novoAtoPremiado;
 
+  // --- INDICADORES DE RISCO DA OPERAÇÃO ---
+  // Identifique o Maior Valor entre o Preço e a Avaliação:
+  // ValorBaseImovel = Math.max(PrecoTabela, AvaliacaoBanco)
+  // Base Líquida c/ ITBI = (ValorBaseImovel + Despesas Cartorárias & ITBI) - Ato Premiado (se aplicado) - Outros Descontos aplicados
+  const valorBaseImovel = hasUnitSelected ? Math.max(price, evaluation) : 0;
+  const baseVendaLiquidaComITBI = hasUnitSelected
+    ? Math.max(0, (valorBaseImovel + valorTotalITBI) - descontoAto)
+    : 0;
+
+  const baseRendaInformada = (simulationData.income && simulationData.income > 0) ? simulationData.income : 0;
+
+  // Gráfico 1: "Risco Parcela / Comprometimento" (Fatia 1: 1ª Parcela sobre a Base da Renda | Fatia 2: Restante da Renda)
+  const valorRiscoParcela = parcela;
+  const pctRiscoParcelaRenda = baseRendaInformada > 0
+    ? Math.min(100, Math.max(0, (valorRiscoParcela / baseRendaInformada) * 100))
+    : 0;
+  const valorRestanteRenda = Math.max(0, baseRendaInformada - valorRiscoParcela);
+  const pctRestanteRenda = Math.max(0, 100 - pctRiscoParcelaRenda);
+
+  // Gráfico 2: "Risco Pró-Soluto Total" (Fatia 1: Pró-Soluto Total c/ ITBI sobre a Base Líquida c/ ITBI | Fatia 2: Demais Recursos)
+  const valorRiscoProSoluto = proSolutoTotalPainel;
+  const pctRiscoProSoluto = baseVendaLiquidaComITBI > 0
+    ? Math.min(100, Math.max(0, (valorRiscoProSoluto / baseVendaLiquidaComITBI) * 100))
+    : 0;
+  const valorRestanteProSoluto = Math.max(0, baseVendaLiquidaComITBI - valorRiscoProSoluto);
+  const pctRestanteProSoluto = Math.max(0, 100 - pctRiscoProSoluto);
+
+  // Função auxiliar para renderizar Gráficos de Pizza Sólidos com percentuais internos refinados
+  const renderSolidPie = (
+    pct: number,
+    colorPrimary: string,
+    colorSecondary: string = '#cbd5e1',
+    primaryTextColor: string = '#ffffff',
+    secondaryTextColor: string = '#334155'
+  ) => {
+    const cx = 50;
+    const cy = 50;
+    const r = 45; // Aumentado em ~15% (de 40 para 45 no viewBox de 100x100)
+    const clampedPct = Math.min(100, Math.max(0, pct));
+    const restPct = Math.max(0, 100 - clampedPct);
+
+    // Centroide de um setor circular de raio r com ângulo theta (em radianos) a partir do centro:
+    // distância do centro ao centroide = (2/3) * r * (sin(theta/2) / (theta/2))
+    // Para setores típicos, isso varia entre 0.55r e 0.67r, garantindo que o texto nunca encoste nas bordas.
+    const calcCentroidRadius = (sliceAngleDeg: number) => {
+      const theta = (sliceAngleDeg * Math.PI) / 180;
+      if (theta <= 0.001) return r * 0.6;
+      const factor = (2 / 3) * (Math.sin(theta / 2) / (theta / 2));
+      // Clamp para garantir posição ideal e segura de respiro
+      return r * Math.min(0.68, Math.max(0.48, factor));
+    };
+
+    if (clampedPct >= 100) {
+      return (
+        <svg className="w-44 h-44 mx-auto drop-shadow-xs select-none" viewBox="0 0 100 100">
+          <circle cx={cx} cy={cy} r={r} fill={colorPrimary} />
+          <text
+            x={cx}
+            y={cy}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={primaryTextColor}
+            fontSize="8"
+            fontWeight="500"
+            className="tracking-tight"
+          >
+            100%
+          </text>
+        </svg>
+      );
+    }
+
+    if (clampedPct <= 0) {
+      return (
+        <svg className="w-44 h-44 mx-auto drop-shadow-xs select-none" viewBox="0 0 100 100">
+          <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
+          <text
+            x={cx}
+            y={cy}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={secondaryTextColor}
+            fontSize="8"
+            fontWeight="500"
+            className="tracking-tight"
+          >
+            100%
+          </text>
+        </svg>
+      );
+    }
+
+    const angle = (clampedPct / 100) * 360;
+    const rad = (angle - 90) * (Math.PI / 180);
+    const x = cx + r * Math.cos(rad);
+    const y = cy + r * Math.sin(rad);
+    const largeArcFlag = clampedPct > 50 ? 1 : 0;
+
+    const pathD = `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${largeArcFlag} 1 ${x} ${y} Z`;
+
+    // Centroide da Fatia 1 (Destaque)
+    const midAngle1 = angle / 2;
+    const rLabel1 = calcCentroidRadius(angle);
+    const rad1 = (midAngle1 - 90) * (Math.PI / 180);
+    const textX1 = cx + rLabel1 * Math.cos(rad1);
+    const textY1 = cy + rLabel1 * Math.sin(rad1);
+
+    // Centroide da Fatia 2 (Neutro/Restante)
+    const restAngle = 360 - angle;
+    const midAngle2 = angle + (restAngle / 2);
+    const rLabel2 = calcCentroidRadius(restAngle);
+    const rad2 = (midAngle2 - 90) * (Math.PI / 180);
+    const textX2 = cx + rLabel2 * Math.cos(rad2);
+    const textY2 = cy + rLabel2 * Math.sin(rad2);
+
+    return (
+      <svg className="w-44 h-44 mx-auto drop-shadow-xs select-none" viewBox="0 0 100 100">
+        {/* Fatia 2 (Círculo de Fundo Neutro) */}
+        <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
+        {/* Fatia 1 (Arco Primário de Destaque) */}
+        <path d={pathD} fill={colorPrimary} />
+        {/* Linhas de Separação Brancas Nítidas */}
+        <line x1={cx} y1={cy} x2={cx} y2={cy - r} stroke="#ffffff" strokeWidth="1.5" />
+        <line x1={cx} y1={cy} x2={x} y2={y} stroke="#ffffff" strokeWidth="1.5" />
+
+        {/* Rótulo Interno Fatia 1 */}
+        {clampedPct >= 5 && (
+          <text
+            x={textX1}
+            y={textY1}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={primaryTextColor}
+            fontSize="7"
+            fontWeight="500"
+            className="tracking-tight"
+          >
+            {clampedPct.toFixed(2)}%
+          </text>
+        )}
+
+        {/* Rótulo Interno Fatia 2 */}
+        {restPct >= 5 && (
+          <text
+            x={textX2}
+            y={textY2}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={secondaryTextColor}
+            fontSize="7"
+            fontWeight="500"
+            className="tracking-tight"
+          >
+            {restPct.toFixed(2)}%
+          </text>
+        )}
+      </svg>
+    );
+  };
+
   // Dynamic key delivery dates from product policy or selected unit phase
   let deliveryText = '';
   if (hasUnitSelected && matchingRow) {
@@ -791,59 +951,52 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
             {/* GRID DE DADOS DA APROVAÇÃO */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="space-y-2 bg-slate-50/60 p-3.5 rounded-xl border border-slate-100">
-                <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block border-b border-slate-200/60 pb-1 mb-1">
-                  Recursos do Cliente
-                </span>
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
-                  <span className="text-slate-600">Renda:</span>
-                  <strong className="text-slate-800 font-semibold">{formatCurrency(income)}</strong>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
-                  <span className="text-slate-600">Subsídio:</span>
-                  <strong className="text-emerald-600 font-semibold">{formatCurrency(subsidyEfetivo)}</strong>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
-                  <span className="text-slate-600">FGTS:</span>
-                  <strong className="text-sky-600 font-semibold">{formatCurrency(fgtsEfetivo)}</strong>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-600 flex items-center gap-1">
-                    <span>Desconto Construtora (Ato):</span>
+              <div className="bg-slate-50/60 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block border-b border-slate-200/60 pb-1 mb-1">
+                    Recursos do Cliente
                   </span>
-                  <strong className="text-emerald-600 font-semibold">{formatCurrency(descontoAto)}</strong>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                    <span className="text-slate-600">Renda:</span>
+                    <strong className="text-slate-800 font-semibold">{formatCurrency(income)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                    <span className="text-slate-600">Subsídio:</span>
+                    <strong className="text-emerald-600 font-semibold">{formatCurrency(subsidyEfetivo)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                    <span className="text-slate-600">FGTS:</span>
+                    <strong className="text-sky-600 font-semibold">{formatCurrency(fgtsEfetivo)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1 mt-2.5">
+                    <span className="text-slate-600">Desconto Ato:</span>
+                    <strong className="text-emerald-600 font-semibold">{formatCurrency(descontoAto)}</strong>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2 bg-slate-50/60 p-3.5 rounded-xl border border-slate-100">
-                <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block border-b border-slate-200/60 pb-1 mb-1">
-                  Operação Bancária
-                </span>
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
-                  <span className="text-slate-600">Max Financ:</span>
-                  <strong className="text-sky-600 font-bold">{formatCurrency(maxFinancEfetivo)}</strong>
+              <div className="bg-slate-50/60 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block border-b border-slate-200/60 pb-1 mb-1">
+                    Operação Bancária
+                  </span>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                    <span className="text-slate-600">Max Financ:</span>
+                    <strong className="text-sky-600 font-bold">{formatCurrency(maxFinancEfetivo)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                    <span className="text-slate-600">Total Negoc:</span>
+                    <strong className="text-slate-800 font-semibold">{formatCurrency(totalNegocEfetivo)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                    <span className="text-slate-600">Sinal Total:</span>
+                    <strong className="text-amber-600 font-bold">{formatCurrency(sinalTotal)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1 mt-2.5">
+                    <span className="text-slate-600">Sinal + ITBI:</span>
+                    <strong className="text-emerald-600 font-bold">{formatCurrency(sinalTotal + despCartoriasEfetivas)}</strong>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
-                  <span className="text-slate-600">Total Negoc:</span>
-                  <strong className="text-slate-800 font-semibold">{formatCurrency(totalNegocEfetivo)}</strong>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-600">Sinal Total:</span>
-                  <strong className="text-amber-600 font-bold">{formatCurrency(sinalTotal)}</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* Destaque Com ITBI */}
-            <div className="bg-gradient-to-r from-amber-50 to-amber-100/60 p-3.5 rounded-xl border border-amber-200/80 text-xs shadow-2xs">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Calculator className="w-4 h-4 text-amber-700" />
-                  <span className="text-amber-900 font-bold">Sinal Total Com ITBI e Despesas:</span>
-                </div>
-                <strong className="text-slate-900 font-extrabold text-sm">
-                  {formatCurrency(sinalTotal + despCartoriasEfetivas)}
-                </strong>
               </div>
             </div>
           </div>
@@ -1164,7 +1317,95 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 <strong className="font-extrabold text-sky-600 text-base">{formatCurrency(proSolutoTotalPainel)}</strong>
               </div>
 
+            </div>
+          </div>
 
+          {/* CARD 4: INDICADORES DE RISCO DA OPERAÇÃO (GRÁFICOS DE PIZZA SÓLIDOS) */}
+          <div className="bg-white p-4 sm:p-4.5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
+            {/* Cabeçalho de Bases Compartilhadas */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <PieChart className="w-4 h-4" />
+                </div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  4. Indicadores de Risco / Comprometimento
+                </h3>
+              </div>
+              <div className="flex items-center flex-wrap gap-2 text-[11px]">
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-0.5 rounded-lg border border-slate-200/80 text-slate-600">
+                  <span className="text-slate-400 font-medium">Base Líquida c/ ITBI:</span>
+                  <strong className="font-bold text-slate-800">{formatCurrency(baseVendaLiquidaComITBI)}</strong>
+                </div>
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-0.5 rounded-lg border border-slate-200/80 text-slate-600">
+                  <span className="text-slate-400 font-medium">Base da Renda:</span>
+                  <strong className="font-bold text-slate-800">{formatCurrency(baseRendaInformada)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {/* COLUNA 1: RISCO PARCELA / COMPROMETIMENTO */}
+              <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 flex flex-col justify-between space-y-1.5">
+                <div className="border-b border-slate-200/60 pb-1.5">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-sky-600" />
+                    Risco Parcela / Comprometimento
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    1ª Parcela sobre a Base da Renda
+                  </p>
+                </div>
+
+                {/* Gráfico de Pizza Sólido sem sobreposição de textos */}
+                <div className="py-0.5 flex items-center justify-center overflow-visible">
+                  {renderSolidPie(pctRiscoParcelaRenda, '#0284c7', '#cbd5e1')}
+                </div>
+
+                {/* Resumo de Valor Inferior */}
+                <div className="w-full">
+                  <div className="flex flex-col items-center justify-center py-2 px-3 text-center bg-slate-50 border border-slate-100 rounded-xl shadow-2xs overflow-hidden w-full">
+                    <span className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 whitespace-nowrap">
+                      <span className="w-2 h-2 rounded-full bg-sky-600 shrink-0" />
+                      1ª Parcela
+                    </span>
+                    <strong className="text-sm font-semibold text-slate-800 mt-0.5 whitespace-nowrap truncate">
+                      {formatCurrency(valorRiscoParcela)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* COLUNA 2: RISCO PRÓ-SOLUTO TOTAL */}
+              <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 flex flex-col justify-between space-y-1.5">
+                <div className="border-b border-slate-200/60 pb-1.5">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600" />
+                    Risco Pró-Soluto Total
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Pró-Soluto Total c/ ITBI sobre a Base Líquida com ITBI
+                  </p>
+                </div>
+
+                {/* Gráfico de Pizza Sólido sem sobreposição de textos */}
+                <div className="py-0.5 flex items-center justify-center overflow-visible">
+                  {renderSolidPie(pctRiscoProSoluto, '#4f46e5', '#cbd5e1')}
+                </div>
+
+                {/* Resumo de Valor Inferior */}
+                <div className="w-full">
+                  <div className="flex flex-col items-center justify-center py-2 px-3 text-center bg-slate-50 border border-slate-100 rounded-xl shadow-2xs overflow-hidden w-full">
+                    <span className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 whitespace-nowrap">
+                      <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
+                      Pró-Soluto Total
+                    </span>
+                    <strong className="text-sm font-semibold text-slate-800 mt-0.5 whitespace-nowrap truncate">
+                      {formatCurrency(valorRiscoProSoluto)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
