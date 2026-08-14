@@ -253,7 +253,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     price,
     despCartorias,
     evaluation,
-    0
+    0,
+    inputFinancing,
+    rawSubsidy,
+    rawFGTS,
+    percent
   );
   const vpValRiscoRenda = riskCalcInitial.vpVal;
   const riscoImovelPctDec = (currentCond?.riscoImovelPct !== undefined ? currentCond.riscoImovelPct : 25) / 100;
@@ -513,27 +517,32 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   };
 
-  // Pró-Soluto (Sinal Restante Imóvel)
-  const proSoluto = sobrasImovel;
-
   // Taxa de juros da política de crédito (a.m.)
   const meses1 = currentCond?.mesesTabela1 || 36;
   const taxa1 = currentCond?.taxaJuros1 !== undefined ? currentCond.taxaJuros1 : 0;
   const taxa2 = currentCond?.taxaJuros2 !== undefined ? currentCond.taxaJuros2 : 1.9;
   const appliedRatePct = (qtdMensais <= meses1) ? taxa1 : taxa2;
 
-  // 1. CÁLCULO DA TAXA BANCÁRIA
-  const proSolutoTotal = proSolutoTotalLiquido;
-  const percentualTaxaBancaria = 0.002003; // 0,2003%
-  const valorTaxaBancaria = proSolutoTotal * percentualTaxaBancaria;
+  // ALGORITMO MATEMÁTICO DE CÁLCULO (RIGOROSO)
+  // 1. DEFINIÇÃO DA MAIOR BASE:
+  const maiorBase = Math.max(price, evaluation);
 
-  // 2. DEFINIÇÃO DA NOVA BASE DE CÁLCULO (RISCO UTILIZADO TX)
-  const baseCalculoPrice = Math.max(0, proSolutoTotal - valorTaxaBancaria);
+  // 2. CÁLCULO DA BASE BRUTA COM ITBI E ATO PREMIADO:
+  const baseBruta = maiorBase + valorTotalITBI - novoAtoPremiado;
 
-  // 3. APLICAÇÃO NA TABELA PRICE
-  // Aplica a taxa de juros do produto (ex: 1.90% ou 2.20%) sobre a baseCalculoPrice deduzida
-  const parcela = (hasUnitSelected && baseCalculoPrice > 0 && qtdMensais > 0)
-    ? calcularParcelaPrice(appliedRatePct, qtdMensais, baseCalculoPrice)
+  // 3. CÁLCULO DO PRÓ-SOLUTO TOTAL (VALOR DO PAINEL / RISCO MÁXIMO):
+  const percentualPolitica = currentCond?.riscoImovelPct !== undefined ? currentCond.riscoImovelPct : 25;
+  const proSolutoTotalPainel = baseBruta * (percentualPolitica / 100);
+
+  // Pró-Soluto (Sinal Restante Imóvel) - subtrai o saldo do ITBI para exibir a porção do imóvel
+  const proSoluto = Math.max(0, proSolutoTotalPainel - saldoITBI);
+
+  // 4. CÁLCULO DA BASE LÍQUIDA PARA A PARCELA (DESCONTO DO FATOR DE TAXA):
+  const baseCalculoParcela = proSolutoTotalPainel * 0.997997;
+
+  // 5. CÁLCULO DA PARCELA MENSUAL (TABELA PRICE):
+  const parcela = (hasUnitSelected && baseCalculoParcela > 0 && qtdMensais > 0)
+    ? calcularParcelaPrice(appliedRatePct, qtdMensais, baseCalculoParcela)
     : 0;
 
   const limiteRenda = (income && income > 0) ? income * 0.35 : 0;
@@ -1145,8 +1154,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
 
               <div className="flex justify-between items-center pt-2 text-sm bg-sky-50/80 p-3.5 rounded-xl border border-sky-100">
-                <span className="font-bold text-slate-900">Pró-Soluto Líquido c/ ITBI:</span>
-                <strong className="font-extrabold text-sky-600 text-base">{formatCurrency(proSolutoTotalLiquido)}</strong>
+                <span className="font-bold text-slate-900">Pró-Soluto Total c/ ITBI (Risco Máx):</span>
+                <strong className="font-extrabold text-sky-600 text-base">{formatCurrency(proSolutoTotalPainel)}</strong>
               </div>
 
 
