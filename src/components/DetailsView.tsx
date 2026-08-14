@@ -301,11 +301,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // h) Pró-Soluto Líquido = Risco Máximo Apurado - Taxa Bancária;
       proSolutoLiquido = Math.max(0, riscoMaximoApuradoBruto - taxaBancaria);
 
-      // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Pró-Soluto Líquido;
-      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido);
+      // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Risco Máximo Apurado Bruto;
+      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - riscoMaximoApuradoBruto);
 
-      // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido
-      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido);
+      // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Risco Máximo Apurado Bruto
+      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - riscoMaximoApuradoBruto);
 
       // j) novoAtoPremiado = Exatamente 10% do Pagamento Ato (Sinal Efetivo), caso o Ato Bruto seja >= 5000
       const novoAtoPremiado = (atoBrutoCalculado >= 5000) 
@@ -327,9 +327,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       pagamentoAtoSinalEfetivo = 2000;
       atoPremiadoAtual = 0; // Regra dos 10% não se aplica pois 2000 não atinge 5k
       const baseDividaTotal = gapInicial + despCartorias;
-      proSolutoLiquido = Math.max(0, baseDividaTotal - pagamentoAtoSinalEfetivo);
-      riscoMaximoApuradoBruto = proSolutoLiquido / (1 - 0.0020029);
+      riscoMaximoApuradoBruto = Math.max(0, baseDividaTotal - pagamentoAtoSinalEfetivo);
       taxaBancaria = riscoMaximoApuradoBruto * 0.0020029;
+      proSolutoLiquido = riscoMaximoApuradoBruto - taxaBancaria;
     }
   }
 
@@ -424,7 +424,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // 3. NOVO FECHAMENTO DIRETO E MATEMÁTICO DO PRÓ-SOLUTO LÍQUIDO:
   // NovoProSolutoLiquido = (PrecoTabela + SaldoITBI) - (MaxFinanc + Subsidio + FGTS + AtoImovel + AtoPremiado + Mensal30D + Mensal60D + AtoITBI)
-  const proSolutoTetoMaximo = hasUnitSelected ? proSolutoLiquido : 0;
+  const proSolutoTetoMaximo = hasUnitSelected ? riscoMaximoApuradoBruto : 0;
   const precoTabelaComITBI = price + valorTotalITBI;
   const totalRecursosAplicados = maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo + atoAposMensais + novoAtoPremiado + mens30d + mens60d + atoITBIValidado;
   let proSolutoTotalLiquido = Math.max(0, precoTabelaComITBI - totalRecursosAplicados);
@@ -531,8 +531,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const baseBruta = maiorBase + valorTotalITBI - novoAtoPremiado;
 
   // 3. CÁLCULO DO PRÓ-SOLUTO TOTAL (VALOR DO PAINEL / RISCO MÁXIMO):
-  const percentualPolitica = currentCond?.riscoImovelPct !== undefined ? currentCond.riscoImovelPct : 25;
-  const proSolutoTotalPainel = baseBruta * (percentualPolitica / 100);
+  const proSolutoTotalPainel = hasUnitSelected ? riscoMaximoApuradoBruto : 0;
 
   // Pró-Soluto (Sinal Restante Imóvel) - subtrai o saldo do ITBI para exibir a porção do imóvel
   const proSoluto = Math.max(0, proSolutoTotalPainel - saldoITBI);

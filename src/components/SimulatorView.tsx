@@ -1,13 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   UserCheck, 
   Wallet, 
   Building, 
   Edit3, 
   ChevronRight, 
-  KeyRound, 
-  Sparkles, 
-  Coins
+  KeyRound,
+  Coins,
+  Sparkles
 } from 'lucide-react';
 import { Product, SimulationData } from '../types';
 import { formatCurrency, formatDeliveryText } from '../utils/formatters';
@@ -26,24 +26,36 @@ interface SimulatorViewProps {
 export const SimulatorView: React.FC<SimulatorViewProps> = ({
   simulationData,
   onSimulationDataChange,
-  products,
-  selectedConditions,
+  products = [],
+  selectedConditions = {},
   onSelectCondition,
   onAdvanceToDetails,
   onNavigateToPolicies
 }) => {
+  // Fallback seguro caso simulationData venha undefined
+  const safeSimulationData = simulationData || {
+    clientName: '',
+    agency: '',
+    income: 0,
+    subsidy: 0,
+    fgts: 0,
+    financing: 0,
+    finPercent: 0.8,
+    isFirstHome: true
+  };
+
   const handleCurrencyInputChange = (field: keyof SimulationData, rawValue: string) => {
-    const digits = rawValue.replace(/\D/g, '');
+    const digits = (rawValue || '').replace(/\D/g, '');
     const numericVal = digits ? parseInt(digits, 10) / 100 : 0;
     onSimulationDataChange({
-      ...simulationData,
+      ...safeSimulationData,
       [field]: numericVal
     });
   };
 
-  const totalRecursosAprovados = (simulationData.financing || 0) + 
-    (simulationData.subsidy || 0) + 
-    (simulationData.fgts || 0);
+  const totalRecursosAprovados = (safeSimulationData.financing || 0) + 
+    (safeSimulationData.subsidy || 0) + 
+    (safeSimulationData.fgts || 0);
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
@@ -53,7 +65,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
           {/* COLUNA ESQUERDA: DADOS DO CLIENTE E RECURSOS (7 COLS) */}
           <div className="lg:col-span-7 space-y-5 w-full">
             
-            {/* 1. IDENTIFICAÇÃO */}
+            {/* 1. IDENTIFICAÇÃO GERAL */}
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
@@ -71,8 +83,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={simulationData.agency}
-                    onChange={(e) => onSimulationDataChange({ ...simulationData, agency: e.target.value })}
+                    value={safeSimulationData.agency || ''}
+                    onChange={(e) => onSimulationDataChange({ ...safeSimulationData, agency: e.target.value })}
                     placeholder="Nome da imobiliária (opcional)"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
                   />
@@ -83,8 +95,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={simulationData.clientName}
-                    onChange={(e) => onSimulationDataChange({ ...simulationData, clientName: e.target.value })}
+                    value={safeSimulationData.clientName || ''}
+                    onChange={(e) => onSimulationDataChange({ ...safeSimulationData, clientName: e.target.value })}
                     placeholder="Digite o nome do cliente"
                     required
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
@@ -93,7 +105,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
               </div>
             </div>
 
-            {/* 2. RECURSOS FINANCEIROS */}
+            {/* 2. RECURSOS E CAPACIDADE FINANCEIRA */}
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -110,7 +122,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                       Total Aprovado Estimado
                     </span>
                     <strong className="text-xs font-extrabold text-sky-700">
-                      {formatCurrency(totalRecursosAprovados)}
+                      {formatCurrency(totalRecursosAprovados || 0)}
                     </strong>
                   </div>
                 )}
@@ -123,7 +135,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={simulationData.income > 0 ? formatCurrency(simulationData.income) : ''}
+                    value={(safeSimulationData.income || 0) > 0 ? formatCurrency(safeSimulationData.income || 0) : ''}
                     onChange={(e) => handleCurrencyInputChange('income', e.target.value)}
                     placeholder="R$ 0,00"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
@@ -135,7 +147,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={simulationData.subsidy > 0 ? formatCurrency(simulationData.subsidy) : ''}
+                    value={(safeSimulationData.subsidy || 0) > 0 ? formatCurrency(safeSimulationData.subsidy || 0) : ''}
                     onChange={(e) => handleCurrencyInputChange('subsidy', e.target.value)}
                     placeholder="R$ 0,00"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-emerald-600 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
@@ -147,7 +159,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={simulationData.fgts > 0 ? formatCurrency(simulationData.fgts) : ''}
+                    value={(safeSimulationData.fgts || 0) > 0 ? formatCurrency(safeSimulationData.fgts || 0) : ''}
                     onChange={(e) => handleCurrencyInputChange('fgts', e.target.value)}
                     placeholder="R$ 0,00"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-sky-600 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
@@ -159,7 +171,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={simulationData.financing > 0 ? formatCurrency(simulationData.financing) : ''}
+                    value={(safeSimulationData.financing || 0) > 0 ? formatCurrency(safeSimulationData.financing || 0) : ''}
                     onChange={(e) => handleCurrencyInputChange('financing', e.target.value)}
                     placeholder="R$ 0,00"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
@@ -179,8 +191,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         type="radio"
                         name="finPercent"
                         value="90"
-                        checked={simulationData.finPercent === 0.9}
-                        onChange={() => onSimulationDataChange({ ...simulationData, finPercent: 0.9 })}
+                        checked={safeSimulationData.finPercent === 0.9}
+                        onChange={() => onSimulationDataChange({ ...safeSimulationData, finPercent: 0.9 })}
                         className="text-sky-600 focus:ring-sky-600 cursor-pointer"
                       />
                       <span>90% (Máximo)</span>
@@ -190,8 +202,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         type="radio"
                         name="finPercent"
                         value="80"
-                        checked={simulationData.finPercent === 0.8}
-                        onChange={() => onSimulationDataChange({ ...simulationData, finPercent: 0.8 })}
+                        checked={safeSimulationData.finPercent === 0.8}
+                        onChange={() => onSimulationDataChange({ ...safeSimulationData, finPercent: 0.8 })}
                         className="text-sky-600 focus:ring-sky-600 cursor-pointer"
                       />
                       <span>80% (Padrão)</span>
@@ -209,8 +221,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         type="radio"
                         name="firstHome"
                         value="SIM"
-                        checked={simulationData.isFirstHome}
-                        onChange={() => onSimulationDataChange({ ...simulationData, isFirstHome: true })}
+                        checked={safeSimulationData.isFirstHome !== false}
+                        onChange={() => onSimulationDataChange({ ...safeSimulationData, isFirstHome: true })}
                         className="text-sky-600 focus:ring-sky-600 cursor-pointer"
                       />
                       <span>SIM</span>
@@ -220,8 +232,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         type="radio"
                         name="firstHome"
                         value="NAO"
-                        checked={!simulationData.isFirstHome}
-                        onChange={() => onSimulationDataChange({ ...simulationData, isFirstHome: false })}
+                        checked={safeSimulationData.isFirstHome === false}
+                        onChange={() => onSimulationDataChange({ ...safeSimulationData, isFirstHome: false })}
                         className="text-sky-600 focus:ring-sky-600 cursor-pointer"
                       />
                       <span>NÃO</span>
@@ -234,7 +246,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
 
           </div>
 
-          {/* COLUNA DIREITA: EMPREENDIMENTOS E CONDIÇÕES (5 COLS) */}
+          {/* COLUNA DIREITA: EMPREENDIMENTOS E CONDIÇÕES COMERCIAIS (5 COLS) */}
           <div className="lg:col-span-5 w-full">
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs w-full space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -255,46 +267,49 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                 </button>
               </div>
 
-              {/* LISTA DE PRODUTOS DINÂMICA */}
+              {/* LISTA LIMPA DE PRODUTOS */}
               <div className="space-y-3.5">
-                {products.map((p) => {
+                {(products || []).map((p) => {
+                  if (!p) return null;
                   const prodWithConds = ensureProductConditions({ ...p });
-                  const selectedCondId = selectedConditions[p.id] || '';
-                  const selectedCond = prodWithConds.conditions.find(c => c.id === selectedCondId);
+                  const selectedCondId = (selectedConditions || {})[p.id] || '';
                   
-                  const borderBg = p.isFeatured ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200 bg-white';
+                  const borderBg = p.isFeatured ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200 bg-white';
                   const badgeDot = p.isFeatured ? 'bg-amber-500' : 'bg-sky-600';
                   const titleClass = p.isFeatured ? 'text-amber-900' : 'text-slate-900';
 
                   const deliveryText = formatDeliveryText(p.deliveryDatePhase1, p.deliveryDatePhase2, p.deliveryDate);
 
-                  // Cálculos oficiais quando a condição está selecionada
+                  // Calcula preview local se condição selecionada
                   let calcPreview = null;
-                  if (selectedCond) {
-                    calcPreview = calculatePolicyRiskValues(
-                      prodWithConds,
-                      selectedCond,
-                      simulationData.income,
-                      undefined,
-                      undefined,
-                      undefined,
-                      undefined,
-                      undefined,
-                      simulationData.financing,
-                      simulationData.subsidy,
-                      simulationData.fgts,
-                      simulationData.finPercent
-                    );
+                  if (selectedCondId) {
+                    const cond = prodWithConds.conditions.find(c => c.id === selectedCondId);
+                    if (cond) {
+                      calcPreview = calculatePolicyRiskValues(
+                        prodWithConds,
+                        cond,
+                        safeSimulationData.income || 0,
+                        undefined,
+                        undefined,
+                        undefined,
+                        undefined,
+                        undefined,
+                        safeSimulationData.financing || 0,
+                        safeSimulationData.subsidy || 0,
+                        safeSimulationData.fgts || 0,
+                        safeSimulationData.finPercent || 0.80
+                      );
+                    }
                   }
 
                   return (
                     <div 
                       key={p.id} 
-                      className={`p-4 rounded-xl border ${borderBg} shadow-2xs w-full hover:shadow-sm transition-all space-y-4`}
+                      className={`p-4 rounded-xl border ${borderBg} shadow-2xs w-full hover:shadow-sm transition-all space-y-3`}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-1">
                         <span className={`text-sm font-bold ${titleClass} uppercase flex items-center gap-1.5`}>
-                          <span className={`w-2 h-2 rounded-full ${badgeDot}`}></span> {p.name}
+                          <span className={`w-2 h-2 rounded-full ${badgeDot}`}></span> {p.name || 'Empreendimento'}
                         </span>
                         {deliveryText && (
                           <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
@@ -332,60 +347,62 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         </button>
                       </div>
 
-                      {/* EXIBIÇÃO VISUAL NA INTERFACE (CONFORME ESPECIFICAÇÃO) */}
+                      {/* RESUMO INSTANTÂNEO COM AS 2 SEÇÕES OBRIGATÓRIAS (Sem Ato Premiado) */}
                       {calcPreview && (
-                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 text-xs space-y-3 mt-4">
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 text-xs space-y-3 mt-4 animate-fade-in">
                           
-                          {/* Bloco 1 */}
+                          {/* Bloco 1: DADOS DA APROVAÇÃO */}
                           <div className="grid grid-cols-2 gap-3 border-b border-slate-200/60 pb-3">
                             <div>
                               <span className="text-slate-500 font-medium block">Sinal Total</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.sinalTotal)}</strong>
+                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.sinalTotal || 0)}</strong>
                             </div>
                             <div>
                               <span className="text-slate-500 font-medium block">Sinal Total com ITBI</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.totalComITBI)}</strong>
+                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.totalComITBI || 0)}</strong>
                             </div>
                           </div>
 
-                          {/* Bloco 2 */}
+                          {/* Bloco 2: FLUXO MORAR CONSTRUTORA */}
                           <div className="grid grid-cols-2 gap-3 border-b border-slate-200/60 pb-3">
-                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
                               <span className="text-slate-500 font-medium block text-[11px] mb-0.5">Pagamento Ato (Imóvel)</span>
-                              <strong className="text-sky-700 font-extrabold text-sm block">{formatCurrency(calcPreview.pagamentoAto)}</strong>
+                              <strong className="text-sky-700 font-extrabold text-sm block">{formatCurrency(calcPreview.pagamentoAto || 0)}</strong>
                             </div>
-                            <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 shadow-sm">
+                            <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 shadow-sm flex flex-col justify-center">
                               <span className="text-amber-700 font-semibold block text-[11px] flex items-center gap-1 mb-0.5">
                                 <Sparkles className="w-3.5 h-3.5" /> Ato Premiado (Desconto)
                               </span>
-                              <strong className="text-amber-800 font-extrabold text-sm block">{formatCurrency(calcPreview.atoPremiado)}</strong>
+                              <strong className="text-amber-800 font-extrabold text-sm block">{formatCurrency(calcPreview.atoPremiado || 0)}</strong>
                             </div>
                           </div>
 
-                          {/* Bloco 3 */}
+                          {/* Bloco 3: PARCELAMENTO PRÓ-SOLUTO */}
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <span className="text-slate-500 font-medium block">Pró-Soluto (Sinal Restante)</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.proSolutoRestante)}</strong>
+                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.proSolutoRestante || 0)}</strong>
                             </div>
                             <div>
                               <span className="text-slate-500 font-medium block">Despesas Cartorárias & ITBI</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.propertyITBI)}</strong>
+                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.propertyITBI || 0)}</strong>
                             </div>
                             <div>
+                              {/* EXIGÊNCIA EXPLÍCITA: PRO SOLUTO TOTAL C/ ITBI = proSolutoTotal */}
                               <span className="text-slate-500 font-medium block">Pró-Soluto Total c/ ITBI</span>
-                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.proSolutoTotal)}</strong>
+                              <strong className="text-slate-800 font-bold">{formatCurrency(calcPreview.proSolutoTotal || 0)}</strong>
                             </div>
                             <div>
                               <span className="text-slate-600 font-semibold block flex items-center gap-1 mb-0.5">
                                 <Coins className="w-3.5 h-3.5 text-emerald-600" /> 1ª e Última Parcela
                               </span>
-                              <strong className="text-emerald-700 font-extrabold text-[13px]">{formatCurrency(calcPreview.parcelaPrice)}</strong>
+                              <strong className="text-emerald-700 font-extrabold text-[13px]">{formatCurrency(calcPreview.parcelaPrice || 0)}</strong>
                             </div>
                           </div>
 
                         </div>
                       )}
+
                     </div>
                   );
                 })}

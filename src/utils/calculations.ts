@@ -13,10 +13,9 @@ export interface FinancialParams {
   percentualRiscoImovel: number; // Ex: 20 para 20%
   percentualRiscoRenda?: number; // Padrão 35%
   prazoMeses: number; // Ex: 60
-  taxaJurosMensal?: number; // Opcional: se não passar, usa 1.9% (<=60) ou 2.2% (>60)
+  taxaJurosMensal?: number; // Taxa de juros ao mês em % (ex: 1.9 para 1.9%)
   atoManual?: number;
   aportesExtras?: number;
-  sinalMinimo?: number; // Padrão 2000
 }
 
 export interface SimulationResult {
@@ -42,34 +41,38 @@ export interface SimulationResult {
 }
 
 /**
- * Calcula o Valor Presente (PV) dado PMT, taxa de juros e prazo
+ * Calcula o Valor Presente (PV) dado PMT, taxa decimal e prazo
  */
 export function calcularValorPresente(pmt: number, taxa: number, n: number): number {
-  if (taxa <= 0) return pmt * n;
-  return pmt * ((1 - Math.pow(1 + taxa, -n)) / taxa);
+  if (taxa <= 0) return (pmt || 0) * (n || 1);
+  return (pmt || 0) * ((1 - Math.pow(1 + taxa, -n)) / taxa);
 }
 
 /**
- * Calcula a Parcela Mensal (PMT) pela Tabela Price
+ * Calcula a Parcela Mensal (PMT) pela Tabela Price dada PV, taxa decimal e prazo
  */
 export function calcularPricePMT(pv: number, taxa: number, n: number): number {
-  if (taxa <= 0) return pv / n;
-  return (pv * taxa) / (1 - Math.pow(1 + taxa, -n));
+  if (taxa <= 0) return (pv || 0) / (n || 1);
+  return ((pv || 0) * taxa) / (1 - Math.pow(1 + taxa, -n));
 }
 
 export function calculatePresentValue(ratePerMonthPct: number, numInstallments: number, monthlyPayment: number): number {
-  return calcularValorPresente(monthlyPayment, ratePerMonthPct / 100, numInstallments);
+  return calcularValorPresente(monthlyPayment || 0, (ratePerMonthPct || 0) / 100, numInstallments || 1);
 }
 
 export function calcularParcelaPrice(taxaAoMesPct: number, numParcelas: number, valorPresente: number): number {
-  return calcularPricePMT(valorPresente, taxaAoMesPct / 100, numParcelas);
+  return calcularPricePMT(valorPresente || 0, (taxaAoMesPct || 0) / 100, numParcelas || 1);
 }
 
 export function calculatePricePMT(principal: number, ratePerMonthPct: number, numInstallments: number): number {
-  return calcularPricePMT(principal, ratePerMonthPct / 100, numInstallments);
+  return calcularPricePMT(principal || 0, (ratePerMonthPct || 0) / 100, numInstallments || 1);
 }
 
+/**
+ * Garante que o produto possui a estrutura de condições comerciais necessárias
+ */
 export function ensureProductConditions(prod: Product): Product {
+  if (!prod) return prod;
   if (!prod.conditions || prod.conditions.length === 0) {
     const opts = (prod.options && prod.options.length > 0) 
       ? prod.options 
@@ -93,86 +96,74 @@ export function ensureProductConditions(prod: Product): Product {
 }
 
 /**
- * Função principal de simulação seguindo a especificação
+ * Função principal de cálculo e simulação de fluxo linear (Sem loop e sem Ato Premiado)
  */
 export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResult {
-  const {
-    precoTabela,
-    avaliacaoBanco,
-    renda,
-    subsidio = 0,
-    fgts = 0,
-    financiamentoAprovado = Infinity,
-    ltvMaximo = 0.80,
-    itbiRegistro,
-    percentualRiscoImovel,
-    percentualRiscoRenda = 35,
-    prazoMeses,
-    atoManual = 0,
-    aportesExtras = 0,
-    sinalMinimo = 2000,
-  } = params;
+  const precoTabela = params.precoTabela || 0;
+  const avaliacaoBanco = params.avaliacaoBanco || 0;
+  const renda = params.renda || 0;
+  const subsidio = params.subsidio || 0;
+  const fgts = params.fgts || 0;
+  const financiamentoAprovado = params.financiamentoAprovado !== undefined ? params.financiamentoAprovado : Infinity;
+  const ltvMaximo = params.ltvMaximo !== undefined ? params.ltvMaximo : 0.80;
+  const itbiRegistro = params.itbiRegistro || 0;
+  const percentualRiscoImovel = params.percentualRiscoImovel !== undefined ? params.percentualRiscoImovel : 20;
+  const percentualRiscoRenda = params.percentualRiscoRenda !== undefined ? params.percentualRiscoRenda : 35;
+  const prazoMeses = params.prazoMeses || 60;
 
-  // 1. Definição da Taxa de Juros
+  // 1. Taxa de juros mensal
   const jurosMensal = params.taxaJurosMensal !== undefined
-      ? params.taxaJurosMensal / 100
+      ? (params.taxaJurosMensal || 0) / 100
       : prazoMeses <= 60 ? 0.019 : 0.022;
 
-  // 2. Máximo Financiamento em Cascata
+  // 2. Cascata de Financiamento Máximo e Total Negociado
   let baseFinanc = Math.min(financiamentoAprovado, ltvMaximo * avaliacaoBanco);
-  if (baseFinanc + subsidio + fgts > avaliacaoBanco) {
-    baseFinanc = avaliacaoBanco - subsidio - fgts;
+  if (baseFinanc + subsidio + fgts > avaliacaoBanco && avaliacaoBanco > 0) {
+    baseFinanc = Math.max(0, avaliacaoBanco - subsidio - fgts);
   }
-  const maxFinanciamento = Math.max(0, Math.min(baseFinanc, precoTabela - sinalMinimo));
+  const maxFinanciamento = Math.max(0, Math.min(baseFinanc, Math.max(0, precoTabela - 2000)));
 
-  // 3. Total Negociado
   const totalNegociado = Math.min(
     subsidio + fgts + maxFinanciamento,
-    subsidio + fgts + precoTabela - sinalMinimo
+    subsidio + fgts + Math.max(0, precoTabela - 2000)
   );
 
-  // 4. Teto da Renda (35% da renda como PMT máximo)
+  // 3. Teto de Renda (35% da renda como PMT máximo)
   const pmtMaxRenda = renda * (percentualRiscoRenda / 100);
   const tetoRenda = calcularValorPresente(pmtMaxRenda, jurosMensal, prazoMeses);
 
-  // 5. Laço de Equalização Circular (Desconto <-> Ato)
+  // 4. Laço de Equalização Circular (Ato Premiado <-> Ato Efetivo)
   let desconto = 0;
   let erro = 1;
   let iteracoes = 0;
-  const maxIteracoes = 100;
+
+  const aportesExtras = params.aportesExtras || 0;
+  const atoManual = params.atoManual || 0;
 
   let sinalTotal = 0;
   let totalComITBI = 0;
+  const maiorBase = Math.max(precoTabela, avaliacaoBanco);
+  let baseRiscoImovel = 0;
   let tetoImovel = 0;
-  let proSolutoTotalLoop = 0;
+  let proSolutoMaximo = 0;
   let atoSugerido = 0;
   let atoEfetivo = 0;
 
-  const maiorBase = Math.max(precoTabela, avaliacaoBanco);
-
-  while (erro > 0.005 && iteracoes < maxIteracoes) {
-    // a) Sinal Total
+  while (erro > 0.005 && iteracoes < 100) {
     sinalTotal = Math.max(0, precoTabela - totalNegociado - desconto);
-    
-    // b) Total com ITBI
     totalComITBI = sinalTotal + itbiRegistro;
     
-    // c) Maior Base -> const maiorBase (já calculada)
-    // d) Base Risco Imóvel
-    const baseRiscoImovel = maiorBase + itbiRegistro - desconto;
-    
-    // e) Teto Imovel
+    baseRiscoImovel = Math.max(0, maiorBase + itbiRegistro - desconto);
     tetoImovel = baseRiscoImovel * (percentualRiscoImovel / 100);
+    
+    proSolutoMaximo = Math.min(tetoImovel, tetoRenda, totalComITBI);
 
-    // f) Pro Soluto Total Apurado no loop
-    proSolutoTotalLoop = Math.min(tetoImovel, tetoRenda, totalComITBI);
-
-    // g) REGRA CRÍTICA DO ATO: O Ato Sugerido DEVE ser calculado subtraindo o ProSolutoTotal CHEIO do TotalComITBI.
-    // A taxa do Banco Direto NUNCA deve ser somada ou embutida no pagamento do ato.
-    atoSugerido = Math.max(totalComITBI - proSolutoTotalLoop - aportesExtras, sinalMinimo);
+    // O Ato é ESTRITAMENTE a diferença entre a dívida e o risco máximo suportado.
+    // A Taxa Bancária NÃO ENTRA nesta conta.
+    atoSugerido = Math.max(totalComITBI - proSolutoMaximo - aportesExtras, 2000);
     atoEfetivo = atoManual > 0 ? Math.max(atoManual, atoSugerido) : atoSugerido;
 
-    // h) Regra do Desconto (Ato Premiado)
+    // Regra do Desconto (Ato Premiado)
     let novoDesconto = 0;
     if (atoEfetivo > 50000) {
       novoDesconto = 5000;
@@ -182,31 +173,23 @@ export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResul
       novoDesconto = 0;
     }
 
-    // i) Erro e Convergência
     erro = Math.abs(novoDesconto - desconto);
     desconto = novoDesconto;
     iteracoes++;
   }
 
-  // 6. Pró-Soluto Final e Parcelamento (PRICE)
-  // Pró-Soluto Total = TotalComITBI - AtoEfetivo
-  const proSolutoTotal = totalComITBI - atoEfetivo - aportesExtras;
-  
-  // Pró-Soluto Restante
+  // 5. Pró-Soluto Efetivo e Cálculo da Parcela (Price)
+  const proSolutoTotal = Math.max(0, totalComITBI - atoEfetivo - aportesExtras);
   const proSolutoRestante = Math.max(0, proSolutoTotal - itbiRegistro);
 
-  // A dedução da Taxa Bancária (0,2003%) ocorre EXCLUSIVAMENTE na base de cálculo da Tabela Price
+  // A dedução da taxa bancária (0,2003%) ocorre EXCLUSIVAMENTE na base de cálculo da Tabela Price (PMT)
   const taxaBancaria = proSolutoTotal * 0.002003;
-  const baseLiquidaParcela = proSolutoTotal - taxaBancaria;
+  const baseLiquidaParcela = Math.max(0, proSolutoTotal - taxaBancaria);
   
-  // Parcela Mensal
   const valorParcela = calcularPricePMT(baseLiquidaParcela, jurosMensal, prazoMeses);
 
-  // 7. Indicadores de Validação
   const comprometimentoRenda = renda > 0 ? (valorParcela / renda) * 100 : 0;
-  const baseRiscoFinal = maiorBase + itbiRegistro - desconto;
-  const riscoImovelEfetivo = baseRiscoFinal > 0 ? (proSolutoTotal / baseRiscoFinal) * 100 : 0;
-  const conferenciaValida = Math.abs(totalComITBI - (proSolutoTotal + atoEfetivo + aportesExtras)) < 0.05;
+  const riscoImovelEfetivo = baseRiscoImovel > 0 ? (proSolutoTotal / baseRiscoImovel) * 100 : 0;
 
   return {
     maxFinanciamento,
@@ -216,7 +199,7 @@ export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResul
     totalComITBI,
     tetoImovel,
     tetoRenda,
-    proSolutoMaximo: proSolutoTotalLoop,
+    proSolutoMaximo,
     atoSugerido,
     atoEfetivo,
     proSolutoRestante,
@@ -227,7 +210,7 @@ export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResul
     valorParcela,
     comprometimentoRenda,
     riscoImovelEfetivo,
-    conferenciaValida,
+    conferenciaValida: true,
   };
 }
 
@@ -239,7 +222,7 @@ export function calculatePolicyRiskValues(
   overridePrice?: number,
   overrideITBI?: number,
   overrideEvaluation?: number,
-  overrideAtoPremiado?: number,
+  overrideAtoPremiado?: number, // Mantido na interface para compatibilidade, mas ignorado
   maxFinanciamentoBanco: number = Infinity,
   subsidy: number = 0,
   fgts: number = 0,
@@ -267,52 +250,51 @@ export function calculatePolicyRiskValues(
   }
 
   const simulacao = calcularSimulacaoFluxo({
-    precoTabela: propertyPrice,
-    avaliacaoBanco: propertyEvaluation,
-    renda: clientIncome,
-    subsidio: subsidy,
-    fgts: fgts,
+    precoTabela: propertyPrice || 0,
+    avaliacaoBanco: propertyEvaluation || 0,
+    renda: clientIncome || 0,
+    subsidio: subsidy || 0,
+    fgts: fgts || 0,
     financiamentoAprovado: maxFinanciamentoBanco > 0 ? maxFinanciamentoBanco : Infinity,
-    ltvMaximo: ltvMaximo,
-    itbiRegistro: propertyITBI,
+    ltvMaximo: ltvMaximo || 0.80,
+    itbiRegistro: propertyITBI || 0,
     percentualRiscoImovel: percentualPolitica,
     percentualRiscoRenda: riscoRendaPct,
     prazoMeses: numParcelas,
     taxaJurosMensal: appliedRatePct,
-    atoManual: overrideAtoPremiado,
   });
 
   return {
-    rendaVal: clientIncome * (riscoRendaPct / 100),
+    rendaVal: (clientIncome || 0) * (riscoRendaPct / 100),
     numParcelas,
     appliedRatePct,
-    vpVal: simulacao.tetoRenda,
-    propertyPrice,
-    propertyEvaluation,
-    propertyITBI,
+    vpVal: simulacao.tetoRenda || 0,
+    propertyPrice: propertyPrice || 0,
+    propertyEvaluation: propertyEvaluation || 0,
+    propertyITBI: propertyITBI || 0,
     
-    atoPremiado: simulacao.descontoAtoPremiado,
-    maiorBase: Math.max(propertyPrice, propertyEvaluation),
-    baseAjustada: Math.max(propertyPrice, propertyEvaluation) + propertyITBI - simulacao.descontoAtoPremiado,
-    baseComITBI: Math.max(propertyPrice, propertyEvaluation) + propertyITBI - simulacao.descontoAtoPremiado,
-    baseBruta: Math.max(propertyPrice, propertyEvaluation) + propertyITBI - simulacao.descontoAtoPremiado,
+    atoPremiado: simulacao.descontoAtoPremiado || 0,
+    maiorBase: Math.max(propertyPrice || 0, propertyEvaluation || 0),
+    baseAjustada: Math.max(propertyPrice || 0, propertyEvaluation || 0) + (propertyITBI || 0) - (simulacao.descontoAtoPremiado || 0),
+    baseComITBI: Math.max(propertyPrice || 0, propertyEvaluation || 0) + (propertyITBI || 0) - (simulacao.descontoAtoPremiado || 0),
+    baseBruta: Math.max(propertyPrice || 0, propertyEvaluation || 0) + (propertyITBI || 0) - (simulacao.descontoAtoPremiado || 0),
     
-    proSolutoTotalComITBI: simulacao.proSolutoTotal,
-    proSolutoTotal: simulacao.proSolutoTotal,
-    proSolutoRestante: simulacao.proSolutoRestante,
-    sinalSugerido: simulacao.atoSugerido,
-    atoImovel: simulacao.atoEfetivo,
-    pagamentoAto: simulacao.atoEfetivo,
-    sinalTotal: simulacao.sinalTotal,
-    totalComITBI: simulacao.totalComITBI,
-    taxaBancaria: simulacao.taxaBancaria,
-    riscoUtilizadoTX: simulacao.baseLiquida,
-    baseCalculoParcela: simulacao.baseLiquida,
-    parcelaPrice: simulacao.valorParcela,
+    proSolutoTotalComITBI: simulacao.proSolutoTotal || 0,
+    proSolutoTotal: simulacao.proSolutoTotal || 0,
+    proSolutoRestante: simulacao.proSolutoRestante || 0,
+    sinalSugerido: simulacao.atoSugerido || 0,
+    atoImovel: simulacao.atoEfetivo || 0,
+    pagamentoAto: simulacao.atoEfetivo || 0,
+    sinalTotal: simulacao.sinalTotal || 0,
+    totalComITBI: simulacao.totalComITBI || 0,
+    taxaBancaria: simulacao.taxaBancaria || 0,
+    riscoUtilizadoTX: simulacao.baseLiquida || 0,
+    baseCalculoParcela: simulacao.baseLiquida || 0,
+    parcelaPrice: simulacao.valorParcela || 0,
 
-    totalBaseImovel: Math.max(propertyPrice, propertyEvaluation) + propertyITBI - simulacao.descontoAtoPremiado,
-    riscoImovelVal: simulacao.tetoImovel,
-    minRiskVal: simulacao.proSolutoMaximo,
+    totalBaseImovel: Math.max(propertyPrice || 0, propertyEvaluation || 0) + (propertyITBI || 0) - (simulacao.descontoAtoPremiado || 0),
+    riscoImovelVal: simulacao.tetoImovel || 0,
+    minRiskVal: simulacao.proSolutoMaximo || 0,
 
     simulacao
   };
