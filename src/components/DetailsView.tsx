@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
 
 interface DetailsViewProps {
   product: Product | null;
   condition: CommercialCondition | null;
   simulationData: SimulationData;
   selectedUnits: Record<string, SelectedUnit>;
+  products?: Product[];
+  onSelectProduct?: (product: Product, conditionId: string) => void;
   onUnitSelectChange: (productId: string, unit: SelectedUnit) => void;
   onBackToSimulator: () => void;
   onNavigateToImport: (productId: string) => void;
@@ -20,6 +22,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   condition,
   simulationData,
   selectedUnits,
+  products = [],
+  onSelectProduct,
   onUnitSelectChange,
   onBackToSimulator,
   onNavigateToImport,
@@ -28,17 +32,18 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const currentProd = product || null;
   const currentCond = condition || (currentProd ? ensureProductConditions({ ...currentProd }).conditions[0] : null);
 
-  // LÓGICA DE DEFINIÇÃO DO PRAZO PADRÃO (INITIAL SUGGESTION / TETO MÁXIMO)
-  // a) SE Prazo Faixa 2 estiver cadastrada e > 0: valor padrão = Faixa 2 (ex: 72x)
-  // b) SE apenas Prazo Faixa 1 estiver cadastrada (ou Faixa 2 for 0/vazia): valor padrão = Faixa 1 (ex: 60x)
-  const faixa1Meses = currentCond?.mesesTabela1;
-  const faixa2Meses = currentCond?.mesesTabela2;
-  const temFaixa2 = faixa2Meses !== undefined && faixa2Meses !== null && Number(faixa2Meses) > 0;
-  const temFaixa1 = faixa1Meses !== undefined && faixa1Meses !== null && Number(faixa1Meses) > 0;
+  // LÓGICA DE DEFINIÇÃO DO PRAZO PADRÃO E TETO MÁXIMO (VINCULADO AO PRODUTO ATUAL)
+  // 1. AVALIAÇÃO DINÂMICA DA POLÍTICA:
+  // Carrega os valores de Prazo Faixa 1 e Prazo Faixa 2 da condição do produto selecionado.
+  const prazoFaixa1 = Number(currentCond?.mesesTabela1) || 0;
+  const prazoFaixa2 = Number(currentCond?.mesesTabela2) || 0;
 
-  const limiteMaximoParcelas = temFaixa2
-    ? Number(faixa2Meses)
-    : (temFaixa1 ? Number(faixa1Meses) : (currentCond?.numParcelas || currentProd?.numParcelas || 60));
+  // 2. LÓGICA DE DEFINIÇÃO DO PRAZO MÁXIMO:
+  // - SE Prazo Faixa 2 existir e for > 0 (ex: 72 no Vista do Passeio): limiteMaximoParcelas = 72
+  // - CASO CONTRÁRIO (se Faixa 2 for 0 ou vazia, como no Colina das Amoras): limiteMaximoParcelas = Prazo Faixa 1 (ex: 60)
+  const limiteMaximoParcelas = (prazoFaixa2 > 0)
+    ? prazoFaixa2
+    : (prazoFaixa1 > 0 ? prazoFaixa1 : (currentCond?.numParcelas || currentProd?.numParcelas || 60));
 
   const [selectedTorre, setSelectedTorre] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
@@ -65,13 +70,22 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         setValParc3(0);
       }
     }
-  }, [currentProd, selectedUnits]);
+  }, [currentProd?.id, selectedUnits]);
 
+  // 2. FUNÇÃO E EFFECT DISPARADOS AO TROCAR DE EMPREENDIMENTO (ON CHANGE):
+  // Ao selecionar um novo empreendimento (ex: Vista do Passeio):
+  // - Limpa completamente os limites e valores do empreendimento anterior.
+  // - Lê a nova configuração e atualiza o valor (value) de QTD. MENSAIS para o limiteMaximoParcelas (ex: 72x ou 60x).
   useEffect(() => {
-    if (currentCond) {
+    if (currentProd && currentCond) {
+      setValAto(0);
+      setValAtoITBI(0);
+      setValAtoPremiado(0);
+      setValParc2(0);
+      setValParc3(0);
       setQtdMensais(limiteMaximoParcelas);
     }
-  }, [currentCond, limiteMaximoParcelas]);
+  }, [currentProd?.id, currentCond?.id, limiteMaximoParcelas]);
 
   if (!currentProd || !currentCond) {
     return (
@@ -90,41 +104,262 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // Get table rows for current product
   const tableRows = currentProd.tableInfo?.rows || [];
-  const uniqueTorres = Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== '')));
+  const uniqueTorres = Array.from(new Set(
+    tableRows.map(r => {
+      if (Array.isArray(r)) return String(r[1] || '').trim();
+      if (r && typeof r === 'object') return String((r as any).torre || (r as any).TORRE || r[1] || '').trim();
+      return '';
+    }).filter(t => t !== '')
+  ));
 
   // Filter units by selected torre
   const filteredUnits = selectedTorre 
     ? Array.from(new Set(
         tableRows
-          .filter(r => String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase())
-          .map(r => String(r[2] || '').trim())
+          .filter(r => {
+            const t = Array.isArray(r) ? String(r[1] || '').trim() : String((r as any).torre || (r as any).TORRE || r[1] || '').trim();
+            return t.toLowerCase() === selectedTorre.toLowerCase();
+          })
+          .map(r => {
+            if (Array.isArray(r)) return String(r[2] || '').trim();
+            if (r && typeof r === 'object') return String((r as any).unidade || (r as any).UNIDADE || r[2] || '').trim();
+            return '';
+          })
           .filter(u => u !== '')
       ))
     : [];
 
   // Find exact row if torre and unidade are chosen
   const matchingRow = (selectedTorre && selectedUnidade)
-    ? tableRows.find(r => 
-        String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase() &&
-        String(r[2] || '').trim().toLowerCase() === selectedUnidade.toLowerCase()
-      )
+    ? tableRows.find(r => {
+        if (Array.isArray(r)) {
+          return String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase() &&
+                 String(r[2] || '').trim().toLowerCase() === selectedUnidade.toLowerCase();
+        } else if (r && typeof r === 'object') {
+          const t = String((r as any).torre || (r as any).TORRE || r[1] || '').trim().toLowerCase();
+          const u = String((r as any).unidade || (r as any).UNIDADE || r[2] || '').trim().toLowerCase();
+          return t === selectedTorre.toLowerCase() && u === selectedUnidade.toLowerCase();
+        }
+        return false;
+      })
     : null;
 
   const hasUnitSelected = Boolean(selectedTorre && selectedUnidade && matchingRow);
 
+  // 1. MAPEAMENTO COMPLETO E BINDING DO OBJETO DA UNIDADE SELECIONADA:
+  const unidadeSelecionada = useMemo(() => {
+    if (!hasUnitSelected || !matchingRow) return null;
+
+    const rawObj = (typeof matchingRow === 'object' && !Array.isArray(matchingRow)) ? (matchingRow as any) : {};
+    const rawArray = Array.isArray(matchingRow) ? (matchingRow as any[]) : [];
+
+    // Helper de extração de string com fallbacks
+    const getStr = (...keys: (string | number)[]) => {
+      for (const k of keys) {
+        if (rawObj && rawObj[k] !== undefined && rawObj[k] !== null && String(rawObj[k]).trim() !== '') {
+          return String(rawObj[k]).trim();
+        }
+      }
+      for (const k of keys) {
+        if (typeof k === 'number' && rawArray && rawArray[k] !== undefined && rawArray[k] !== null) {
+          return String(rawArray[k]).trim();
+        }
+      }
+      return '';
+    };
+
+    // Helper de extração e conversão de valores numéricos/monetários
+    const getNum = (...keys: (string | number)[]) => {
+      for (const k of keys) {
+        let val: any = undefined;
+        if (rawObj && rawObj[k] !== undefined && rawObj[k] !== null && rawObj[k] !== '') {
+          val = rawObj[k];
+        } else if (typeof k === 'number' && rawArray && rawArray[k] !== undefined && rawArray[k] !== null && rawArray[k] !== '') {
+          val = rawArray[k];
+        }
+
+        if (val !== undefined) {
+          if (typeof val === 'number') return isNaN(val) ? 0 : val;
+          if (typeof val === 'string') {
+            const str = val.trim();
+            if (!str || str.includes('—') || str === '-') continue;
+            const cleaned = str.replace('R$', '').replace(/\s+/g, '');
+            let parsed = 0;
+            if (cleaned.includes(',')) {
+              parsed = parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
+            } else {
+              parsed = parseFloat(cleaned);
+            }
+            if (!isNaN(parsed) && parsed > 0) return parsed;
+          }
+        }
+      }
+      return 0;
+    };
+
+    // Leitura flexível dos dados básicos
+    const areaPriv = getStr('areaPrivativa', 'ÁREA PRIVATIVA M² - APTO', 'ÁREA PRIVATIVA', 'area_privativa', 'privativa', 3) || '0,00';
+    const areaQui = getStr('areaQuintal', 'ÁREA QUINTAL M²', 'ÁREA QUINTAL', 'quintal', 4) || '0,00';
+    const tipo = getStr('tipologia', 'TIPOLOGIA', 'Tipologia', 5) || '';
+    const prc = getNum('preco', 'PREÇO', 'PREÇO DE TABELA', 'PRECO', 'Valor', 'VALOR', 7);
+    const aval = getNum('avaliacao', 'AVALIAÇÃO', 'AVALIAÇÃO 05/08/2025', 'AVALIACAO', 'Avaliação', 6);
+
+    // ITBI 1º Imóvel e 2º Imóvel
+    const chavesObj = rawObj ? Object.keys(rawObj) : [];
+    const chaveItbi1 = chavesObj.find(k => k.toUpperCase().replace(/\s/g, '').includes('1ºIMOVEL') || k.toUpperCase().replace(/\s/g, '').includes('1ºIMÓVEL'));
+    const chaveItbi2 = chavesObj.find(k => k.toUpperCase().replace(/\s/g, '').includes('2ºIMOVEL') || k.toUpperCase().replace(/\s/g, '').includes('2ºIMÓVEL'));
+
+    let rawItbi1 = chaveItbi1 ? rawObj[chaveItbi1] : undefined;
+    let rawItbi2 = chaveItbi2 ? rawObj[chaveItbi2] : undefined;
+
+    // Trava de segurança: se o valor for igual ao Preço, zera para evitar espelhamento
+    if (rawItbi1 === rawObj['PREÇO'] || rawItbi1 === rawObj['Preço'] || (prc > 0 && parseCurrency(rawItbi1) === prc)) rawItbi1 = 0;
+    if (rawItbi2 === rawObj['PREÇO'] || rawItbi2 === rawObj['Preço'] || (prc > 0 && parseCurrency(rawItbi2) === prc)) rawItbi2 = 0;
+
+    let v1 = rawItbi1 ? (typeof rawItbi1 === 'string' ? parseFloat(rawItbi1.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0 : parseCurrency(rawItbi1)) : 0;
+    let v2 = rawItbi2 ? (typeof rawItbi2 === 'string' ? parseFloat(rawItbi2.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0 : parseCurrency(rawItbi2)) : 0;
+
+    if (v1 <= 0) {
+      v1 = getNum(
+        'ITBI + Registro\n1º Imóvel',
+        'ITBI + Registro\r\n1º Imóvel',
+        'ITBI + Registro 1º Imóvel',
+        'ITBI + REG. 1º IMÓVEL',
+        'ITBI + REGISTRO 1º IMÓVEL',
+        'ITBI + REGISTRO',
+        'ITBI + Registro',
+        'itbiPrimeiroImovel',
+        'itbiRegistro',
+        'itbi_registro',
+        'itbi1',
+        'ITBI',
+        'itbi',
+        8
+      );
+      if (prc > 0 && v1 === prc) v1 = 0;
+    }
+
+    if (v2 <= 0) {
+      v2 = getNum(
+        'ITBI + Registro\n2º Imóvel',
+        'ITBI + Registro\r\n2º Imóvel',
+        'ITBI + Registro 2º Imóvel',
+        'ITBI + REG. 2º IMÓVEL',
+        'ITBI + REGISTRO 2º IMÓVEL',
+        'ITBI + Registro segundo imóvel',
+        'itbiSegundoImovel',
+        'itbi2',
+        9
+      );
+      if (prc > 0 && v2 === prc) v2 = 0;
+    }
+
+    if (v2 <= 0 && v1 > 0) v2 = v1;
+
+    const faseStr = getStr('fase', 'FASE', 0) || '1ª';
+    const torreStr = getStr('torre', 'TORRE', 'Torre', 1) || '';
+    const unidadeStr = getStr('unidade', 'UNIDADE', 'Unidade', 2) || '';
+
+    return {
+      ...rawObj,
+      raw: matchingRow,
+      fase: faseStr,
+      torre: torreStr,
+      unidade: unidadeStr,
+      areaPrivativa: areaPriv,
+      'ÁREA PRIVATIVA M² - APTO': areaPriv,
+      area_privativa: areaPriv,
+      areaQuintal: areaQui,
+      'ÁREA QUINTAL M²': areaQui,
+      quintal: areaQui,
+      tipologia: tipo,
+      'TIPOLOGIA': tipo,
+      preco: prc,
+      'PREÇO': prc,
+      'PREÇO DE TABELA': prc,
+      avaliacao: aval,
+      'AVALIAÇÃO': aval,
+      'AVALIAÇÃO 05/08/2025': aval,
+      itbiPrimeiroImovel: v1,
+      itbiSegundoImovel: v2,
+      itbiValor: v1,
+      itbiRegistro: v1,
+      itbi_registro: v1,
+      'ITBI + REG. 1º IMÓVEL': v1,
+      'ITBI + REGISTRO': v1,
+      'ITBI + Registro': v1,
+      'ITBI + Registro 1º Imóvel': v1,
+      'ITBI + Registro\n1º Imóvel': v1,
+      'ITBI + Registro\r\n1º Imóvel': v1,
+      'ITBI + Registro  1º Imóvel': v1,
+      'ITBI + Registro 2º Imóvel': v2,
+      'ITBI + Registro\n2º Imóvel': v2,
+      'ITBI + Registro\r\n2º Imóvel': v2,
+      ITBI: v1,
+      itbi: v1
+    };
+  }, [hasUnitSelected, matchingRow]);
+
+  // LOG DE AUDITORIA SOLICITADO NO TOPO DA FUNÇÃO / SELEÇÃO DA UNIDADE
+  useEffect(() => {
+    if (selectedTorre && selectedUnidade) {
+      console.log("DADOS COMPLETOS DA UNIDADE SELECIONADA:", unidadeSelecionada);
+    }
+  }, [selectedTorre, selectedUnidade, unidadeSelecionada]);
+
   // Extracted row data
-  const fase = matchingRow ? String(matchingRow[0] || '1ª') : '-';
-  const tipologia = matchingRow ? String(matchingRow[5] || '2 Quartos') : '-';
-  const areaPriv = matchingRow ? formatM2(matchingRow[3]) : '0,00 m²';
-  const areaQuintal = matchingRow ? formatM2(matchingRow[4]) : '0,00 m²';
+  const fase = unidadeSelecionada ? unidadeSelecionada.fase : '-';
+  const tipologia = unidadeSelecionada ? (unidadeSelecionada.tipologia || unidadeSelecionada['TIPOLOGIA'] || '-') : '-';
+  const areaPriv = unidadeSelecionada ? formatM2(unidadeSelecionada.areaPrivativa || unidadeSelecionada['ÁREA PRIVATIVA M² - APTO'] || unidadeSelecionada.area_privativa) : '0,00 m²';
+  const areaQuintal = unidadeSelecionada ? formatM2(unidadeSelecionada.areaQuintal || unidadeSelecionada['ÁREA QUINTAL M²'] || unidadeSelecionada.quintal) : '0,00 m²';
 
-  const price = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[7]) : 0;
-  const evaluation = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[6]) : 0;
+  const price = unidadeSelecionada ? (unidadeSelecionada.preco || unidadeSelecionada['PREÇO'] || 0) : 0;
+  const evaluation = unidadeSelecionada ? (unidadeSelecionada.avaliacao || unidadeSelecionada['AVALIAÇÃO'] || unidadeSelecionada['AVALIAÇÃO 05/08/2025'] || 0) : 0;
 
-  // ITBI depends on whether it's 1º Imóvel or 2º Imóvel
-  const itbiVal = (hasUnitSelected && matchingRow) 
-    ? (simulationData.isFirstHome ? parseCurrency(matchingRow[8]) : parseCurrency(matchingRow[9]))
-    : 0;
+  // LEITURA FLEXÍVEL E CONDICIONAL DE DESPESAS CARTORÁRIAS / ITBI (1º vs 2º IMÓVEL)
+  let despesasCartorarias = 0;
+
+  if (unidadeSelecionada) {
+    const isSegundoImovel = !simulationData.isFirstHome;
+
+    if (isSegundoImovel) {
+      let rawItbi2 = (unidadeSelecionada as any)['ITBI + REGISTRO 2º IMÓVEL'] ||
+                      (unidadeSelecionada as any)['ITBI + Registro 2º Imóvel'] ||
+                      (unidadeSelecionada as any).itbiSegundoImovel || 
+                      (unidadeSelecionada as any)['ITBI + REGISTRO'] || 
+                      (unidadeSelecionada as any)['ITBI + Registro'] || 
+                      (unidadeSelecionada as any).itbiPrimeiroImovel || 0;
+      
+      if (typeof rawItbi2 === 'string') {
+        if (rawItbi2.includes('—') || rawItbi2.trim() === '-') {
+          rawItbi2 = 0;
+        } else {
+          rawItbi2 = parseFloat(rawItbi2.replace('R$', '').replace(/\./g, '').replace(',', '.').trim()) || 0;
+        }
+      }
+      despesasCartorarias = Number(rawItbi2) || 0;
+    } else {
+      // Comportamento PADRÃO: Assume 1º Imóvel com leitura flexível de chaves
+      let rawItbi1 = (unidadeSelecionada as any)['ITBI + REG. 1º IMÓVEL'] ||
+                      (unidadeSelecionada as any)['ITBI + REGISTRO'] || 
+                      (unidadeSelecionada as any)['ITBI + Registro'] || 
+                      (unidadeSelecionada as any)['ITBI + Registro 1º Imóvel'] ||
+                      (unidadeSelecionada as any).itbiPrimeiroImovel || 
+                      (unidadeSelecionada as any).itbiValor ||
+                      (unidadeSelecionada as any).itbi || 0;
+
+      if (typeof rawItbi1 === 'string') {
+        if (rawItbi1.includes('—') || rawItbi1.trim() === '-') {
+          rawItbi1 = 0;
+        } else {
+          rawItbi1 = parseFloat(rawItbi1.replace('R$', '').replace(/\./g, '').replace(',', '.').trim()) || 0;
+        }
+      }
+      despesasCartorarias = Number(rawItbi1) || 0;
+    }
+  }
+
+  const itbiVal = despesasCartorarias;
 
   // Handle dropdown changes
   const handleTorreChange = (torre: string) => {
@@ -234,9 +469,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // REFLEXO NO GAP INICIAL (SINAL TOTAL)
   const gapInicial = hasUnitSelected ? Math.max(0, price - totalNegoc) : 0;
 
-  const despCartorias = hasUnitSelected 
-    ? (itbiVal > 0 ? itbiVal : (price * 0.0441))
-    : 0;
+  // Despesas cartorárias conforme regra condicional (1º vs 2º Imóvel)
+  const despCartorias = hasUnitSelected ? despesasCartorarias : 0;
 
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
@@ -326,80 +560,81 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const atoMinimoCalculado = hasUnitSelected ? Math.max(2000, pagamentoAtoSinalEfetivo) : 0;
   const sinalTotalOriginal = gapInicial;
 
-  // 1. CAMPO 1: "PAGAMENTO ATO (IMÓVEL)" - valAto
+  // 1. LEITURA DO APORTE DAS MENSAIS (1ª MENSAL 30D / 2ª MENSAL 60D)
   const mens30d = valParc2 || 0;
   const mens60d = valParc3 || 0;
   const somaMensais = mens30d + mens60d;
+  let saldoParaAbater = somaMensais;
 
   const atoImovelDigitado = valAto > 0 ? valAto : atoMinimoCalculado;
-  const descontoImovelDigitado = (atoImovelDigitado >= 5000) ? Math.min(atoImovelDigitado * 0.10, 5000) : 0;
-  const necessidadeTotalEntrada = atoImovelDigitado + descontoImovelDigitado;
 
-  // As mensais absorvem parte da entrada requerida. Target restante para (AtoEfetivo + AtoPremiado):
-  const targetAtoEComposto = Math.max(0, necessidadeTotalEntrada - somaMensais);
+  // 2. EXECUÇÃO DA FILA SEQUENCIAL DE ABATIMENTO (ETAPAS 1, 2, 3 E 4)
 
-  let atoAposMensais = 2000;
+  // ETAPA 1 (ATO / SINAL - PISO 2K):
+  // Abata o SaldoParaAbater do PagamentoAtoImovel, mas NUNCA permita que ele fique menor que R$ 2.000,00.
+  const disponivelAbatimentoAto = Math.max(0, atoImovelDigitado - 2000);
+  const atoAbsorvido = Math.min(disponivelAbatimentoAto, saldoParaAbater);
+  let atoAposMensais = atoImovelDigitado - atoAbsorvido;
+  saldoParaAbater -= atoAbsorvido;
+
+  // Recalculo do Ato Premiado (desconto da Construtora) para o novo Ato do Imóvel
   let novoAtoPremiado = 0;
-  let atoAbsorvido = 0;
-  let sobraParaAmortizar = 0;
-
-  if (targetAtoEComposto < 2000) {
-    // Trava de R$ 2.000,00 do Ato Mínimo
-    atoAposMensais = 2000;
-    novoAtoPremiado = 0;
-    atoAbsorvido = Math.min(Math.max(0, atoImovelDigitado - 2000), somaMensais);
-    sobraParaAmortizar = somaMensais - atoAbsorvido;
-  } else {
-    // Loop de equalização e convergência iterativa entre Ato Efetivo e Ato Premiado
-    let currAtoEfetivo = targetAtoEComposto;
+  if (atoAposMensais >= 4500) {
+    let currAtoEfetivo = atoAposMensais;
     let currAtoPremiado = 0;
-
     for (let iter = 0; iter < 100; iter++) {
-      const atoBruto = currAtoEfetivo + currAtoPremiado;
-      const novoDesc = (atoBruto >= 5000 && currAtoEfetivo >= 4500)
+      const atoBrutoCalculado = currAtoEfetivo + currAtoPremiado;
+      const novoDesc = (atoBrutoCalculado >= 5000 && currAtoEfetivo >= 4500)
         ? Math.min(currAtoEfetivo * 0.10, 5000)
         : 0;
 
-      const lacuna = targetAtoEComposto - (currAtoEfetivo + novoDesc);
+      const lacuna = atoAposMensais - currAtoEfetivo;
       currAtoPremiado = novoDesc;
-
-      if (Math.abs(lacuna) < 0.0001) {
-        break;
-      }
+      if (Math.abs(lacuna) < 0.0001) break;
       currAtoEfetivo += lacuna;
     }
-
-    if (currAtoEfetivo < 2000) {
-      currAtoEfetivo = 2000;
-      currAtoPremiado = 0;
-    }
-
-    atoAposMensais = currAtoEfetivo;
     novoAtoPremiado = currAtoPremiado;
-    atoAbsorvido = necessidadeTotalEntrada - (atoAposMensais + novoAtoPremiado);
-    sobraParaAmortizar = 0;
   }
 
-  // Abatimento 2 & 3 (Excesso das mensais vai para Financiamento, FGTS e Subsídio):
+  // ETAPA 2 (PRÓ-SOLUTO - SINAL RESTANTE / DIRETO):
+  // SE SaldoParaAbater > 0, abata do Pró-Soluto do Sinal Restante até zerá-lo.
+  // Note: O ITBI permanece intacto isolado em seu próprio saldo neste momento.
+  const proSolutoSinalRestanteBase = Math.max(0, gapInicial - (atoAposMensais + novoAtoPremiado));
+  let proSolutoAbsorvido = 0;
+  let novoProSolutoSinalRestante = proSolutoSinalRestanteBase;
+
+  if (saldoParaAbater > 0) {
+    proSolutoAbsorvido = Math.min(proSolutoSinalRestanteBase, saldoParaAbater);
+    novoProSolutoSinalRestante = proSolutoSinalRestanteBase - proSolutoAbsorvido;
+    saldoParaAbater -= proSolutoAbsorvido;
+  }
+
+  // ETAPA 3 (FINANCIAMENTO BANCÁRIO - MAX FINANC):
+  // SE SaldoParaAbater > 0 (ou seja, o Pró-Soluto do Sinal Restante já está em R$ 0,00), abata do Financiamento Bancário.
   let maxFinancEfetivo = maxFinanc;
+  let bancoAbsorvido = 0;
+
+  if (saldoParaAbater > 0) {
+    bancoAbsorvido = Math.min(maxFinancEfetivo, saldoParaAbater);
+    maxFinancEfetivo -= bancoAbsorvido;
+    saldoParaAbater -= bancoAbsorvido;
+  }
+
+  // ETAPA 4 (FGTS / SUBSÍDIO):
+  // SE SaldoParaAbater > 0 (Financiamento zerado), abata a sobra do FGTS até zerar e, em seguida, do Subsídio.
   let fgtsEfetivo = fgts;
   let subsidyEfetivo = subsidy;
 
-  if (sobraParaAmortizar > 0) {
-    if (sobraParaAmortizar <= maxFinancEfetivo) {
-      maxFinancEfetivo -= sobraParaAmortizar;
-    } else {
-      const sobraAposFinanc = sobraParaAmortizar - maxFinancEfetivo;
-      maxFinancEfetivo = 0;
+  if (saldoParaAbater > 0) {
+    const fgtsAbsorvido = Math.min(fgtsEfetivo, saldoParaAbater);
+    fgtsEfetivo -= fgtsAbsorvido;
+    saldoParaAbater -= fgtsAbsorvido;
+  }
 
-      if (sobraAposFinanc <= fgtsEfetivo) {
-        fgtsEfetivo -= sobraAposFinanc;
-      } else {
-        const sobraAposFGTS = sobraAposFinanc - fgtsEfetivo;
-        fgtsEfetivo = 0;
-        subsidyEfetivo = Math.max(0, subsidyEfetivo - sobraAposFGTS);
-      }
-    }
+  if (saldoParaAbater > 0) {
+    const subsidyAbsorvido = Math.min(subsidyEfetivo, saldoParaAbater);
+    subsidyEfetivo -= subsidyAbsorvido;
+    saldoParaAbater -= subsidyAbsorvido;
   }
 
   const poderDePagamentoImovel = atoAposMensais + novoAtoPremiado;
@@ -509,19 +744,34 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // Pró-Soluto (Sinal Restante Imóvel)
   const proSoluto = sobrasImovel;
 
-  // Taxa de juros da política de crédito (a.m.)
-  const meses1 = currentCond?.mesesTabela1 || 36;
-  const taxa1 = currentCond?.taxaJuros1 !== undefined ? currentCond.taxaJuros1 : 0;
-  const taxa2 = currentCond?.taxaJuros2 !== undefined ? currentCond.taxaJuros2 : 1.9;
+  // CARREGAMENTO DINÂMICO DA TAXA DE JUROS DA POLÍTICA DE CRÉDITO (ON CHANGE)
+  const meses1 = Number(currentCond?.mesesTabela1) || 36;
+  const rawTaxa1 = currentCond?.taxaJuros1 !== undefined && currentCond?.taxaJuros1 !== null ? Number(currentCond.taxaJuros1) : 1.9;
+  const rawTaxa2 = currentCond?.taxaJuros2 !== undefined && currentCond?.taxaJuros2 !== null ? Number(currentCond.taxaJuros2) : 1.9;
+
+  // Trava de segurança: se a condição contiver "Direto" e a taxa veio 1.0 ou 0 por legado, ajusta para 1.90% a.m.
+  const isBancoDireto = currentCond?.name?.toLowerCase().includes('direto');
+  const taxa1 = (isBancoDireto && rawTaxa1 === 0) ? 1.9 : rawTaxa1;
+  const taxa2 = (isBancoDireto && rawTaxa2 === 1.0) ? 1.9 : rawTaxa2;
+
+  // Identifica se o prazo selecionado ("QTD. MENSAIS") está na Faixa 1 ou Faixa 2
   const appliedRatePct = (qtdMensais <= meses1) ? taxa1 : taxa2;
 
-  // Cálculo das parcelas mensais utilizando a fórmula da Tabela Price (PGTO Excel):
-  // PMT = PGTO(appliedRatePct, qtdMensais, -proSolutoTotalBruto)
-  const parcela = (hasUnitSelected && proSolutoTotalBruto > 0 && qtdMensais > 0)
-    ? calculatePricePMT(proSolutoTotalBruto, appliedRatePct, qtdMensais)
+  // CÁLCULO DA BASE E RECALCULO IMEDIATO DA TABELA PRICE
+  const proSolutoTotal = proSolutoTotalLiquido;
+  const percentualTaxaBancaria = 0.002003; // 0,2003%
+  const valorTaxaBancaria = proSolutoTotal * percentualTaxaBancaria;
+
+  // Definição da Base de Cálculo Price (descontando a taxa bancária)
+  const baseCalculoPrice = Math.max(0, proSolutoTotal - valorTaxaBancaria);
+
+  // Recálculo imediato da 1ª Parcela e Última Parcela na Tabela Price com a taxa real
+  const parcela = (hasUnitSelected && baseCalculoPrice > 0 && qtdMensais > 0)
+    ? calcularParcelaPrice(appliedRatePct, qtdMensais, baseCalculoPrice)
     : 0;
 
   const limiteRenda = (income && income > 0) ? income * 0.35 : 0;
+  const isExceededPrice = limiteRenda > 0 && parcela > limiteRenda;
   const isExceededParc2 = limiteRenda > 0 && mens30d > limiteRenda;
   const isExceededParc3 = limiteRenda > 0 && mens60d > limiteRenda;
 
@@ -575,9 +825,28 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             <span>Voltar</span>
           </button>
           <div className="flex items-center gap-3.5 flex-wrap">
-            <span className="text-sm font-extrabold text-sky-600 bg-sky-50 px-3.5 py-1 rounded-lg border border-sky-100 uppercase tracking-wide">
-              {currentProd.name}
-            </span>
+            {products.length > 0 && onSelectProduct ? (
+              <select
+                id="select-empreendimento-details"
+                value={currentProd.id}
+                onChange={(e) => {
+                  const targetProd = products.find(p => p.id === e.target.value);
+                  if (targetProd) {
+                    const cond = targetProd.conditions?.[0] || ensureProductConditions({ ...targetProd }).conditions[0];
+                    onSelectProduct(targetProd, cond.id);
+                  }
+                }}
+                className="text-sm font-extrabold text-sky-600 bg-sky-50 px-3 py-1 rounded-lg border border-sky-100 uppercase tracking-wide cursor-pointer focus:outline-none focus:border-sky-500"
+              >
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-sm font-extrabold text-sky-600 bg-sky-50 px-3.5 py-1 rounded-lg border border-sky-100 uppercase tracking-wide">
+                {currentProd.name}
+              </span>
+            )}
             <span className="text-xs font-bold text-slate-600 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200/80">
               {currentCond.name}
             </span>
@@ -867,47 +1136,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </div>
                   <input
                     type="text"
-                    value={atoAposMensais > 0 ? formatCurrency(atoAposMensais) : ''}
+                    value={valAto > 0 ? formatCurrency(valAto) : (atoAposMensais > 0 ? formatCurrency(atoAposMensais) : '')}
                     onChange={(e) => {
                       const inputVal = parseCurrency(e.target.value);
-                      const saldoDevedorTotal = sinalTotalOriginal + maxFinanc;
-                      let maxAtoPermitido = saldoDevedorTotal;
-                      if (saldoDevedorTotal >= 55000) {
-                        maxAtoPermitido = saldoDevedorTotal - 5000;
-                      } else if (saldoDevedorTotal >= 5500) {
-                        maxAtoPermitido = saldoDevedorTotal / 1.10;
-                      }
-
-                      if (hasUnitSelected && saldoDevedorTotal > 0 && inputVal > maxAtoPermitido + 0.01) {
-                        alert("O valor digitado excede o saldo devedor total (Construtora + Banco). O Ato foi ajustado para o valor exato necessário para quitar 100% do financiamento.");
-                        setValAto(maxAtoPermitido);
-                      } else {
-                        setValAto(inputVal);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (hasUnitSelected && (sinalTotalOriginal > 0 || maxFinanc > 0)) {
-                        const saldoDevedorTotal = sinalTotalOriginal + maxFinanc;
-                        let maxAtoPermitido = saldoDevedorTotal;
-                        if (saldoDevedorTotal >= 55000) {
-                          maxAtoPermitido = saldoDevedorTotal - 5000;
-                        } else if (saldoDevedorTotal >= 5500) {
-                          maxAtoPermitido = saldoDevedorTotal / 1.10;
-                        }
-
-                        if (valAto > maxAtoPermitido + 0.01) {
-                          alert("O valor digitado excede o saldo devedor total (Construtora + Banco). O Ato foi ajustado para o valor exato necessário para quitar 100% do financiamento.");
-                          setValAto(maxAtoPermitido);
-                        } else if (valAto < atoMinimoCalculado - 0.01) {
-                          alert("Não existe a possibilidade de diminuir o valor do Ato (Imóvel), pois ele já está no limite do risco calculated.");
-                          setValAto(atoMinimoCalculado);
-                        }
-                      }
+                      setValAto(inputVal);
                     }}
                     placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all"
+                    className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all cursor-text"
                   />
-
                 </div>
 
                 {/* CAMPO 2: PAGAMENTO ITBI NO ATO */}
@@ -925,21 +1161,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     value={valAtoITBI > 0 ? formatCurrency(valAtoITBI) : ''}
                     onChange={(e) => {
                       const inputVal = parseCurrency(e.target.value);
-                      if (hasUnitSelected && despCartorias > 0 && inputVal > despCartorias) {
-                        alert(`O valor do Pagamento do ITBI no Ato não pode exceder o valor total do ITBI/Despesas Cartorárias (${formatCurrency(despCartorias)}).`);
-                        setValAtoITBI(despCartorias);
-                      } else {
-                        setValAtoITBI(inputVal);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (hasUnitSelected && despCartorias > 0 && valAtoITBI > despCartorias) {
-                        alert(`O valor do Pagamento do ITBI no Ato não pode exceder o valor total do ITBI/Despesas Cartorárias (${formatCurrency(despCartorias)}).`);
-                        setValAtoITBI(despCartorias);
-                      }
+                      setValAtoITBI(inputVal);
                     }}
                     placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all"
+                    className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all cursor-text"
                   />
                 </div>
 
@@ -1078,7 +1303,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
                       if (val > limiteMaximoParcelas) {
                         setQtdMensais(limiteMaximoParcelas);
-                        alert("A quantidade máxima de parcelas permitida pela política de vendas para este empreendimento é de " + limiteMaximoParcelas + "x.");
+                        alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
                         return;
                       }
                       if (val < 1) {
@@ -1092,7 +1317,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                         setQtdMensais(1);
                       } else if (qtdMensais > limiteMaximoParcelas) {
                         setQtdMensais(limiteMaximoParcelas);
-                        alert("A quantidade máxima de parcelas permitida pela política de vendas para este empreendimento é de " + limiteMaximoParcelas + "x.");
+                        alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
                       }
                     }}
                     className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-sky-600 text-center focus:outline-none focus:border-sky-600 text-xs"
@@ -1101,20 +1326,39 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 </div>
               </div>
 
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 text-center">
-                <span className="block text-[10px] font-bold text-slate-400 uppercase">1ª Parcela</span>
-                <strong className="text-slate-900 font-bold text-sm block mt-1">
+              <div className={`p-2.5 rounded-xl border text-center transition-all ${
+                isExceededPrice ? 'bg-red-50 border-red-500 text-red-900' : 'bg-slate-50 border-slate-200/80'
+              }`}>
+                <span className={`block text-[10px] font-bold uppercase ${
+                  isExceededPrice ? 'text-red-700' : 'text-slate-400'
+                }`}>1ª Parcela</span>
+                <strong className={`font-bold text-sm block mt-1 ${
+                  isExceededPrice ? 'text-red-600 font-extrabold' : 'text-slate-900'
+                }`}>
                   {formatCurrency(parcela)}
                 </strong>
               </div>
 
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 text-center">
-                <span className="block text-[10px] font-bold text-slate-400 uppercase">Última Parcela</span>
-                <strong className="text-slate-900 font-bold text-sm block mt-1">
+              <div className={`p-2.5 rounded-xl border text-center transition-all ${
+                isExceededPrice ? 'bg-red-50 border-red-500 text-red-900' : 'bg-slate-50 border-slate-200/80'
+              }`}>
+                <span className={`block text-[10px] font-bold uppercase ${
+                  isExceededPrice ? 'text-red-700' : 'text-slate-400'
+                }`}>Última Parcela</span>
+                <strong className={`font-bold text-sm block mt-1 ${
+                  isExceededPrice ? 'text-red-600 font-extrabold' : 'text-slate-900'
+                }`}>
                   {formatCurrency(parcela)}
                 </strong>
               </div>
             </div>
+
+            {isExceededPrice && (
+              <div className="flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-100 p-2.5 rounded-xl border border-red-300">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>Atenção: Parcela excede 35% da renda informada (Máx: {formatCurrency(limiteRenda)})</span>
+              </div>
+            )}
 
             <div className="space-y-2 text-xs pt-1">
               <div className="flex justify-between items-center border-b border-slate-100 pb-2 px-1">
@@ -1126,12 +1370,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
               <div className="flex justify-between items-center border-b border-slate-100 pb-2 px-1">
                 <span className="text-slate-500 font-medium">Pró-Soluto (Sinal Restante):</span>
-                <strong className="text-slate-900 font-bold">{formatCurrency(proSoluto)}</strong>
+                <strong className={`font-bold ${isExceededPrice ? 'text-red-600' : 'text-slate-900'}`}>{formatCurrency(proSoluto)}</strong>
               </div>
 
-              <div className="flex justify-between items-center pt-2 text-sm bg-sky-50/80 p-3.5 rounded-xl border border-sky-100">
+              <div className={`flex justify-between items-center pt-2 text-sm p-3.5 rounded-xl border transition-all ${
+                isExceededPrice ? 'bg-red-50 border-red-300 text-red-900' : 'bg-sky-50/80 border-sky-100'
+              }`}>
                 <span className="font-bold text-slate-900">Pró-Soluto Líquido c/ ITBI:</span>
-                <strong className="font-extrabold text-sky-600 text-base">{formatCurrency(proSolutoTotalLiquido)}</strong>
+                <strong className={`font-extrabold text-base ${isExceededPrice ? 'text-red-600' : 'text-sky-600'}`}>{formatCurrency(proSolutoTotalLiquido)}</strong>
               </div>
 
 

@@ -2,17 +2,19 @@ export function parseCurrency(val: any): number {
   if (val === null || val === undefined || val === '') return 0;
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   
-  const str = String(val).trim();
-  if (!str) return 0;
+  let str = String(val).trim();
+  if (!str || str === '-' || str === '—') return 0;
 
-  if (/^\d+\.\d+$/.test(str)) {
-    const floatVal = parseFloat(str);
-    if (!isNaN(floatVal)) return floatVal;
+  // Limpeza de símbolos de moeda e espaços
+  str = str.replace(/R\$\s?|R\s?|\$/g, '').trim();
+
+  // Se contiver vírgula (formato PT-BR ex: "13.031,23")
+  if (str.includes(',')) {
+    str = str.replace(/\./g, '').replace(',', '.');
   }
 
-  const digits = str.replace(/\D/g, '');
-  if (!digits) return 0;
-  return parseInt(digits, 10) / 100;
+  const parsed = parseFloat(str.replace(/[^0-9.-]/g, ''));
+  return isNaN(parsed) ? 0 : parsed;
 }
 
 export function formatCurrency(val: number): string {
@@ -53,14 +55,22 @@ export interface ColumnDef {
 export const COLUMN_DEFINITIONS: ColumnDef[] = [
   { key: "Fase", label: "Fase", match: norm => norm.includes("FASE") },
   { key: "TORRE", label: "TORRE", match: norm => norm.includes("TORRE") || norm.includes("BLOCO") },
-  { key: "UNIDADE", label: "UNIDADE", match: norm => norm.includes("UNIDADE") || norm.includes("APTO") || norm.includes("APT") },
-  { key: "ÁREA PRIVATIVA M² - APTO", label: "ÁREA PRIVATIVA M² - APTO", match: norm => norm.includes("PRIVATIVA") || (norm.includes("AREA") && !norm.includes("QUINTAL") && !norm.includes("GARDEN")) },
+  { key: "UNIDADE", label: "UNIDADE", match: norm => norm.includes("UNIDADE") || norm.includes("UNID") || norm.includes("APTO") || norm.includes("APT") },
+  { key: "ÁREA PRIVATIVA M² - APTO", label: "ÁREA PRIVATIVA M² - APTO", match: norm => norm.includes("PRIVATIVA") || (norm.includes("AREA") && !norm.includes("QUINTAL") && !norm.includes("GARDEN") && !norm.includes("TERRACO")) },
   { key: "ÁREA QUINTAL M²", label: "ÁREA QUINTAL M²", match: norm => norm.includes("QUINTAL") || norm.includes("GARDEN") || norm.includes("TERRACO") },
-  { key: "TIPOLOGIA", label: "TIPOLOGIA", match: norm => norm.includes("TIPOLOGIA") || norm.includes("TIPOLOG") || norm.includes("QUARTO") || norm.includes("DORM") },
+  { key: "TIPOLOGIA", label: "TIPOLOGIA", match: norm => norm.includes("TIPOLOGIA") || norm.includes("TIPOLOG") || norm.includes("QUARTO") || norm.includes("DORM") || norm === "TIPO" || norm.startsWith("TIPO ") },
   { key: "AVALIAÇÃO", label: "AVALIAÇÃO", match: norm => norm.includes("AVALIAC") || norm.includes("AVAL") },
-  { key: "PREÇO", label: "PREÇO", match: norm => (norm.includes("PRECO") || norm.includes("VALOR") || norm.includes("TABELA")) && !norm.includes("AVALIAC") && !norm.includes("ITBI") && !norm.includes("REGISTRO") },
-  { key: "ITBI + Registro 1º Imóvel", label: "ITBI + Registro 1º Imóvel", match: norm => (norm.includes("ITBI") || norm.includes("REGISTRO") || norm.includes("CARTOR")) && (norm.includes("1") || norm.includes("PRIMEIRO")) },
-  { key: "ITBI + Registro 2º Imóvel", label: "ITBI + Registro 2º Imóvel", match: norm => (norm.includes("ITBI") || norm.includes("REGISTRO") || norm.includes("CARTOR")) && (norm.includes("2") || norm.includes("SEGUNDO")) }
+  { key: "PREÇO", label: "PREÇO", match: norm => (norm.includes("PRECO") || norm.includes("VALOR") || norm.includes("TABELA") || norm.includes("PRECIO")) && !norm.includes("AVALIAC") && !norm.includes("VENDAS") },
+  { key: "ITBI + Registro 1º Imóvel", label: "ITBI + Registro 1º Imóvel", match: norm => {
+    const upper = norm.toUpperCase();
+    if (upper.includes("PREÇO") || upper.includes("PRECO") || upper.includes("VALOR") || upper.includes("AVALIAC")) return false;
+    return (upper.includes("1º") || upper.includes("1")) && (upper.includes("ITBI") || upper.includes("REGISTRO") || upper.includes("CARTOR"));
+  }},
+  { key: "ITBI + Registro 2º Imóvel", label: "ITBI + Registro 2º Imóvel", match: norm => {
+    const upper = norm.toUpperCase();
+    if (upper.includes("PREÇO") || upper.includes("PRECO") || upper.includes("VALOR") || upper.includes("AVALIAC")) return false;
+    return (upper.includes("2º") || upper.includes("2")) && (upper.includes("ITBI") || upper.includes("REGISTRO") || upper.includes("CARTOR"));
+  }}
 ];
 
 export function formatDateMonthYear(dateStr?: string): string {

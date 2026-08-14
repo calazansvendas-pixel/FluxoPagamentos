@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { FileCheck, CheckCircle, AlertCircle, Trash2, CalendarClock, UploadCloud, Search, XCircle, Table as TableIcon, CheckCircle2, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, TableInfo } from '../types';
-import { COLUMN_DEFINITIONS, formatCurrency, normalizeHeader } from '../utils/formatters';
+import { COLUMN_DEFINITIONS, formatCurrency, parseCurrency, normalizeHeader } from '../utils/formatters';
 
 interface ImportTableViewProps {
   products: Product[];
@@ -105,60 +105,306 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           return;
         }
 
-        let headerRowIndex = -1;
-        let mappedColIndices: number[] = [];
-        let mappedHeaders: string[] = [];
+        let bestHeaderRowIndex = -1;
+        let maxScore = -1;
+        let bestColMap: Record<string, number> = {};
 
-        // Locate header row matching column definitions
+        // 1. AVALIAÇÃO DINÂMICA DE LINHAS DE CABEÇALHO PARA EVITAR BANNER/TÍTULO MESCLADO
         for (let i = 0; i < Math.min(jsonData.length, 30); i++) {
           const row = jsonData[i];
-          if (!row || !Array.isArray(row)) continue;
+          if (!row || !Array.isArray(row) || row.length < 2) continue;
 
           const normalizedCells = Array.from(row, cell => normalizeHeader(cell));
+
+          // Descarta linhas vazias ou com apenas 1 célula longa (banners/títulos)
+          const filledCells = normalizedCells.filter(c => c.length > 0);
+          if (filledCells.length < 2) continue;
+
           let colMap: Record<string, number> = {};
-          let matchedCount = 0;
+          let score = 0;
 
           normalizedCells.forEach((normText, excelColIdx) => {
             if (!normText) return;
+            // Se o texto for excessivamente longo, é um título de banner ou observação
+            if (normText.length > 35 || normText.includes("TABELA DE VENDAS") || normText.includes("ESTUDO DE STATUS")) return;
+
+            // Busca correspondência com cada definição de coluna
             COLUMN_DEFINITIONS.forEach(def => {
+              if (def.key === "AVALIAÇÃO") return; // Tratado separadamente abaixo
               if (colMap[def.key] === undefined && def.match(normText)) {
                 colMap[def.key] = excelColIdx;
-                matchedCount++;
+                score++;
               }
             });
+
+            // Mapeamento especial de AVALIAÇÃO
+            if (colMap["AVALIAÇÃO"] === undefined) {
+              if (
+                (normText.includes("05") && normText.includes("08") && normText.includes("2025")) ||
+                normText.includes("05082025") ||
+                normText.includes("AVALIAC") ||
+                normText.includes("AVAL")
+              ) {
+                colMap["AVALIAÇÃO"] = excelColIdx;
+                score++;
+              }
+            }
+
+            // Mapeamento especial de ITBI (Com trava ESTRITA e sanitização de 1º/2º Imóvel)
+            const superCleanText = normText.replace(/\s+/g, '').toUpperCase();
+            const isPrecioHeader = normText.includes("PRECO") || normText.includes("PREÇO") || normText.includes("VALOR");
+            if (
+              !isPrecioHeader &&
+              !normText.includes("AVALIAC")
+            ) {
+              if (superCleanText.includes("2ºIMÓVEL") || superCleanText.includes("2ºIMOVEL") || superCleanText.includes("2IMOVEL")) {
+                if (colMap["ITBI + Registro 2º Imóvel"] === undefined) {
+                  colMap["ITBI + Registro 2º Imóvel"] = excelColIdx;
+                  score++;
+                }
+              } else if (superCleanText.includes("1ºIMÓVEL") || superCleanText.includes("1ºIMOVEL") || superCleanText.includes("1IMOVEL")) {
+                if (colMap["ITBI + Registro 1º Imóvel"] === undefined) {
+                  colMap["ITBI + Registro 1º Imóvel"] = excelColIdx;
+                  score++;
+                }
+              } else if (normText.includes("ITBI") || normText.includes("REGISTRO") || normText.includes("CARTOR")) {
+                if (normText.includes("2") || normText.includes("SEGUNDO")) {
+                  if (colMap["ITBI + Registro 2º Imóvel"] === undefined) {
+                    colMap["ITBI + Registro 2º Imóvel"] = excelColIdx;
+                    score++;
+                  }
+                } else {
+                  if (colMap["ITBI + Registro 1º Imóvel"] === undefined) {
+                    colMap["ITBI + Registro 1º Imóvel"] = excelColIdx;
+                    score++;
+                  }
+                }
+              }
+            }
           });
 
-          if (matchedCount >= 3) {
-            headerRowIndex = i;
-            COLUMN_DEFINITIONS.forEach(def => {
-              mappedHeaders.push(def.label);
-              mappedColIndices.push(colMap[def.key] !== undefined ? colMap[def.key] : -1);
-            });
-            break;
+          // Bônus decisivo para cabeçalho real ter TORRE e UNIDADE em colunas distintas
+          if (colMap["TORRE"] !== undefined && colMap["UNIDADE"] !== undefined && colMap["TORRE"] !== colMap["UNIDADE"]) {
+            score += 5;
+          }
+
+          if (score > maxScore && score >= 2) {
+            maxScore = score;
+            bestHeaderRowIndex = i;
+            bestColMap = colMap;
           }
         }
 
+        let headerRowIndex = bestHeaderRowIndex;
+        let colMap = bestColMap;
+
+        // Se não identificou cabeçalho dinâmico por pontuação, assume a primeira linha válida
         if (headerRowIndex === -1) {
           headerRowIndex = 0;
-          mappedHeaders = COLUMN_DEFINITIONS.map(d => d.label);
-          mappedColIndices = COLUMN_DEFINITIONS.map((_, idx) => idx);
+          colMap = {
+            "Fase": 0,
+            "TORRE": 1,
+            "UNIDADE": 2,
+            "ÁREA PRIVATIVA M² - APTO": 3,
+            "ÁREA QUINTAL M²": 4,
+            "TIPOLOGIA": 5,
+            "AVALIAÇÃO": 6,
+            "PREÇO": 7,
+            "ITBI + Registro 1º Imóvel": 8,
+            "ITBI + Registro 2º Imóvel": 9
+          };
         }
 
+        // Garante fallbacks para colunas essenciais caso alguma não tenha sido mapeada pelo cabeçalho
+        if (colMap["Fase"] === undefined) colMap["Fase"] = 0;
+        if (colMap["TORRE"] === undefined) colMap["TORRE"] = 1;
+        if (colMap["UNIDADE"] === undefined) colMap["UNIDADE"] = 2;
+        if (colMap["ÁREA PRIVATIVA M² - APTO"] === undefined) colMap["ÁREA PRIVATIVA M² - APTO"] = 3;
+        if (colMap["ÁREA QUINTAL M²"] === undefined) colMap["ÁREA QUINTAL M²"] = 4;
+        if (colMap["TIPOLOGIA"] === undefined) colMap["TIPOLOGIA"] = 5;
+        if (colMap["AVALIAÇÃO"] === undefined) colMap["AVALIAÇÃO"] = 6;
+        if (colMap["PREÇO"] === undefined) colMap["PREÇO"] = 7;
+
+        // Fallbacks de ITBI com trava de segurança se não mapeado na busca inicial (Coluna Y = 24, Coluna AC = 28)
+        const headerLine = jsonData[headerRowIndex] || [];
+        if (colMap["ITBI + Registro 1º Imóvel"] === undefined) {
+          let foundIdx = -1;
+          if (Array.isArray(headerLine)) {
+            headerLine.forEach((cell: any, idx: number) => {
+              const normCell = normalizeHeader(cell);
+              const cleanCell = normCell.replace(/\s+/g, '').toUpperCase();
+              if (
+                (cleanCell.includes("1ºIMÓVEL") || cleanCell.includes("1ºIMOVEL") || cleanCell.includes("1IMOVEL") || normCell.includes("ITBI") || normCell.includes("REGISTRO")) &&
+                !normCell.includes("PRECO") &&
+                !normCell.includes("PREÇO") &&
+                !normCell.includes("VALOR")
+              ) {
+                if (foundIdx === -1) foundIdx = idx;
+              }
+            });
+          }
+          // Coluna Y (índice 24 em base 0)
+          colMap["ITBI + Registro 1º Imóvel"] = foundIdx !== -1 ? foundIdx : (headerLine.length > 24 ? 24 : 8);
+        }
+        if (colMap["ITBI + Registro 2º Imóvel"] === undefined) {
+          let foundIdx2 = -1;
+          if (Array.isArray(headerLine)) {
+            headerLine.forEach((cell: any, idx: number) => {
+              const normCell = normalizeHeader(cell);
+              const cleanCell = normCell.replace(/\s+/g, '').toUpperCase();
+              if (
+                (cleanCell.includes("2ºIMÓVEL") || cleanCell.includes("2ºIMOVEL") || cleanCell.includes("2IMOVEL")) &&
+                !normCell.includes("PRECO") &&
+                !normCell.includes("PREÇO") &&
+                !normCell.includes("VALOR")
+              ) {
+                if (foundIdx2 === -1) foundIdx2 = idx;
+              }
+            });
+          }
+          // Coluna AC (índice 28 em base 0, depois AA 26)
+          colMap["ITBI + Registro 2º Imóvel"] = foundIdx2 !== -1 ? foundIdx2 : (headerLine.length > 28 ? 28 : (headerLine.length > 26 ? 26 : (colMap["ITBI + Registro 1º Imóvel"] !== undefined ? colMap["ITBI + Registro 1º Imóvel"] : 9)));
+        }
+
+        const mappedHeaders = COLUMN_DEFINITIONS.map(d => d.label);
+
+        // 2. EXTRAÇÃO DAS LINHAS E NORMALIZAÇÃO FLEXÍVEL COM ALIASES
         const filteredRows: (string | number)[][] = [];
+
         for (let r = headerRowIndex + 1; r < jsonData.length; r++) {
           const rawRow = jsonData[r];
           if (!rawRow || !Array.isArray(rawRow)) continue;
 
-          const rowData = mappedColIndices.map(colIdx => {
-            if (colIdx === -1) return '';
-            let cellVal = rawRow[colIdx] !== undefined && rawRow[colIdx] !== null ? rawRow[colIdx] : '';
-            if (typeof cellVal === 'string') cellVal = cellVal.trim();
-            return cellVal;
-          });
+          // Se a linha for totalmente vazia, ignora
+          const hasContent = rawRow.some(val => val !== '' && val !== null && val !== undefined);
+          if (!hasContent) continue;
 
-          if (rowData.some(val => val !== '' && val !== null && val !== undefined)) {
-            filteredRows.push(rowData);
+          // Extrai células com base nos índices mapeados
+          const getCell = (idx: number) => {
+            if (idx === -1) return '';
+            let val = rawRow[idx] !== undefined && rawRow[idx] !== null ? rawRow[idx] : '';
+            if (typeof val === 'string') val = val.trim();
+            return val;
+          };
+
+          const faseStr = String(getCell(colMap["Fase"]) || '1ª');
+          const torreStr = String(getCell(colMap["TORRE"]));
+          const unidadeStr = String(getCell(colMap["UNIDADE"]));
+          const areaPrivStr = String(getCell(colMap["ÁREA PRIVATIVA M² - APTO"]) || '0,00');
+          const areaQuiStr = String(getCell(colMap["ÁREA QUINTAL M²"]) || '0,00');
+          const tipoStr = String(getCell(colMap["TIPOLOGIA"]));
+          const avalNum = parseCurrency(getCell(colMap["AVALIAÇÃO"]));
+          const precoNum = parseCurrency(getCell(colMap["PREÇO"]));
+
+          // Converte a linha bruta em dicionário de chaves do Excel para busca dinâmica
+          const rowObj: Record<string, any> = {};
+          if (Array.isArray(headerLine) && Array.isArray(rawRow)) {
+            headerLine.forEach((hName: any, hIdx: number) => {
+              if (hName !== undefined && hName !== null) {
+                rowObj[String(hName)] = rawRow[hIdx];
+              }
+            });
+          } else if (rawRow && typeof rawRow === 'object') {
+            Object.assign(rowObj, rawRow);
           }
+
+          const chaves = Object.keys(rowObj);
+
+          // Pega a chave exata do ITBI 1 ignorando espaços e quebras
+          const chaveItbi1 = chaves.find(k => k.toUpperCase().replace(/\s/g, '').includes('1ºIMOVEL') || k.toUpperCase().replace(/\s/g, '').includes('1ºIMÓVEL'));
+
+          // Pega a chave exata do ITBI 2
+          const chaveItbi2 = chaves.find(k => k.toUpperCase().replace(/\s/g, '').includes('2ºIMOVEL') || k.toUpperCase().replace(/\s/g, '').includes('2ºIMÓVEL'));
+
+          let rawItbi1 = chaveItbi1 ? rowObj[chaveItbi1] : getCell(colMap["ITBI + Registro 1º Imóvel"]);
+          let rawItbi2 = chaveItbi2 ? rowObj[chaveItbi2] : getCell(colMap["ITBI + Registro 2º Imóvel"]);
+
+          // Trava de segurança: se o valor for igual ao Preço, zera para evitar espelhamento
+          if (rawItbi1 === rowObj['PREÇO'] || rawItbi1 === rowObj['Preço'] || (precoNum > 0 && parseCurrency(rawItbi1) === precoNum)) rawItbi1 = 0;
+          if (rawItbi2 === rowObj['PREÇO'] || rawItbi2 === rowObj['Preço'] || (precoNum > 0 && parseCurrency(rawItbi2) === precoNum)) rawItbi2 = 0;
+
+          // Sanitização final para float (limpando a moeda R$)
+          let itbi1Num = typeof rawItbi1 === 'string' ? parseFloat(rawItbi1.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0 : parseCurrency(rawItbi1);
+          let itbi2Num = typeof rawItbi2 === 'string' ? parseFloat(rawItbi2.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0 : parseCurrency(rawItbi2);
+
+          // Filtra linhas inválidas (ex: sem torre/unidade ou linhas de legenda/rodapé)
+          if (!torreStr && !unidadeStr) continue;
+          if (torreStr.toLowerCase().includes('legenda') || torreStr.toLowerCase().includes('observaç')) continue;
+
+          // Monta o array da linha com os índices padronizados
+          const rowData: any = [
+            faseStr,
+            torreStr,
+            unidadeStr,
+            areaPrivStr,
+            areaQuiStr,
+            tipoStr,
+            avalNum,
+            precoNum,
+            itbi1Num,
+            itbi2Num > 0 ? itbi2Num : itbi1Num
+          ];
+
+          // Sanitização e Aliases de acesso flexível
+          const unidadeLida = {
+            fase: faseStr,
+            torre: torreStr,
+            unidade: unidadeStr,
+            areaPrivativa: areaPrivStr,
+            areaQuintal: areaQuiStr,
+            tipologia: tipoStr,
+            avaliacao: avalNum,
+            preco: precoNum,
+            itbi1: itbi1Num,
+            itbi2: itbi2Num > 0 ? itbi2Num : itbi1Num,
+            itbiPrimeiroImovel: itbi1Num,
+            itbiSegundoImovel: itbi2Num > 0 ? itbi2Num : itbi1Num,
+            itbiRegistro: itbi1Num,
+
+            // Chaves amigáveis e exatamente como aparecem nas planilhas do Excel:
+            'FASE': faseStr,
+            'TORRE': torreStr,
+            'Torre': torreStr,
+            'Bloco': torreStr,
+            'BLOCO': torreStr,
+            'UNID.': unidadeStr,
+            'UNID': unidadeStr,
+            'UNIDADE': unidadeStr,
+            'Unidade': unidadeStr,
+            'APTO': unidadeStr,
+            'APT': unidadeStr,
+            'ÁREA PRIVATIVA M² - APTO': areaPrivStr,
+            'ÁREA PRIVATIVA M²': areaPrivStr,
+            'ÁREA PRIVATIVA': areaPrivStr,
+            'Area Privativa': areaPrivStr,
+            'ÁREA QUINTAL M²': areaQuiStr,
+            'ÁREA QUINTAL': areaQuiStr,
+            'Quintal': areaQuiStr,
+            'TIPOLOGIA': tipoStr,
+            'Tipologia': tipoStr,
+            'AVALIAÇÃO': avalNum,
+            'Avaliação': avalNum,
+            'AVALIAÇÃO 05/08/2025': avalNum,
+            'PREÇO': precoNum,
+            'Preço': precoNum,
+            'PREÇO TABELA': precoNum,
+            'ITBI + REG. 1º IMÓVEL': itbi1Num,
+            'ITBI + REGISTRO 1º IMÓVEL': itbi1Num,
+            'ITBI + Registro 1º Imóvel': itbi1Num,
+            'ITBI + Registro\n1º Imóvel': itbi1Num,
+            'ITBI + Registro\r\n1º Imóvel': itbi1Num,
+            'ITBI + Registro  1º Imóvel': itbi1Num,
+            'ITBI + REGISTRO': itbi1Num,
+            'ITBI': itbi1Num,
+            'ITBI + REG. 2º IMÓVEL': itbi2Num > 0 ? itbi2Num : itbi1Num,
+            'ITBI + REGISTRO 2º IMÓVEL': itbi2Num > 0 ? itbi2Num : itbi1Num,
+            'ITBI + Registro 2º Imóvel': itbi2Num > 0 ? itbi2Num : itbi1Num,
+            'ITBI + Registro\n2º Imóvel': itbi2Num > 0 ? itbi2Num : itbi1Num,
+            'ITBI + Registro\r\n2º Imóvel': itbi2Num > 0 ? itbi2Num : itbi1Num
+          };
+
+          Object.assign(rowData, unidadeLida);
+          filteredRows.push(rowData);
         }
 
         setTempParsedData({

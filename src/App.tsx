@@ -26,6 +26,11 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((p: any) => p.id));
+          const missing = INITIAL_PRODUCTS.filter(ip => !existingIds.has(ip.id));
+          if (missing.length > 0) {
+            return [...parsed, ...missing];
+          }
           return parsed;
         }
       }
@@ -254,6 +259,8 @@ export default function App() {
             <DetailsView
               product={activeAnalysisProduct}
               condition={activeAnalysisCondition}
+              products={products}
+              onSelectProduct={handleAdvanceToDetails}
               simulationData={simulationData}
               selectedUnits={selectedUnits}
               onUnitSelectChange={handleUnitSelectChange}

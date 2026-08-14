@@ -19,33 +19,39 @@ export function ensureProductConditions(prod: Product): Product {
       ? prod.options 
       : ['Sinal em 48X c/ Morar', 'Sinal em 72X c/ Banco Direto'];
     
-    prod.conditions = opts.map((optName, idx) => ({
-      id: `cond_${prod.id}_${idx + 1}`,
-      name: optName,
-      numParcelas: prod.numParcelas || 72,
-      sinalMinimo: prod.sinalMinimo || 'R$ 2.000,00',
-      riscoRendaPct: prod.riscoRendaPct !== undefined ? prod.riscoRendaPct : 30,
-      riscoImovelPct: prod.riscoImovelPct !== undefined ? prod.riscoImovelPct : 25,
-      mesesTabela1: 36,
-      taxaJuros1: 0.0,
-      mesesTabela2: 72,
-      taxaJuros2: 1.0,
-      policy: prod.policy || `POLÍTICA COMERCIAL SINAL ${optName.toUpperCase()}:\n- Comissão padrão: 4% apartada na proposta.\n- Entrada mínima conforme negociação.\n- Sujeito à análise financeira.`
-    }));
+    prod.conditions = opts.map((optName, idx) => {
+      const isDireto = optName.toLowerCase().includes('direto');
+      return {
+        id: `cond_${prod.id}_${idx + 1}`,
+        name: optName,
+        numParcelas: prod.numParcelas || 72,
+        sinalMinimo: prod.sinalMinimo || 'R$ 2.000,00',
+        riscoRendaPct: prod.riscoRendaPct !== undefined ? prod.riscoRendaPct : 30,
+        riscoImovelPct: prod.riscoImovelPct !== undefined ? prod.riscoImovelPct : 25,
+        mesesTabela1: 36,
+        taxaJuros1: isDireto ? 1.9 : 0.0,
+        mesesTabela2: 72,
+        taxaJuros2: isDireto ? 1.9 : 1.9,
+        policy: prod.policy || `POLÍTICA COMERCIAL SINAL ${optName.toUpperCase()}:\n- Comissão padrão: 4% apartada na proposta.\n- Entrada mínima conforme negociação.\n- Sujeito à análise financeira.`
+      };
+    });
   }
   return prod;
 }
 
+export function calcularParcelaPrice(taxaAoMes: number, numParcelas: number, valorPresente: number): number {
+  if (numParcelas <= 0 || valorPresente <= 0) return 0;
+  // Converte a taxa informada (ex: 1.9) para decimal (0.019)
+  let i = taxaAoMes / 100;
+  if (i === 0) return valorPresente / numParcelas;
+
+  let fator = Math.pow(1 + i, numParcelas);
+  let parcela = valorPresente * ((i * fator) / (fator - 1));
+  return parcela;
+}
+
 export function calculatePricePMT(principal: number, ratePerMonthPct: number, numInstallments: number): number {
-  if (numInstallments <= 0 || principal <= 0) return 0;
-  const i = ratePerMonthPct / 100;
-  if (i === 0) {
-    return principal / numInstallments;
-  }
-  const factor = Math.pow(1 + i, numInstallments);
-  if (factor === 1) return principal / numInstallments;
-  const pmt = principal * ((i * factor) / (factor - 1));
-  return Math.round(pmt * 100) / 100;
+  return calcularParcelaPrice(ratePerMonthPct, numInstallments, principal);
 }
 
 export function calculatePolicyRiskValues(
