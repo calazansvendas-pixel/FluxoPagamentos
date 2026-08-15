@@ -16,6 +16,7 @@ export interface FinancialParams {
   taxaJurosMensal?: number; // Taxa de juros ao mês em % (ex: 1.9 para 1.9%)
   atoManual?: number;
   aportesExtras?: number;
+  sinalMinimo?: number;
 }
 
 export interface SimulationResult {
@@ -110,6 +111,7 @@ export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResul
   const percentualRiscoImovel = params.percentualRiscoImovel !== undefined ? params.percentualRiscoImovel : 20;
   const percentualRiscoRenda = params.percentualRiscoRenda !== undefined ? params.percentualRiscoRenda : 35;
   const prazoMeses = params.prazoMeses || 60;
+  const pisoSinal = params.sinalMinimo !== undefined && params.sinalMinimo > 0 ? params.sinalMinimo : 2000;
 
   // 1. Taxa de juros mensal
   const jurosMensal = params.taxaJurosMensal !== undefined
@@ -121,11 +123,11 @@ export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResul
   if (baseFinanc + subsidio + fgts > avaliacaoBanco && avaliacaoBanco > 0) {
     baseFinanc = Math.max(0, avaliacaoBanco - subsidio - fgts);
   }
-  const maxFinanciamento = Math.max(0, Math.min(baseFinanc, Math.max(0, precoTabela - 2000)));
+  const maxFinanciamento = Math.max(0, Math.min(baseFinanc, Math.max(0, precoTabela - pisoSinal)));
 
   const totalNegociado = Math.min(
     subsidio + fgts + maxFinanciamento,
-    subsidio + fgts + Math.max(0, precoTabela - 2000)
+    subsidio + fgts + Math.max(0, precoTabela - pisoSinal)
   );
 
   // 3. Teto de Renda (35% da renda como PMT máximo)
@@ -160,7 +162,7 @@ export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResul
 
     // O Ato é ESTRITAMENTE a diferença entre a dívida e o risco máximo suportado.
     // A Taxa Bancária NÃO ENTRA nesta conta.
-    atoSugerido = Math.max(totalComITBI - proSolutoMaximo - aportesExtras, 2000);
+    atoSugerido = Math.max(totalComITBI - proSolutoMaximo - aportesExtras, pisoSinal);
     atoEfetivo = atoManual > 0 ? Math.max(atoManual, atoSugerido) : atoSugerido;
 
     // Regra do Desconto (Ato Premiado)
@@ -249,6 +251,8 @@ export function calculatePolicyRiskValues(
     if (firstRow[6] !== undefined) propertyEvaluation = parseCurrency(firstRow[6]);
   }
 
+  const sinalMinimoNum = cond.sinalMinimo ? parseCurrency(cond.sinalMinimo) : 2000;
+
   const simulacao = calcularSimulacaoFluxo({
     precoTabela: propertyPrice || 0,
     avaliacaoBanco: propertyEvaluation || 0,
@@ -262,6 +266,7 @@ export function calculatePolicyRiskValues(
     percentualRiscoRenda: riscoRendaPct,
     prazoMeses: numParcelas,
     taxaJurosMensal: appliedRatePct,
+    sinalMinimo: sinalMinimoNum > 0 ? sinalMinimoNum : 2000,
   });
 
   return {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
@@ -26,18 +26,23 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   onShowToast
 }) => {
   const currentProd = product || null;
-  const currentCond = condition || (currentProd ? ensureProductConditions({ ...currentProd }).conditions[0] : null);
+  const currentCond = useMemo(() => {
+    if (!currentProd) return null;
+    const prodWithConds = ensureProductConditions({ ...currentProd });
+    if (condition) {
+      const match = prodWithConds.conditions.find(c => c.id === condition.id);
+      if (match) return match;
+    }
+    return condition || prodWithConds.conditions[0];
+  }, [currentProd, condition]);
 
-  // LÓGICA DE DEFINIÇÃO DO PRAZO PADRÃO (INITIAL SUGGESTION / TETO MÁXIMO)
-  // 1. VINCULAÇÃO ESTRITA À POLÍTICA DO PRODUTO ATUAL:
-  // Carrega EXATAMENTE os valores de Prazo Faixa 1 e Prazo Faixa 2 do produto/condição selecionado.
+  // LÓGICA DE DEFINIÇÃO DO PRAZO PADRÃO (HERDADO DINAMICAMENTE DA POLÍTICA DE CRÉDITO)
+  const condNumParcelas = Number(currentCond?.numParcelas) || Number(currentProd?.numParcelas) || 60;
+
+  // Carrega os valores de Prazo Faixa 1 e Prazo Faixa 2 do produto/condição selecionado
   const prazoFaixa1 = Number(currentCond?.mesesTabela1) || 0;
   const prazoFaixa2 = Number(currentCond?.mesesTabela2) || 0;
-
-  // Se o produto define Faixa 1 = 60 e Faixa 2 = 60, o teto máximo é 60.
-  const limiteMaximoParcelas = (prazoFaixa1 > 0 || prazoFaixa2 > 0)
-    ? Math.max(prazoFaixa1, prazoFaixa2)
-    : (currentCond?.numParcelas || currentProd?.numParcelas || 60);
+  const limiteMaximoParcelas = Math.max(prazoFaixa1, prazoFaixa2, condNumParcelas, 1);
 
   const [selectedTorre, setSelectedTorre] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
@@ -46,12 +51,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [atoInputText, setAtoInputText] = useState<string>('');
   const [isEditingAto, setIsEditingAto] = useState<boolean>(false);
   const [valAtoITBI, setValAtoITBI] = useState<number>(0);
-  const [valAtoPremiado, setValAtoPremiado] = useState<number>(0);
   const [isAtoPremiadoEnabled, setIsAtoPremiadoEnabled] = useState<boolean>(true);
   const [valParc2, setValParc2] = useState<number>(0);
   const [valParc3, setValParc3] = useState<number>(0);
 
-  const [qtdMensais, setQtdMensais] = useState<number>(limiteMaximoParcelas);
+  const [qtdMensais, setQtdMensais] = useState<number>(condNumParcelas);
 
   // Sync state when product or unit selection changes
   useEffect(() => {
@@ -69,21 +73,20 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   }, [currentProd?.id, selectedUnits]);
 
-  // 2. FUNÇÃO E EFFECT DISPARADOS AO TROCAR DE EMPREENDIMENTO (ON CHANGE):
-  // Garante a limpeza do estado residual na memória e o reset dinâmico da Qtd. Mensais para o teto do produto selecionado.
+  // 2. FUNÇÃO E EFFECT DISPARADOS AO TROCAR DE EMPREENDIMENTO OU ATUALIZAR A POLÍTICA DE CRÉDITO:
+  // Garante a limpeza do estado residual na memória e a sincronização dinâmica da Qtd. Mensais para o valor configurado na condição comercial.
   useEffect(() => {
     if (currentProd && currentCond) {
       setValAtoManual(null);
       setAtoInputText('');
       setIsEditingAto(false);
       setValAtoITBI(0);
-      setValAtoPremiado(0);
       setValParc2(0);
       setValParc3(0);
-      setQtdMensais(limiteMaximoParcelas);
+      setQtdMensais(condNumParcelas);
       setIsAtoPremiadoEnabled(true);
     }
-  }, [currentProd?.id, currentCond?.id, limiteMaximoParcelas]);
+  }, [currentProd?.id, currentCond?.id, currentCond?.numParcelas, condNumParcelas]);
 
   if (!currentProd || !currentCond) {
     return (
@@ -143,7 +146,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setSelectedTorre(torre);
     setSelectedUnidade('');
     if (currentCond) {
-      setQtdMensais(limiteMaximoParcelas);
+      setQtdMensais(condNumParcelas);
     }
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre, unidade: '' });
@@ -153,7 +156,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const handleUnidadeChange = (unidade: string) => {
     setSelectedUnidade(unidade);
     if (currentCond) {
-      setQtdMensais(limiteMaximoParcelas);
+      setQtdMensais(condNumParcelas);
     }
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: selectedTorre, unidade });
@@ -168,12 +171,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setAtoInputText('');
     setIsEditingAto(false);
     setValAtoITBI(0);
-    setValAtoPremiado(0);
     setIsAtoPremiadoEnabled(true);
     setValParc2(0);
     setValParc3(0);
     if (currentCond) {
-      setQtdMensais(limiteMaximoParcelas);
+      setQtdMensais(condNumParcelas);
     }
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
@@ -190,6 +192,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const percent = simulationData.finPercent;
   const maxAllowed = (hasUnitSelected && evaluation > 0) ? (evaluation * percent) : 0;
 
+  // Sinal Mínimo configurado na Política de Crédito da condição selecionada
+  const sinalMinimoPolicy = currentCond?.sinalMinimo ? parseCurrency(currentCond.sinalMinimo) : 2000;
+  const sinalMinimoVal = sinalMinimoPolicy > 0 ? sinalMinimoPolicy : 2000;
+
   let rawMaxFinanc = 0;
   if (hasUnitSelected) {
     if (inputFinancing > 0 && maxAllowed > 0) {
@@ -205,9 +211,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // 1. DEFINIÇÃO DO TETO MÁXIMO DA OPERAÇÃO:
   // a) Não pode ultrapassar o Valor de Avaliação.
-  // b) Não pode ultrapassar o Preço de Tabela deduzido do sinal mínimo de R$ 2.000,00.
+  // b) Não pode ultrapassar o Preço de Tabela deduzido do sinal mínimo da política de crédito.
   const valorAvaliacao = (hasUnitSelected && evaluation > 0) ? evaluation : price;
-  const precoTabelaMenosSinalMin = (hasUnitSelected && price > 0) ? Math.max(0, price - 2000) : 0;
+  const precoTabelaMenosSinalMin = (hasUnitSelected && price > 0) ? Math.max(0, price - sinalMinimoVal) : 0;
   const tetoMaximo = (hasUnitSelected && price > 0)
     ? Math.min(valorAvaliacao, precoTabelaMenosSinalMin)
     : 0;
@@ -331,10 +337,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       iteracoes++;
     }
 
-    // 1. TRAVA DO ATO MÍNIMO (PISO DE R$ 2.000,00) & REDISTRIBUIÇÃO OBRIGATÓRIA
-    if (pagamentoAtoSinalEfetivo < 2000) {
-      pagamentoAtoSinalEfetivo = 2000;
-      atoPremiadoAtual = 0; // Regra dos 10% não se aplica pois 2000 não atinge 5k
+    // 1. TRAVA DO ATO MÍNIMO (PISO DA POLÍTICA DE CRÉDITO) & REDISTRIBUIÇÃO OBRIGATÓRIA
+    if (pagamentoAtoSinalEfetivo < sinalMinimoVal) {
+      pagamentoAtoSinalEfetivo = sinalMinimoVal;
+      atoPremiadoAtual = 0; // Regra dos 10% não se aplica se não atingir 5k
       const baseDividaTotal = gapInicial + despCartorias;
       riscoMaximoApuradoBruto = Math.max(0, baseDividaTotal - pagamentoAtoSinalEfetivo);
       taxaBancaria = riscoMaximoApuradoBruto * 0.0020029;
@@ -342,7 +348,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   }
 
-  const atoMinimoCalculado = hasUnitSelected ? Math.max(2000, pagamentoAtoSinalEfetivo) : 0;
+  const atoMinimoCalculado = hasUnitSelected ? Math.max(sinalMinimoVal, pagamentoAtoSinalEfetivo) : 0;
   const sinalTotalOriginal = gapInicial;
 
   // 1. LEITURA DO APORTE DAS MENSAIS (1ª MENSAL 30D / 2ª MENSAL 60D)
@@ -354,9 +360,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? valAtoManual
     : atoMinimoCalculado;
 
-  // Se o usuário digitou mensais 30d/60d, abate primeiro do Ato (até o piso de 2k)
+  // Se o usuário digitou mensais 30d/60d, abate primeiro do Ato (até o piso configurado da política)
   let saldoParaAbater = somaMensais;
-  const disponivelAbatimentoAto = Math.max(0, atoImovelDigitado - 2000);
+  const disponivelAbatimentoAto = Math.max(0, atoImovelDigitado - sinalMinimoVal);
   const atoAbsorvido = Math.min(disponivelAbatimentoAto, saldoParaAbater);
   let atoAposMensais = atoImovelDigitado - atoAbsorvido;
   saldoParaAbater -= atoAbsorvido;
@@ -433,26 +439,25 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
   const despCartoriasEfetivas = saldoITBI;
 
-  // Pró-Soluto Total Parcelado = Pró-Soluto do Imóvel (após amortização do excedente) + Saldo de ITBI
-  const proSolutoTotalParcelado = hasUnitSelected ? (novoProSolutoImovel + saldoITBI) : 0;
-  const proSolutoTotalPainel = proSolutoTotalParcelado;
-  const proSoluto = novoProSolutoImovel;
-
   const totalNegocEfetivo = hasUnitSelected ? (maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo) : 0;
   const sinalTotal = Math.max(0, price - totalNegocEfetivo);
-  const descontoAto = novoAtoPremiado;
+  const descontoAto = isAtoPremiadoEnabled ? novoAtoPremiado : 0;
+
+  // 1. REGRA DE DEDUÇÃO NO PRÓ-SOLUTO (SINAL RESTANTE):
+  // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - Pagamento ITBI no Ato - 1ª Mensal - 2ª Mensal - Ato Premiado (Desconto Ato)
+  const proSolutoSinalRestante = hasUnitSelected
+    ? Math.max(0, sinalTotal - atoAposMensais - atoITBIValidado - mens30d - mens60d - descontoAto)
+    : 0;
+  const proSoluto = proSolutoSinalRestante;
+
+  // Pró-Soluto Total c/ ITBI (Risco Máx) = Pró-Soluto (Sinal Restante) + Despesas Cartorárias & ITBI
+  const proSolutoTotalParcelado = hasUnitSelected
+    ? Math.max(0, proSolutoSinalRestante + despCartorias)
+    : 0;
+  const proSolutoTotalPainel = proSolutoTotalParcelado;
 
   const atoEfetivo = atoAposMensais + atoITBIValidado;
   const atoBruto = atoEfetivo + descontoAto;
-
-  // Sync valAtoPremiado com descontoAto diretamente no campo "ATO PREMIADO"
-  useEffect(() => {
-    if (hasUnitSelected) {
-      setValAtoPremiado(descontoAto);
-    } else {
-      setValAtoPremiado(0);
-    }
-  }, [hasUnitSelected, descontoAto]);
 
   // Função utilitária para converter inputs flexíveis em número monetário
   const parseFlexibleCurrency = (input: string | number): number => {
@@ -527,7 +532,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setValAtoITBI(0);
     setValParc2(0);
     setValParc3(0);
-    setQtdMensais(limiteMaximoParcelas);
+    setQtdMensais(condNumParcelas);
     setIsAtoPremiadoEnabled(true);
     if (onShowToast) {
       onShowToast('Fluxo de pagamento redefinido para as condições padrão.');
@@ -552,7 +557,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const isExceededParc2 = limiteRenda > 0 && mens30d > limiteRenda;
   const isExceededParc3 = limiteRenda > 0 && mens60d > limiteRenda;
 
-  const totalEntradaMorar = atoAposMensais + atoITBIValidado + mens30d + mens60d + novoAtoPremiado;
+  const totalEntradaMorar = atoAposMensais + atoITBIValidado + mens30d + mens60d + descontoAto;
 
   // --- INDICADORES DE RISCO DA OPERAÇÃO ---
   // Identifique o Maior Valor entre o Preço e a Avaliação:
@@ -1112,12 +1117,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setValAtoManual(null);
-                        setAtoInputText('');
-                        setIsEditingAto(false);
-                        setIsAtoPremiadoEnabled(!isAtoPremiadoEnabled);
+                        setIsAtoPremiadoEnabled(prev => !prev);
                       }}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors ${
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
                         isAtoPremiadoEnabled 
                           ? 'bg-amber-200 text-amber-900 hover:bg-amber-300' 
                           : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
@@ -1128,7 +1130,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </div>
                   <div className="mt-auto">
                     <span className="font-extrabold text-amber-800 text-sm">
-                      {isAtoPremiadoEnabled && valAtoPremiado > 0 ? formatCurrency(valAtoPremiado) : 'R$ 0,00'}
+                      {isAtoPremiadoEnabled && descontoAto > 0 ? formatCurrency(descontoAto) : 'R$ 0,00'}
                     </span>
                   </div>
                 </div>

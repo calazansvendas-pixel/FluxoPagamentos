@@ -44,12 +44,18 @@ export default function App() {
     }
   }, [products]);
 
-  // Keep activeAnalysisProduct in sync with products state
+  // Keep activeAnalysisProduct and activeAnalysisCondition in sync with products state
   React.useEffect(() => {
     if (activeAnalysisProduct) {
       const updated = products.find(p => p.id === activeAnalysisProduct.id);
       if (updated) {
         setActiveAnalysisProduct(updated);
+        if (activeAnalysisCondition) {
+          const updatedCond = (updated.conditions || []).find(c => c.id === activeAnalysisCondition.id);
+          if (updatedCond) {
+            setActiveAnalysisCondition(updatedCond);
+          }
+        }
       }
     }
   }, [products]);
@@ -156,6 +162,12 @@ export default function App() {
 
     if (activeAnalysisProduct?.id === updatedProduct.id) {
       setActiveAnalysisProduct(updatedProduct);
+      if (activeAnalysisCondition) {
+        const updatedCond = (updatedProduct.conditions || []).find(c => c.id === activeAnalysisCondition.id);
+        if (updatedCond) {
+          setActiveAnalysisCondition(updatedCond);
+        }
+      }
     }
   };
 

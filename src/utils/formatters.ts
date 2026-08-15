@@ -2,17 +2,33 @@ export function parseCurrency(val: any): number {
   if (val === null || val === undefined || val === '') return 0;
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   
-  const str = String(val).trim();
+  let str = String(val).trim();
+  str = str.replace(/^R\$\s*/i, '').trim();
   if (!str) return 0;
 
-  if (/^\d+\.\d+$/.test(str)) {
-    const floatVal = parseFloat(str);
-    if (!isNaN(floatVal)) return floatVal;
+  // Se possui vírgula (ex: "5.000,00", "5000,00", "5000,5", "5,50")
+  if (str.includes(',')) {
+    const clean = str.replace(/\./g, '').replace(',', '.');
+    const floatVal = parseFloat(clean);
+    return isNaN(floatVal) ? 0 : floatVal;
   }
 
-  const digits = str.replace(/\D/g, '');
-  if (!digits) return 0;
-  return parseInt(digits, 10) / 100;
+  // Se possui ponto
+  if (str.includes('.')) {
+    const parts = str.split('.');
+    // Caso de múltiplos pontos ("1.500.000") ou ponto como milhar ("5.000" sem decimais):
+    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3)) {
+      const clean = str.replace(/\./g, '');
+      const floatVal = parseFloat(clean);
+      return isNaN(floatVal) ? 0 : floatVal;
+    }
+    const floatVal = parseFloat(str);
+    return isNaN(floatVal) ? 0 : floatVal;
+  }
+
+  // String apenas com inteiros (ex: "5000", "2000")
+  const floatVal = parseFloat(str);
+  return isNaN(floatVal) ? 0 : floatVal;
 }
 
 export function formatCurrency(val: number): string {

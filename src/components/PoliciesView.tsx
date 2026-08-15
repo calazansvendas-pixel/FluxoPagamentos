@@ -1,5 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Layers, PlusCircle, ShieldCheck, Calculator, Building, ShieldAlert, Eraser, Save } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Plus, 
+  Trash2, 
+  Layers, 
+  PlusCircle, 
+  ShieldCheck, 
+  Calculator, 
+  Building, 
+  ShieldAlert, 
+  Eraser, 
+  Save, 
+  X, 
+  Sparkles, 
+  CheckCircle2 
+} from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
 import { calculatePresentValue, ensureProductConditions } from '../utils/calculations';
@@ -15,6 +29,20 @@ interface PoliciesViewProps {
   clientIncome: number;
   selectedUnits?: Record<string, SelectedUnit>;
 }
+
+// Helpers para conversão e formatação robusta de decimais e inteiros
+const parseDecimal = (val: string | number | undefined, defaultVal = 0): number => {
+  if (val === undefined || val === null) return defaultVal;
+  if (typeof val === 'number') return isNaN(val) ? defaultVal : val;
+  const cleaned = String(val).trim().replace(',', '.');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? defaultVal : parsed;
+};
+
+const formatDecimalBR = (num: number, minDec = 1, maxDec = 2): string => {
+  if (isNaN(num)) return '0';
+  return num.toLocaleString('pt-BR', { minimumFractionDigits: minDec, maximumFractionDigits: maxDec });
+};
 
 export const PoliciesView: React.FC<PoliciesViewProps> = ({
   products,
@@ -38,16 +66,21 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const [deliveryDatePhase2, setDeliveryDatePhase2] = useState<string>('');
   const [isFeatured, setIsFeatured] = useState<boolean>(false);
 
-  // Condition parameters state
-  const [numParcelas, setNumParcelas] = useState<number>(72);
+  // String states for flexible decimal and numeric inputs (accepts both ',' and '.')
+  const [numParcelasStr, setNumParcelasStr] = useState<string>('72');
   const [sinalMinimo, setSinalMinimo] = useState<string>('R$ 2.000,00');
-  const [riscoRendaPct, setRiscoRendaPct] = useState<number>(30);
-  const [riscoImovelPct, setRiscoImovelPct] = useState<number>(25);
-  const [mesesTabela1, setMesesTabela1] = useState<number>(36);
-  const [taxaJuros1, setTaxaJuros1] = useState<number>(0.0);
-  const [mesesTabela2, setMesesTabela2] = useState<number>(72);
-  const [taxaJuros2, setTaxaJuros2] = useState<number>(1.0);
+  const [riscoRendaStr, setRiscoRendaStr] = useState<string>('30,0');
+  const [riscoImovelStr, setRiscoImovelStr] = useState<string>('25,0');
+  const [mesesTabela1Str, setMesesTabela1Str] = useState<string>('36');
+  const [taxaJuros1Str, setTaxaJuros1Str] = useState<string>('0,00');
+  const [mesesTabela2Str, setMesesTabela2Str] = useState<string>('72');
+  const [taxaJuros2Str, setTaxaJuros2Str] = useState<string>('1,00');
   const [policyText, setPolicyText] = useState<string>('');
+
+  // Modal State for New Commercial Condition
+  const [isNewConditionModalOpen, setIsNewConditionModalOpen] = useState<boolean>(false);
+  const [newConditionName, setNewConditionName] = useState<string>('');
+  const newCondInputRef = useRef<HTMLInputElement>(null);
 
   // Sync state when active product changes
   useEffect(() => {
@@ -66,46 +99,61 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   }, [activeProductId, products]);
 
   const loadConditionData = (cond: CommercialCondition) => {
-    setNumParcelas(cond.numParcelas || 72);
-    setSinalMinimo(cond.sinalMinimo || 'R$ 2.000,00');
-    setRiscoRendaPct(cond.riscoRendaPct !== undefined ? cond.riscoRendaPct : 30);
-    setRiscoImovelPct(cond.riscoImovelPct !== undefined ? cond.riscoImovelPct : 25);
-    setMesesTabela1(cond.mesesTabela1 !== undefined ? cond.mesesTabela1 : 36);
-    setTaxaJuros1(cond.taxaJuros1 !== undefined ? cond.taxaJuros1 : 0.0);
-    setMesesTabela2(cond.mesesTabela2 !== undefined ? cond.mesesTabela2 : 72);
-    setTaxaJuros2(cond.taxaJuros2 !== undefined ? cond.taxaJuros2 : 1.0);
+    const numP = cond.numParcelas || 72;
+    const rr = cond.riscoRendaPct !== undefined ? cond.riscoRendaPct : 30;
+    const ri = cond.riscoImovelPct !== undefined ? cond.riscoImovelPct : 25;
+    const m1 = cond.mesesTabela1 !== undefined ? cond.mesesTabela1 : 36;
+    const t1 = cond.taxaJuros1 !== undefined ? cond.taxaJuros1 : 0.0;
+    const m2 = cond.mesesTabela2 !== undefined ? cond.mesesTabela2 : 72;
+    const t2 = cond.taxaJuros2 !== undefined ? cond.taxaJuros2 : 1.0;
+
+    const parsedSinal = parseCurrency(cond.sinalMinimo);
+    const formattedSinal = formatCurrency(parsedSinal > 0 ? parsedSinal : 2000);
+
+    setNumParcelasStr(String(numP));
+    setSinalMinimo(formattedSinal);
+    setRiscoRendaStr(formatDecimalBR(rr, 1, 2));
+    setRiscoImovelStr(formatDecimalBR(ri, 1, 2));
+    setMesesTabela1Str(String(m1));
+    setTaxaJuros1Str(formatDecimalBR(t1, 2, 2));
+    setMesesTabela2Str(String(m2));
+    setTaxaJuros2Str(formatDecimalBR(t2, 2, 2));
     setPolicyText(cond.policy || '');
   };
 
+  // Dynamic parsed numeric values for live calculations
+  const numParcelas = parseInt(numParcelasStr, 10) || 1;
+  const riscoRendaPct = parseDecimal(riscoRendaStr, 30);
+  const riscoImovelPct = parseDecimal(riscoImovelStr, 25);
+  const mesesTabela1 = parseInt(mesesTabela1Str, 10) || 1;
+  const taxaJuros1 = parseDecimal(taxaJuros1Str, 0);
+  const mesesTabela2 = parseInt(mesesTabela2Str, 10) || 1;
+  const taxaJuros2 = parseDecimal(taxaJuros2Str, 1);
+
   const handleSelectCondition = (condId: string) => {
-    setActiveConditionId(condId);
-    if (prodWithConds) {
-      const cond = prodWithConds.conditions.find(c => c.id === condId);
-      if (cond) {
-        loadConditionData(cond);
-      }
-    }
-  };
-
-  const handleAddNewCondition = () => {
     if (!prodWithConds) return;
-    const condName = prompt("Digite o nome da nova Condição Comercial (ex: Sinal em 36X c/ Morar):");
-    if (!condName || !condName.trim()) return;
 
-    const newCondId = `cond_${prodWithConds.id}_${Date.now()}`;
-    const newCond: CommercialCondition = {
-      id: newCondId,
-      name: condName.trim(),
-      numParcelas: 72,
-      sinalMinimo: 'R$ 2.000,00',
-      riscoRendaPct: 30,
-      riscoImovelPct: 25,
-      mesesTabela1: 36,
-      taxaJuros1: 0.0,
-      mesesTabela2: 72,
-      taxaJuros2: 1.0,
-      policy: `POLÍTICA COMERCIAL DA CONDIÇÃO ${condName.toUpperCase()}:\n- Digite aqui as regras comerciais desta opção.`
-    };
+    const parsedCurrentSinal = parseCurrency(sinalMinimo);
+    const formattedCurrentSinal = formatCurrency(parsedCurrentSinal > 0 ? parsedCurrentSinal : 2000);
+
+    // Salva preventivamente o estado atual da condição antes de trocar
+    const updatedConditions = (prodWithConds.conditions || []).map(c => {
+      if (c.id === activeConditionId) {
+        return {
+          ...c,
+          numParcelas,
+          sinalMinimo: formattedCurrentSinal,
+          riscoRendaPct,
+          riscoImovelPct,
+          mesesTabela1,
+          taxaJuros1,
+          mesesTabela2,
+          taxaJuros2,
+          policy: policyText
+        };
+      }
+      return c;
+    });
 
     const updatedProd: Product = {
       ...prodWithConds,
@@ -114,13 +162,88 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       deliveryDatePhase1,
       deliveryDatePhase2,
       isFeatured,
-      conditions: [...prodWithConds.conditions, newCond]
+      numParcelas,
+      conditions: updatedConditions
+    };
+    onSaveProductPolicy(updatedProd);
+
+    setActiveConditionId(condId);
+    const targetCond = updatedConditions.find(c => c.id === condId);
+    if (targetCond) {
+      loadConditionData(targetCond);
+    }
+  };
+
+  const handleOpenNewConditionModal = () => {
+    setNewConditionName('');
+    setIsNewConditionModalOpen(true);
+    setTimeout(() => {
+      newCondInputRef.current?.focus();
+    }, 60);
+  };
+
+  const handleConfirmNewCondition = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!prodWithConds) return;
+    const trimmedName = newConditionName.trim();
+    if (!trimmedName) {
+      onShowToast("Informe um nome para a nova condição comercial.");
+      return;
+    }
+
+    const newCondId = `cond_${prodWithConds.id}_${Date.now()}`;
+    const newCond: CommercialCondition = {
+      id: newCondId,
+      name: trimmedName,
+      numParcelas: 72,
+      sinalMinimo: 'R$ 2.000,00',
+      riscoRendaPct: 30,
+      riscoImovelPct: 25,
+      mesesTabela1: 36,
+      taxaJuros1: 0.0,
+      mesesTabela2: 72,
+      taxaJuros2: 1.0,
+      policy: `POLÍTICA COMERCIAL DA CONDIÇÃO ${trimmedName.toUpperCase()}:\n- Parcelamento da entrada em até 72x.\n- Sinal mínimo a partir de R$ 2.000,00.\n- Taxa de 0,00% a.m. até 36 meses e 1,00% a.m. até 72 meses.`
+    };
+
+    const parsedCurrentSinal = parseCurrency(sinalMinimo);
+    const formattedCurrentSinal = formatCurrency(parsedCurrentSinal > 0 ? parsedCurrentSinal : 2000);
+
+    // Salvar as edições atuais da condição em tela
+    const currentConditionsUpdated = (prodWithConds.conditions || []).map(c => {
+      if (c.id === activeConditionId) {
+        return {
+          ...c,
+          numParcelas,
+          sinalMinimo: formattedCurrentSinal,
+          riscoRendaPct,
+          riscoImovelPct,
+          mesesTabela1,
+          taxaJuros1,
+          mesesTabela2,
+          taxaJuros2,
+          policy: policyText
+        };
+      }
+      return c;
+    });
+
+    const updatedProd: Product = {
+      ...prodWithConds,
+      name: productName.trim() || prodWithConds.name,
+      deliveryDate: deliveryDatePhase1 || deliveryDatePhase2 || '',
+      deliveryDatePhase1,
+      deliveryDatePhase2,
+      isFeatured,
+      conditions: [...currentConditionsUpdated, newCond]
     };
 
     onSaveProductPolicy(updatedProd);
     setActiveConditionId(newCondId);
     loadConditionData(newCond);
-    onShowToast(`Nova condição "${condName}" adicionada com sucesso!`);
+    setIsNewConditionModalOpen(false);
+    setNewConditionName('');
+    onShowToast(`Nova condição "${trimmedName}" criada com sucesso!`);
   };
 
   const handleDeleteCondition = () => {
@@ -155,18 +278,39 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       return;
     }
 
-    const updatedConditions = prodWithConds.conditions.map(c => {
+    // Coleta o estado completo e normaliza os inputs decimais e inteiros
+    const parsedNumParcelas = Math.max(1, parseInt(numParcelasStr, 10) || 72);
+    const parsedSinalMinimoNum = parseCurrency(sinalMinimo);
+    const formattedSinalMinimo = formatCurrency(parsedSinalMinimoNum > 0 ? parsedSinalMinimoNum : 2000);
+    const parsedRiscoRenda = parseDecimal(riscoRendaStr, 30);
+    const parsedRiscoImovel = parseDecimal(riscoImovelStr, 25);
+    const parsedMeses1 = Math.max(1, parseInt(mesesTabela1Str, 10) || 36);
+    const parsedTaxa1 = parseDecimal(taxaJuros1Str, 0);
+    const parsedMeses2 = Math.max(1, parseInt(mesesTabela2Str, 10) || 72);
+    const parsedTaxa2 = parseDecimal(taxaJuros2Str, 1);
+
+    // Atualiza a formatação visual dos inputs ao salvar
+    setNumParcelasStr(String(parsedNumParcelas));
+    setSinalMinimo(formattedSinalMinimo);
+    setRiscoRendaStr(formatDecimalBR(parsedRiscoRenda, 1, 2));
+    setRiscoImovelStr(formatDecimalBR(parsedRiscoImovel, 1, 2));
+    setMesesTabela1Str(String(parsedMeses1));
+    setTaxaJuros1Str(formatDecimalBR(parsedTaxa1, 2, 2));
+    setMesesTabela2Str(String(parsedMeses2));
+    setTaxaJuros2Str(formatDecimalBR(parsedTaxa2, 2, 2));
+
+    const updatedConditions = (prodWithConds.conditions || []).map(c => {
       if (c.id === activeConditionId) {
         return {
           ...c,
-          numParcelas,
-          sinalMinimo,
-          riscoRendaPct,
-          riscoImovelPct,
-          mesesTabela1,
-          taxaJuros1,
-          mesesTabela2,
-          taxaJuros2,
+          numParcelas: parsedNumParcelas,
+          sinalMinimo: formattedSinalMinimo,
+          riscoRendaPct: parsedRiscoRenda,
+          riscoImovelPct: parsedRiscoImovel,
+          mesesTabela1: parsedMeses1,
+          taxaJuros1: parsedTaxa1,
+          mesesTabela2: parsedMeses2,
+          taxaJuros2: parsedTaxa2,
           policy: policyText
         };
       }
@@ -180,11 +324,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       deliveryDatePhase1,
       deliveryDatePhase2,
       isFeatured,
+      numParcelas: parsedNumParcelas,
       conditions: updatedConditions
     };
 
     onSaveProductPolicy(updatedProd);
-    onShowToast(`Política e regras do empreendimento "${productName}" salvas!`);
+    onShowToast("✓ Alterações salvas com sucesso!");
   };
 
   // CALCULATIONS FOR DISPLAY CARDS
@@ -213,6 +358,13 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const minRiskVal = (vpVal > 0 && riscoImovelVal > 0) ? Math.min(vpVal, riscoImovelVal) : 0;
 
   const activeCondObj = prodWithConds?.conditions.find(c => c.id === activeConditionId);
+
+  const quickConditionSuggestions = [
+    'Sinal em 36X c/ Direto',
+    'À Vista c/ Desconto',
+    'Sinal em 48X Morar',
+    'Direto Construtora 60X'
+  ];
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
@@ -334,8 +486,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
               <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                 <button
                   type="button"
-                  onClick={handleAddNewCondition}
-                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                  onClick={handleOpenNewConditionModal}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
                   <span>+ Nova Condição</span>
@@ -373,11 +525,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 </label>
                 <div className="relative flex items-center">
                   <input
-                    type="number"
-                    min="1"
-                    max="180"
-                    value={numParcelas}
-                    onChange={(e) => setNumParcelas(parseInt(e.target.value, 10) || 1)}
+                    type="text"
+                    inputMode="numeric"
+                    value={numParcelasStr}
+                    onChange={(e) => setNumParcelasStr(e.target.value)}
+                    onBlur={() => {
+                      const val = Math.max(1, parseInt(numParcelasStr, 10) || 72);
+                      setNumParcelasStr(String(val));
+                    }}
                     className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
                   />
                   <span className="absolute right-3 font-extrabold text-slate-500 text-xs pointer-events-none">X</span>
@@ -393,7 +548,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   type="text"
                   value={sinalMinimo}
                   onChange={(e) => setSinalMinimo(e.target.value)}
-                  placeholder="Ex: R$ 2.000,00 ou 5%"
+                  onBlur={() => {
+                    const parsed = parseCurrency(sinalMinimo);
+                    setSinalMinimo(formatCurrency(parsed > 0 ? parsed : 2000));
+                  }}
+                  placeholder="Ex: 5000, 5000,00 ou R$ 5.000,00"
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold text-emerald-600 focus:outline-none focus:border-sky-600"
                 />
               </div>
@@ -406,12 +565,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </label>
                   <div className="relative flex items-center">
                     <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.5"
-                      value={riscoRendaPct}
-                      onChange={(e) => setRiscoRendaPct(parseFloat(e.target.value) || 0)}
+                      type="text"
+                      inputMode="decimal"
+                      value={riscoRendaStr}
+                      onChange={(e) => setRiscoRendaStr(e.target.value)}
+                      onBlur={() => {
+                        const parsed = parseDecimal(riscoRendaStr, 30);
+                        setRiscoRendaStr(formatDecimalBR(parsed, 1, 2));
+                      }}
                       className="w-full pl-2 pr-6 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
                     />
                     <span className="absolute right-2.5 font-extrabold text-slate-500 text-xs pointer-events-none">%</span>
@@ -438,12 +599,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </label>
                   <div className="relative flex items-center">
                     <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.5"
-                      value={riscoImovelPct}
-                      onChange={(e) => setRiscoImovelPct(parseFloat(e.target.value) || 0)}
+                      type="text"
+                      inputMode="decimal"
+                      value={riscoImovelStr}
+                      onChange={(e) => setRiscoImovelStr(e.target.value)}
+                      onBlur={() => {
+                        const parsed = parseDecimal(riscoImovelStr, 25);
+                        setRiscoImovelStr(formatDecimalBR(parsed, 1, 2));
+                      }}
                       className="w-full pl-2 pr-6 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
                     />
                     <span className="absolute right-2.5 font-extrabold text-slate-500 text-xs pointer-events-none">%</span>
@@ -474,11 +637,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </label>
                   <div className="relative flex items-center">
                     <input
-                      type="number"
-                      min="1"
-                      max="180"
-                      value={mesesTabela1}
-                      onChange={(e) => setMesesTabela1(parseInt(e.target.value, 10) || 1)}
+                      type="text"
+                      inputMode="numeric"
+                      value={mesesTabela1Str}
+                      onChange={(e) => setMesesTabela1Str(e.target.value)}
+                      onBlur={() => {
+                        const val = Math.max(1, parseInt(mesesTabela1Str, 10) || 36);
+                        setMesesTabela1Str(String(val));
+                      }}
                       className="w-full pl-2 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
                     />
                     <span className="absolute right-2 font-bold text-slate-400 text-[10px] pointer-events-none">M</span>
@@ -490,12 +656,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </label>
                   <div className="relative flex items-center">
                     <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={taxaJuros1}
-                      onChange={(e) => setTaxaJuros1(parseFloat(e.target.value) || 0)}
+                      type="text"
+                      inputMode="decimal"
+                      value={taxaJuros1Str}
+                      onChange={(e) => setTaxaJuros1Str(e.target.value)}
+                      onBlur={() => {
+                        const parsed = parseDecimal(taxaJuros1Str, 0);
+                        setTaxaJuros1Str(formatDecimalBR(parsed, 2, 2));
+                      }}
                       className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-emerald-600 text-center focus:outline-none focus:border-sky-600 text-xs"
                     />
                     <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">% a.m.</span>
@@ -511,11 +679,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </label>
                   <div className="relative flex items-center">
                     <input
-                      type="number"
-                      min="1"
-                      max="180"
-                      value={mesesTabela2}
-                      onChange={(e) => setMesesTabela2(parseInt(e.target.value, 10) || 1)}
+                      type="text"
+                      inputMode="numeric"
+                      value={mesesTabela2Str}
+                      onChange={(e) => setMesesTabela2Str(e.target.value)}
+                      onBlur={() => {
+                        const val = Math.max(1, parseInt(mesesTabela2Str, 10) || 72);
+                        setMesesTabela2Str(String(val));
+                      }}
                       className="w-full pl-2 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
                     />
                     <span className="absolute right-2 font-bold text-slate-400 text-[10px] pointer-events-none">M</span>
@@ -527,12 +698,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </label>
                   <div className="relative flex items-center">
                     <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={taxaJuros2}
-                      onChange={(e) => setTaxaJuros2(parseFloat(e.target.value) || 0)}
+                      type="text"
+                      inputMode="decimal"
+                      value={taxaJuros2Str}
+                      onChange={(e) => setTaxaJuros2Str(e.target.value)}
+                      onBlur={() => {
+                        const parsed = parseDecimal(taxaJuros2Str, 1);
+                        setTaxaJuros2Str(formatDecimalBR(parsed, 2, 2));
+                      }}
                       className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-emerald-600 text-center focus:outline-none focus:border-sky-600 text-xs"
                     />
                     <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">% a.m.</span>
@@ -671,6 +844,107 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* MODAL: NOVA CONDIÇÃO COMERCIAL */}
+      {isNewConditionModalOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsNewConditionModalOpen(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setIsNewConditionModalOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 relative">
+            <button
+              type="button"
+              onClick={() => setIsNewConditionModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
+                <PlusCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Nova Condição Comercial
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Empreendimento: <span className="font-semibold text-slate-700">{productName || activeProd.name}</span>
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmNewCondition} className="space-y-4 pt-1">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Nome da Condição Comercial *
+                </label>
+                <input
+                  ref={newCondInputRef}
+                  type="text"
+                  value={newConditionName}
+                  onChange={(e) => setNewConditionName(e.target.value)}
+                  placeholder="Ex: Sinal em 36X c/ Direto, À Vista c/ Desconto..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-600 transition-all"
+                />
+              </div>
+
+              {/* SUGESTÕES RÁPIDAS */}
+              <div>
+                <span className="block text-[11px] font-semibold text-slate-400 mb-1.5 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-500" /> Sugestões rápidas:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {quickConditionSuggestions.map((sug, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setNewConditionName(sug)}
+                      className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 transition-all cursor-pointer border border-slate-200/60"
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+                <p className="font-semibold text-slate-700 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Valores padrão inicializados:
+                </p>
+                <p className="text-slate-500">
+                  72 Parcelas, Sinal Mínimo R$ 2.000,00, Risco Renda 30%, Risco Imóvel 25%, Prazos e Taxas (0% até 36m / 1% até 72m). Todos editáveis após a criação.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsNewConditionModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newConditionName.trim()}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Criar Condição</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
