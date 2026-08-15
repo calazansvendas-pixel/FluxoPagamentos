@@ -289,6 +289,8 @@ export default function App() {
               onOpenNewProductModal={() => setIsNewProductModalOpen(true)}
               onShowToast={showToast}
               clientIncome={simulationData.income}
+              isFirstHome={simulationData.isFirstHome}
+              simulationData={simulationData}
               selectedUnits={selectedUnits}
             />
           )}

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp } from 'lucide-react';
+import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
+import { PdfExportModal } from './PdfExportModal';
 
 interface DetailsViewProps {
   product: Product | null;
@@ -47,15 +48,33 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [selectedTorre, setSelectedTorre] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
 
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
+  const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
+
   const [valAtoManual, setValAtoManual] = useState<number | null>(null);
   const [atoInputText, setAtoInputText] = useState<string>('');
   const [isEditingAto, setIsEditingAto] = useState<boolean>(false);
+
   const [valAtoITBI, setValAtoITBI] = useState<number>(0);
+  const [itbiInputText, setItbiInputText] = useState<string>('');
+  const [isEditingITBI, setIsEditingITBI] = useState<boolean>(false);
+
   const [isAtoPremiadoEnabled, setIsAtoPremiadoEnabled] = useState<boolean>(true);
+
   const [valParc2, setValParc2] = useState<number>(0);
+  const [parc2InputText, setParc2InputText] = useState<string>('');
+  const [isEditingParc2, setIsEditingParc2] = useState<boolean>(false);
+
   const [valParc3, setValParc3] = useState<number>(0);
+  const [parc3InputText, setParc3InputText] = useState<string>('');
+  const [isEditingParc3, setIsEditingParc3] = useState<boolean>(false);
 
   const [qtdMensais, setQtdMensais] = useState<number>(condNumParcelas);
+
+  // Sync isFirstHomeLocal when simulationData.isFirstHome changes
+  useEffect(() => {
+    setIsFirstHomeLocal(simulationData.isFirstHome ?? true);
+  }, [simulationData.isFirstHome]);
 
   // Sync state when product or unit selection changes
   useEffect(() => {
@@ -68,7 +87,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         setSelectedTorre('');
         setSelectedUnidade('');
         setValParc2(0);
+        setParc2InputText('');
+        setIsEditingParc2(false);
         setValParc3(0);
+        setParc3InputText('');
+        setIsEditingParc3(false);
       }
     }
   }, [currentProd?.id, selectedUnits]);
@@ -81,8 +104,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       setAtoInputText('');
       setIsEditingAto(false);
       setValAtoITBI(0);
+      setItbiInputText('');
+      setIsEditingITBI(false);
       setValParc2(0);
+      setParc2InputText('');
+      setIsEditingParc2(false);
       setValParc3(0);
+      setParc3InputText('');
+      setIsEditingParc3(false);
       setQtdMensais(condNumParcelas);
       setIsAtoPremiadoEnabled(true);
     }
@@ -136,9 +165,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const price = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[7]) : 0;
   const evaluation = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[6]) : 0;
 
-  // ITBI depends on whether it's 1º Imóvel or 2º Imóvel
+  // ITBI depends on whether it's 1º Imóvel (Com Desconto) or 2º Imóvel (Sem Desconto)
   const itbiVal = (hasUnitSelected && matchingRow) 
-    ? (simulationData.isFirstHome ? parseCurrency(matchingRow[8]) : parseCurrency(matchingRow[9]))
+    ? (isFirstHomeLocal ? parseCurrency(matchingRow[8]) : parseCurrency(matchingRow[9]))
     : 0;
 
   // Handle dropdown changes
@@ -171,9 +200,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setAtoInputText('');
     setIsEditingAto(false);
     setValAtoITBI(0);
+    setItbiInputText('');
+    setIsEditingITBI(false);
     setIsAtoPremiadoEnabled(true);
     setValParc2(0);
+    setParc2InputText('');
+    setIsEditingParc2(false);
     setValParc3(0);
+    setParc3InputText('');
+    setIsEditingParc3(false);
     if (currentCond) {
       setQtdMensais(condNumParcelas);
     }
@@ -444,15 +479,19 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const descontoAto = isAtoPremiadoEnabled ? novoAtoPremiado : 0;
 
   // 1. REGRA DE DEDUÇÃO NO PRÓ-SOLUTO (SINAL RESTANTE):
-  // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - Pagamento ITBI no Ato - 1ª Mensal - 2ª Mensal - Ato Premiado (Desconto Ato)
+  // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - 1ª Mensal - 2ª Mensal - Ato Premiado (Desconto Ato)
   const proSolutoSinalRestante = hasUnitSelected
-    ? Math.max(0, sinalTotal - atoAposMensais - atoITBIValidado - mens30d - mens60d - descontoAto)
+    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d - descontoAto)
     : 0;
   const proSoluto = proSolutoSinalRestante;
 
-  // Pró-Soluto Total c/ ITBI (Risco Máx) = Pró-Soluto (Sinal Restante) + Despesas Cartorárias & ITBI
+  // 2. PRÓ-SOLUTO TOTAL C/ ITBI (RISCO MÁX):
+  // Isole e utilize o saldo devedor restante das despesas de ITBI/Cartório:
+  // ITBI_Restante = Math.max(0, DespesasCartorariasTotal - PagamentoITBINoAto)
+  // ProSolutoTotalComITBI = ProSolutoSinalRestante + ITBI_Restante
+  const itbiRestante = saldoITBI;
   const proSolutoTotalParcelado = hasUnitSelected
-    ? Math.max(0, proSolutoSinalRestante + despCartorias)
+    ? Math.max(0, proSolutoSinalRestante + itbiRestante)
     : 0;
   const proSolutoTotalPainel = proSolutoTotalParcelado;
 
@@ -524,14 +563,90 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   };
 
+  // Gatilho executado exclusivamente ao término da digitação do ITBI no Ato (onBlur ou Enter)
+  const handleFinishITBIEdit = (rawText: string) => {
+    setIsEditingITBI(false);
+    const parsed = parseFlexibleCurrency(rawText);
+    const maxITBI = despCartorias > 0 ? despCartorias : 0;
+
+    if (rawText.trim() === '' || parsed <= 0) {
+      setValAtoITBI(0);
+      setItbiInputText('');
+      return;
+    }
+
+    if (hasUnitSelected && maxITBI > 0 && parsed > maxITBI) {
+      if (onShowToast) {
+        onShowToast(`O valor do Pagamento do ITBI no Ato não pode exceder o total de ${formatCurrency(maxITBI)}. Ajustado para o teto.`);
+      }
+      setValAtoITBI(maxITBI);
+      setItbiInputText(formatCurrency(maxITBI));
+    } else {
+      setValAtoITBI(parsed);
+      setItbiInputText(formatCurrency(parsed));
+    }
+  };
+
+  // Gatilho executado exclusivamente ao término da digitação da 1ª Mensal 30d (onBlur ou Enter)
+  const handleFinishParc2Edit = (rawText: string) => {
+    setIsEditingParc2(false);
+    const parsed = parseFlexibleCurrency(rawText);
+
+    if (rawText.trim() === '' || parsed <= 0) {
+      setValParc2(0);
+      setParc2InputText('');
+      return;
+    }
+
+    if (parsed > 0 && parsed < 200) {
+      setValParc2(200);
+      setParc2InputText(formatCurrency(200));
+      if (onShowToast) {
+        onShowToast('O valor mínimo para parcelas mensais é R$ 200,00.');
+      }
+    } else {
+      setValParc2(parsed);
+      setParc2InputText(formatCurrency(parsed));
+    }
+  };
+
+  // Gatilho executado exclusivamente ao término da digitação da 2ª Mensal 60d (onBlur ou Enter)
+  const handleFinishParc3Edit = (rawText: string) => {
+    setIsEditingParc3(false);
+    const parsed = parseFlexibleCurrency(rawText);
+
+    if (rawText.trim() === '' || parsed <= 0) {
+      setValParc3(0);
+      setParc3InputText('');
+      return;
+    }
+
+    if (parsed > 0 && parsed < 200) {
+      setValParc3(200);
+      setParc3InputText(formatCurrency(200));
+      if (onShowToast) {
+        onShowToast('O valor mínimo para parcelas mensais é R$ 200,00.');
+      }
+    } else {
+      setValParc3(parsed);
+      setParc3InputText(formatCurrency(parsed));
+    }
+  };
+
   // Função para resetar exclusivamente o Fluxo de Pagamento (Quadros 2 e 3)
   const limparFluxoPagamento = () => {
     setValAtoManual(null);
     setAtoInputText('');
     setIsEditingAto(false);
     setValAtoITBI(0);
+    setItbiInputText('');
+    setIsEditingITBI(false);
     setValParc2(0);
+    setParc2InputText('');
+    setIsEditingParc2(false);
     setValParc3(0);
+    setParc3InputText('');
+    setIsEditingParc3(false);
     setQtdMensais(condNumParcelas);
     setIsAtoPremiadoEnabled(true);
     if (onShowToast) {
@@ -592,28 +707,27 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     colorPrimary: string,
     colorSecondary: string = '#cbd5e1',
     primaryTextColor: string = '#ffffff',
-    secondaryTextColor: string = '#334155'
+    secondaryTextColor: string = '#1e293b'
   ) => {
     const cx = 50;
     const cy = 50;
-    const r = 45; // Aumentado em ~15% (de 40 para 45 no viewBox de 100x100)
+    const r = 40; // Raio proporcional com folga perimetral anti-clipping
     const clampedPct = Math.min(100, Math.max(0, pct));
     const restPct = Math.max(0, 100 - clampedPct);
 
-    // Centroide de um setor circular de raio r com ângulo theta (em radianos) a partir do centro:
-    // distância do centro ao centroide = (2/3) * r * (sin(theta/2) / (theta/2))
-    // Para setores típicos, isso varia entre 0.55r e 0.67r, garantindo que o texto nunca encoste nas bordas.
     const calcCentroidRadius = (sliceAngleDeg: number) => {
       const theta = (sliceAngleDeg * Math.PI) / 180;
-      if (theta <= 0.001) return r * 0.6;
+      if (theta <= 0.001) return r * 0.58;
       const factor = (2 / 3) * (Math.sin(theta / 2) / (theta / 2));
-      // Clamp para garantir posição ideal e segura de respiro
       return r * Math.min(0.68, Math.max(0.48, factor));
     };
 
     if (clampedPct >= 100) {
       return (
-        <svg className="w-44 h-44 mx-auto drop-shadow-xs select-none" viewBox="0 0 100 100">
+        <svg
+          className="w-24 h-24 sm:w-28 sm:h-28 mx-auto select-none overflow-visible block"
+          viewBox="-10 -10 120 120"
+        >
           <circle cx={cx} cy={cy} r={r} fill={colorPrimary} />
           <text
             x={cx}
@@ -621,11 +735,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             textAnchor="middle"
             dominantBaseline="central"
             fill={primaryTextColor}
-            fontSize="8"
+            fontSize="10"
             fontWeight="500"
-            className="tracking-tight"
           >
-            100%
+            100.0%
           </text>
         </svg>
       );
@@ -633,7 +746,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
     if (clampedPct <= 0) {
       return (
-        <svg className="w-44 h-44 mx-auto drop-shadow-xs select-none" viewBox="0 0 100 100">
+        <svg
+          className="w-24 h-24 sm:w-28 sm:h-28 mx-auto select-none overflow-visible block"
+          viewBox="-10 -10 120 120"
+        >
           <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
           <text
             x={cx}
@@ -641,11 +757,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             textAnchor="middle"
             dominantBaseline="central"
             fill={secondaryTextColor}
-            fontSize="8"
+            fontSize="10"
             fontWeight="500"
-            className="tracking-tight"
           >
-            100%
+            0.0%
           </text>
         </svg>
       );
@@ -659,14 +774,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
     const pathD = `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${largeArcFlag} 1 ${x} ${y} Z`;
 
-    // Centroide da Fatia 1 (Destaque)
     const midAngle1 = angle / 2;
     const rLabel1 = calcCentroidRadius(angle);
     const rad1 = (midAngle1 - 90) * (Math.PI / 180);
     const textX1 = cx + rLabel1 * Math.cos(rad1);
     const textY1 = cy + rLabel1 * Math.sin(rad1);
 
-    // Centroide da Fatia 2 (Neutro/Restante)
     const restAngle = 360 - angle;
     const midAngle2 = angle + (restAngle / 2);
     const rLabel2 = calcCentroidRadius(restAngle);
@@ -675,7 +788,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     const textY2 = cy + rLabel2 * Math.sin(rad2);
 
     return (
-      <svg className="w-44 h-44 mx-auto drop-shadow-xs select-none" viewBox="0 0 100 100">
+      <svg
+        className="w-24 h-24 sm:w-28 sm:h-28 mx-auto select-none overflow-visible block"
+        viewBox="-10 -10 120 120"
+      >
         {/* Fatia 2 (Círculo de Fundo Neutro) */}
         <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
         {/* Fatia 1 (Arco Primário de Destaque) */}
@@ -692,11 +808,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             textAnchor="middle"
             dominantBaseline="central"
             fill={primaryTextColor}
-            fontSize="7"
+            fontSize={clampedPct < 14 ? '9' : '10'}
             fontWeight="500"
-            className="tracking-tight"
           >
-            {clampedPct.toFixed(2)}%
+            {clampedPct.toFixed(1)}%
           </text>
         )}
 
@@ -708,11 +823,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             textAnchor="middle"
             dominantBaseline="central"
             fill={secondaryTextColor}
-            fontSize="7"
+            fontSize={restPct < 14 ? '9' : '10'}
             fontWeight="500"
-            className="tracking-tight"
           >
-            {restPct.toFixed(2)}%
+            {restPct.toFixed(1)}%
           </text>
         )}
       </svg>
@@ -753,30 +867,30 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   );
 
   return (
-    <div className="w-full space-y-6 animate-fade-in">
+    <div className="w-full space-y-4 animate-fade-in">
       
       {/* BARRA SUPERIOR DE AÇÃO E NAVEGAÇÃO */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4 flex-wrap">
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
             onClick={onBackToSimulator}
-            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Voltar</span>
           </button>
-          <div className="flex items-center gap-3.5 flex-wrap">
-            <span className="text-sm font-extrabold text-sky-600 bg-sky-50 px-3.5 py-1 rounded-lg border border-sky-100 uppercase tracking-wide">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-xs sm:text-sm font-extrabold text-sky-600 bg-sky-50 px-3 py-1 rounded-lg border border-sky-100 uppercase tracking-wide">
               {currentProd.name}
             </span>
-            <span className="text-xs font-bold text-slate-600 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200/80">
+            <span className="text-xs font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80">
               {currentCond.name}
             </span>
             {deliveryText && (
               <span
                 id="badge-data-entrega"
-                className="text-xs font-bold text-amber-800 bg-amber-50 px-3.5 py-1.5 rounded-lg border border-amber-200 flex items-center gap-2 shadow-2xs"
+                className="text-xs font-bold text-amber-800 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200 flex items-center gap-1.5"
               >
                 <KeyRound className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>Chaves ➔ {deliveryText}</span>
@@ -784,14 +898,27 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* BOTÃO EXPORTAR PDF / IMPRIMIR */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsPdfModalOpen(true)}
+            className="px-3.5 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
+            title="Exportar Ficha de Análise em PDF / Imprimir"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Exportar PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA */}
       {!hasTable && (
-        <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl shrink-0">
-              <AlertTriangle className="w-5 h-5" />
+            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+              <AlertTriangle className="w-4 h-4" />
             </div>
             <div>
               <h4 className="text-xs font-bold text-amber-900">Tabela de Vendas Não Importada</h4>
@@ -803,147 +930,148 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           <button
             type="button"
             onClick={() => onNavigateToImport(currentProd.id)}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer shadow-2xs"
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer"
           >
-            <FileSpreadsheet className="w-4 h-4" />
+            <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Importar Tabela (Excel)</span>
           </button>
         </div>
       )}
 
-      {/* CONTEÚDO PRINCIPAL: FICHA x FLUXO (GRID 12 COLS) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* COLUNA ESQUERDA: DADOS DA APROVAÇÃO (6 COLS) */}
-        <div className="lg:col-span-6 space-y-4">
-          
-          {/* CARD 1: DADOS DA UNIDADE E CLIENTE CENTRALIZADOS */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2 text-xs">
-              <div className="flex items-center gap-3">
-                <span className="text-slate-500 font-medium">
-                  Cliente: <strong className="text-slate-900">{simulationData.clientName || 'Cliente Não Informado'}</strong>
-                </span>
-                <span className="text-slate-500 font-medium">
-                  Imobiliária: <strong className="text-slate-900">{simulationData.agency || 'Calazans Imóveis'}</strong>
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleResetFicha}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
-                title="Limpar Ficha de Análise"
-              >
-                <RotateCcw className="w-3 h-3 text-sky-600" />
-                <span>Limpar</span>
-              </button>
-            </div>
+      {/* CARD DO IMÓVEL E CLIENTE CENTRALIZADOS */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 w-full overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2 text-xs">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-slate-500 font-medium">
+              Cliente: <strong className="text-slate-900">{simulationData.clientName || 'Cliente Não Informado'}</strong>
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="text-slate-500 font-medium">
+              Imobiliária: <strong className="text-slate-900">{simulationData.agency?.trim() || 'Imobiliária Não Informada'}</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleResetFicha}
+            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
+            title="Limpar Ficha de Análise"
+          >
+            <RotateCcw className="w-3 h-3 text-sky-600" />
+            <span>Limpar</span>
+          </button>
+        </div>
 
-            {/* LINHA 1: TORRE, UNIDADE, FASE, TIPOLOGIA CENTRALIZADOS */}
-            <div className="grid grid-cols-12 gap-2 text-xs">
-              <div className="col-span-12 sm:col-span-3 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center">
-                <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center">
-                  TORRE *
-                </label>
-                <select
-                  value={selectedTorre}
-                  onChange={(e) => handleTorreChange(e.target.value)}
-                  className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center"
-                >
-                  <option value="">-- Selecione --</option>
-                  {uniqueTorres.map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="col-span-12 sm:col-span-3 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center">
-                <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center">
-                  UNIDADE *
-                </label>
-                <select
-                  value={selectedUnidade}
-                  onChange={(e) => handleUnidadeChange(e.target.value)}
-                  disabled={!selectedTorre}
-                  className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center disabled:opacity-50"
-                >
-                  <option value="">-- Selecione --</option>
-                  {filteredUnits.map(u => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="col-span-6 sm:col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center">
-                <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5">Fase</span>
-                <input
-                  id="campo-fase"
-                  type="text"
-                  value={fase}
-                  readOnly
-                  className="w-full bg-transparent font-bold text-slate-700 text-center focus:outline-none cursor-not-allowed"
-                />
-              </div>
-
-              <div className="col-span-6 sm:col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center">
-                <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5">Tipologia</span>
-                <input
-                  type="text"
-                  value={tipologia}
-                  readOnly
-                  className="w-full bg-transparent font-bold text-slate-700 text-center focus:outline-none cursor-not-allowed truncate"
-                  title={tipologia}
-                />
-              </div>
-            </div>
-
-            {/* LINHA 2: METRAGENS + VALORES DE TABELA CENTRALIZADOS */}
-            <div className="grid grid-cols-12 gap-2 text-xs">
-              <div className="col-span-6 sm:col-span-3 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center">
-                <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5">M² Priv.</span>
-                <input
-                  type="text"
-                  value={areaPriv}
-                  readOnly
-                  className="w-full bg-transparent font-bold text-slate-700 text-center focus:outline-none cursor-not-allowed text-xs"
-                />
-              </div>
-
-              <div className="col-span-6 sm:col-span-3 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center">
-                <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5">M² Quintal</span>
-                <input
-                  type="text"
-                  value={areaQuintal}
-                  readOnly
-                  className="w-full bg-transparent font-bold text-slate-700 text-center focus:outline-none cursor-not-allowed text-xs"
-                />
-              </div>
-
-              <div className="col-span-12 sm:col-span-3 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center">
-                <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5">Preço Tabela</span>
-                <input
-                  type="text"
-                  value={formatCurrency(price)}
-                  readOnly
-                  className="w-full bg-transparent font-bold text-slate-900 text-center focus:outline-none cursor-not-allowed text-xs"
-                />
-              </div>
-
-              <div className="col-span-12 sm:col-span-3 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center">
-                <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5">Avaliação Banco</span>
-                <input
-                  type="text"
-                  value={formatCurrency(evaluation)}
-                  readOnly
-                  className="w-full bg-transparent font-bold text-emerald-600 text-center focus:outline-none cursor-not-allowed text-xs"
-                />
-              </div>
-            </div>
+        {/* LINHA 1: TORRE (col-span-2), UNIDADE (col-span-2), FASE (col-span-2), TIPOLOGIA (col-span-6) */}
+        <div className="grid grid-cols-12 gap-2 text-xs w-full">
+          <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+            <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
+              TORRE *
+            </label>
+            <select
+              value={selectedTorre}
+              onChange={(e) => handleTorreChange(e.target.value)}
+              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center"
+            >
+              <option value="">--</option>
+              {uniqueTorres.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
 
-          {/* CARD 2: DADOS DA APROVAÇÃO DE CRÉDITO */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+            <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
+              UNIDADE *
+            </label>
+            <select
+              value={selectedUnidade}
+              onChange={(e) => handleUnidadeChange(e.target.value)}
+              disabled={!selectedTorre}
+              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center disabled:opacity-50"
+            >
+              <option value="">--</option>
+              {filteredUnits.map(u => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+            <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Fase</span>
+            <input
+              id="campo-fase"
+              type="text"
+              value={fase}
+              readOnly
+              className="w-full bg-transparent font-bold text-slate-700 text-center focus:outline-none cursor-not-allowed text-xs"
+            />
+          </div>
+
+          <div className="col-span-6 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+            <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Tipologia</span>
+            <input
+              type="text"
+              value={tipologia}
+              readOnly
+              className="w-full bg-transparent font-bold text-slate-700 text-center focus:outline-none cursor-not-allowed truncate text-xs"
+              title={tipologia}
+            />
+          </div>
+        </div>
+
+        {/* LINHA 2: ÁREA PRIVATIVA (col-span-2), QUINTAL (col-span-2), PREÇO DE TABELA (col-span-4), AVALIAÇÃO BANCÁRIA (col-span-4) */}
+        <div className="grid grid-cols-12 gap-2 text-xs w-full">
+          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+            <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Área Privativa</span>
+            <input
+              type="text"
+              value={areaPriv}
+              readOnly
+              className="w-full bg-transparent font-bold text-slate-700 text-center focus:outline-none cursor-not-allowed text-xs whitespace-nowrap"
+            />
+          </div>
+
+          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+            <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Quintal</span>
+            <input
+              type="text"
+              value={areaQuintal}
+              readOnly
+              className="w-full bg-transparent font-bold text-slate-700 text-center focus:outline-none cursor-not-allowed text-xs whitespace-nowrap"
+            />
+          </div>
+
+          <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+            <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Preço de Tabela</span>
+            <input
+              type="text"
+              value={formatCurrency(price)}
+              readOnly
+              className="w-full bg-transparent font-bold text-slate-900 text-center focus:outline-none cursor-not-allowed text-xs whitespace-nowrap"
+            />
+          </div>
+
+          <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+            <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Avaliação Bancária</span>
+            <input
+              type="text"
+              value={formatCurrency(evaluation)}
+              readOnly
+              className="w-full bg-transparent font-bold text-emerald-600 text-center focus:outline-none cursor-not-allowed text-xs whitespace-nowrap"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* CORPO DA PÁGINA: GRID DE 2 COLUNAS IDÊNTICO AO PDF */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        
+        {/* ================= COLUNA DA ESQUERDA ================= */}
+        <div className="space-y-4">
+          
+          {/* BLOCO 1: DADOS DA APROVAÇÃO DE CRÉDITO */}
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
                   <FileCheck2 className="w-4 h-4" />
@@ -954,50 +1082,50 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
             </div>
 
-            {/* GRID DE DADOS DA APROVAÇÃO */}
+            {/* SUBCOLUNAS LADO A LADO: RECURSOS DO CLIENTE & OPERAÇÃO BANCÁRIA */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="bg-slate-50/60 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between">
+              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between">
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block border-b border-slate-200/60 pb-1 mb-1">
+                  <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block border-b border-slate-200 pb-1 mb-1.5">
                     Recursos do Cliente
                   </span>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Renda:</span>
                     <strong className="text-slate-800 font-semibold">{formatCurrency(income)}</strong>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Subsídio:</span>
                     <strong className="text-emerald-600 font-semibold">{formatCurrency(subsidyEfetivo)}</strong>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">FGTS:</span>
                     <strong className="text-sky-600 font-semibold">{formatCurrency(fgtsEfetivo)}</strong>
                   </div>
-                  <div className="flex justify-between items-center py-1 mt-2.5">
+                  <div className="flex justify-between items-center py-1 mt-2">
                     <span className="text-slate-600">Desconto Ato:</span>
                     <strong className="text-emerald-600 font-semibold">{formatCurrency(descontoAto)}</strong>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-50/60 p-3.5 rounded-xl border border-slate-100 flex flex-col justify-between">
+              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between">
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block border-b border-slate-200/60 pb-1 mb-1">
+                  <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block border-b border-slate-200 pb-1 mb-1.5">
                     Operação Bancária
                   </span>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Max Financ:</span>
                     <strong className="text-sky-600 font-bold">{formatCurrency(maxFinancEfetivo)}</strong>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Total Negoc:</span>
                     <strong className="text-slate-800 font-semibold">{formatCurrency(totalNegocEfetivo)}</strong>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Sinal Total:</span>
                     <strong className="text-amber-600 font-bold">{formatCurrency(sinalTotal)}</strong>
                   </div>
-                  <div className="flex justify-between items-center py-1 mt-2.5">
+                  <div className="flex justify-between items-center py-1 mt-2">
                     <span className="text-slate-600">Sinal + ITBI:</span>
                     <strong className="text-emerald-600 font-bold">{formatCurrency(sinalTotal + despCartoriasEfetivas)}</strong>
                   </div>
@@ -1006,25 +1134,100 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             </div>
           </div>
 
-          {/* TERMOS LEGAIS */}
-          <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-[10px] text-amber-900 leading-relaxed">
-            <strong>Informações importantes:</strong> Estas informações referem-se apenas a uma simulação. As condições da operação e a efetivação dos resultados estão condicionadas à aprovação de crédito e à contratação junto ao parceiro financeiro.
+          {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO (REPOSICIONADO NA COLUNA ESQUERDA) */}
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+            {/* Cabeçalho de Bases Compartilhadas */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <PieChart className="w-4 h-4" />
+                </div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  4. Indicadores de Risco / Comprometimento
+                </h3>
+              </div>
+              <div className="flex items-center flex-wrap gap-2 text-[10px]">
+                <div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-600">
+                  <span className="text-slate-400 font-medium">Base Líq. c/ ITBI:</span>
+                  <strong className="font-bold text-slate-800">{formatCurrency(baseVendaLiquidaComITBI)}</strong>
+                </div>
+                <div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-600">
+                  <span className="text-slate-400 font-medium">Base Renda:</span>
+                  <strong className="font-bold text-slate-800">{formatCurrency(baseRendaInformada)}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* GRÁFICOS DE PIZZA LADO A LADO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* SUB-CARD 1: RISCO PARCELA / COMPROMETIMENTO */}
+              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between space-y-1">
+                <div className="border-b border-slate-200/60 pb-1 text-center">
+                  <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-sky-600 shrink-0" />
+                    Risco Parcela / Renda
+                  </h4>
+                  <p className="text-[9.5px] text-slate-500 mt-0.5">
+                    1ª Parcela sobre a Base da Renda
+                  </p>
+                </div>
+
+                <div className="py-1 flex items-center justify-center overflow-visible">
+                  {renderSolidPie(pctRiscoParcelaRenda, '#0284c7', '#cbd5e1')}
+                </div>
+
+                <div className="w-full pt-1 border-t border-slate-200/70 text-center">
+                  <span className="block text-[10px] text-slate-500 font-medium">
+                    1ª Parcela
+                  </span>
+                  <strong className="text-xs font-semibold text-slate-800 block">
+                    {formatCurrency(valorRiscoParcela)}
+                  </strong>
+                </div>
+              </div>
+
+              {/* SUB-CARD 2: RISCO PRÓ-SOLUTO TOTAL */}
+              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between space-y-1">
+                <div className="border-b border-slate-200/60 pb-1 text-center">
+                  <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
+                    Risco Pró-Soluto Total
+                  </h4>
+                  <p className="text-[9.5px] text-slate-500 mt-0.5">
+                    Pró-Soluto Total c/ ITBI s/ Base Líquida
+                  </p>
+                </div>
+
+                <div className="py-1 flex items-center justify-center overflow-visible">
+                  {renderSolidPie(pctRiscoProSoluto, '#4f46e5', '#cbd5e1')}
+                </div>
+
+                <div className="w-full pt-1 border-t border-slate-200/70 text-center">
+                  <span className="block text-[10px] text-slate-500 font-medium">
+                    Pró-Soluto Total
+                  </span>
+                  <strong className="text-xs font-semibold text-slate-800 block">
+                    {formatCurrency(valorRiscoProSoluto)}
+                  </strong>
+                </div>
+              </div>
+            </div>
           </div>
 
         </div>
 
-        {/* COLUNA DIREITA: FLUXO MORAR + BANCO DIRETO (6 COLS) */}
-        <div className="lg:col-span-6 space-y-4">
+        {/* ================= COLUNA DA DIREITA ================= */}
+        <div className="space-y-4">
           
-          {/* QUADRO 1: FLUXO DE PAGAMENTO C/ MORAR CONSTRUTORA */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          {/* BLOCO 2: FLUXO DE ENTRADA C/ CONSTRUTORA */}
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
                   <Building className="w-4 h-4" />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  2. Fluxo de Pagamento c/ Morar Construtora
+                  2. FLUXO DE ENTRADA C/ CONSTRUTORA
                 </h3>
               </div>
               <div className="flex items-center gap-2">
@@ -1032,7 +1235,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   type="button"
                   onClick={limparFluxoPagamento}
                   className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Limpar Fluxo de Pagamento"
+                  title="Limpar Fluxo de Entrada"
                 >
                   <RotateCcw className="w-3 h-3 text-sky-600" />
                   <span>Limpar</span>
@@ -1040,14 +1243,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3 text-xs">
-              {/* 1ª LINHA: ATO (IMÓVEL), ATO (ITBI) E ATO PREMIADO */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* CAMPO 1: PAGAMENTO ATO (IMÓVEL) */}
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+            <div className="space-y-2.5 text-xs">
+              {/* 1ª LINHA: 3 COLUNAS IGUAIS (ATO IMÓVEL, ITBI NO ATO, ATO PREMIADO) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* CAMPO 1: ATO (IMÓVEL) */}
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase">
-                      Pagamento Ato (Imóvel)
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">
+                      Ato (Imóvel)
                     </label>
                   </div>
                   <input
@@ -1070,48 +1273,66 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       }
                     }}
                     placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all"
+                    className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
                   />
-
                 </div>
 
-                {/* CAMPO 2: PAGAMENTO ITBI NO ATO */}
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                {/* CAMPO 2: ITBI NO ATO */}
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-sky-800 uppercase">
-                      Pagamento ITBI no Ato
+                    <label className="block text-[10px] font-bold text-sky-800 uppercase whitespace-nowrap">
+                      ITBI no Ato
                     </label>
-                    <span className="text-[9px] text-sky-700 font-bold bg-sky-50 px-1.5 py-0.5 rounded border border-sky-100">
-                      Sem Desconto
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsFirstHomeLocal(prev => !prev)}
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                        isFirstHomeLocal
+                          ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
+                          : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                      }`}
+                      title="Alternar entre Com Desconto e Sem Desconto no ITBI"
+                    >
+                      {isFirstHomeLocal ? 'Com Desc.' : 'Sem Desc.'}
+                    </button>
                   </div>
                   <input
+                    id="input-pagamento-itbi-ato"
                     type="text"
-                    value={valAtoITBI > 0 ? formatCurrency(valAtoITBI) : ''}
+                    value={isEditingITBI ? itbiInputText : (valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '')}
+                    onFocus={() => {
+                      setIsEditingITBI(true);
+                      setItbiInputText(valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '');
+                    }}
                     onChange={(e) => {
-                      const inputVal = parseCurrency(e.target.value);
-                      if (hasUnitSelected && despCartorias > 0 && inputVal > despCartorias) {
-                        alert(`O valor do Pagamento do ITBI no Ato não pode exceder o valor total do ITBI/Despesas Cartorárias (${formatCurrency(despCartorias)}).`);
-                        setValAtoITBI(despCartorias);
-                      } else {
-                        setValAtoITBI(inputVal);
+                      setItbiInputText(e.target.value);
+                      const parsed = parseFlexibleCurrency(e.target.value);
+                      if (parsed >= 0) {
+                        if (hasUnitSelected && despCartorias > 0 && parsed > despCartorias) {
+                          setValAtoITBI(despCartorias);
+                        } else {
+                          setValAtoITBI(parsed);
+                        }
                       }
                     }}
-                    onBlur={() => {
-                      if (hasUnitSelected && despCartorias > 0 && valAtoITBI > despCartorias) {
-                        alert(`O valor do Pagamento do ITBI no Ato não pode exceder o valor total do ITBI/Despesas Cartorárias (${formatCurrency(despCartorias)}).`);
-                        setValAtoITBI(despCartorias);
+                    onBlur={(e) => {
+                      handleFinishITBIEdit(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleFinishITBIEdit(itbiInputText);
+                        (e.target as HTMLInputElement).blur();
                       }
                     }}
                     placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all"
+                    className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
                   />
                 </div>
 
                 {/* ATO PREMIADO */}
-                <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/80 flex flex-col justify-between">
+                <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/80 flex flex-col justify-between">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-amber-800 uppercase">
+                    <label className="block text-[10px] font-bold text-amber-800 uppercase whitespace-nowrap">
                       Ato Premiado
                     </label>
                     <button
@@ -1119,7 +1340,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       onClick={() => {
                         setIsAtoPremiadoEnabled(prev => !prev);
                       }}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
                         isAtoPremiadoEnabled 
                           ? 'bg-amber-200 text-amber-900 hover:bg-amber-300' 
                           : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
@@ -1128,84 +1349,112 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       {isAtoPremiadoEnabled ? 'Zerar' : 'Aplicar'}
                     </button>
                   </div>
-                  <div className="mt-auto">
-                    <span className="font-extrabold text-amber-800 text-sm">
+                  <div className="mt-auto pt-1 text-center">
+                    <span className="font-extrabold text-amber-800 text-xs whitespace-nowrap">
                       {isAtoPremiadoEnabled && descontoAto > 0 ? formatCurrency(descontoAto) : 'R$ 0,00'}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* 2ª LINHA: 1ª MENSAL (30D) E 2ª MENSAL (60D) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* 1ª MENSAL (30D) */}
-                <div className={`p-2.5 rounded-xl border transition-all ${
+              {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* 1ª MENSAL (30 DIAS) */}
+                <div className={`p-2.5 rounded-lg border transition-all ${
                   isExceededParc2 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
                 }`}>
                   <div className="flex items-center justify-between mb-1">
-                    <label className={`block text-[10px] font-bold uppercase ${
+                    <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
                       isExceededParc2 ? 'text-red-900' : 'text-slate-500'
                     }`}>
-                      1ª Mensal (30d)
+                      1ª Mensal (30 Dias)
                     </label>
                   </div>
                   <input
+                    id="input-primeira-mensal-30d"
                     type="text"
-                    value={valParc2 > 0 ? formatCurrency(valParc2) : ''}
-                    onChange={(e) => setValParc2(parseCurrency(e.target.value))}
-                    onBlur={() => {
-                      if (valParc2 > 0 && valParc2 < 200) {
-                        setValParc2(200);
-                        if (onShowToast) onShowToast('O valor mínimo para parcelas mensais é R$ 200,00.');
+                    value={isEditingParc2 ? parc2InputText : (valParc2 > 0 ? formatCurrency(valParc2) : '')}
+                    onFocus={() => {
+                      setIsEditingParc2(true);
+                      setParc2InputText(valParc2 > 0 ? formatCurrency(valParc2) : '');
+                    }}
+                    onChange={(e) => {
+                      setParc2InputText(e.target.value);
+                      const parsed = parseFlexibleCurrency(e.target.value);
+                      if (parsed >= 0) {
+                        setValParc2(parsed);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      handleFinishParc2Edit(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleFinishParc2Edit(parc2InputText);
+                        (e.target as HTMLInputElement).blur();
                       }
                     }}
                     placeholder="R$ 0,00"
-                    className={`w-full px-2 py-1 rounded-lg font-bold text-center text-xs transition-all focus:outline-none ${
+                    className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
                       isExceededParc2
                         ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
                         : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
                     }`}
                   />
                   {isExceededParc2 && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100/80 p-1.5 rounded-lg border border-red-200">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                      <span>Atenção: parcela excede 35% da renda (Máx: {formatCurrency(limiteRenda)})!</span>
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-red-700 bg-red-100/80 p-1 rounded border border-red-200">
+                      <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                      <span>Atenção: parcela excede 35% da renda!</span>
                     </div>
                   )}
                 </div>
 
-                {/* 2ª MENSAL (60D) */}
-                <div className={`p-2.5 rounded-xl border transition-all ${
+                {/* 2ª MENSAL (60 DIAS) */}
+                <div className={`p-2.5 rounded-lg border transition-all ${
                   isExceededParc3 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
                 }`}>
                   <div className="flex items-center justify-between mb-1">
-                    <label className={`block text-[10px] font-bold uppercase ${
+                    <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
                       isExceededParc3 ? 'text-red-900' : 'text-slate-500'
                     }`}>
-                      2ª Mensal (60d)
+                      2ª Mensal (60 Dias)
                     </label>
                   </div>
                   <input
+                    id="input-segunda-mensal-60d"
                     type="text"
-                    value={valParc3 > 0 ? formatCurrency(valParc3) : ''}
-                    onChange={(e) => setValParc3(parseCurrency(e.target.value))}
-                    onBlur={() => {
-                      if (valParc3 > 0 && valParc3 < 200) {
-                        setValParc3(200);
-                        if (onShowToast) onShowToast('O valor mínimo para parcelas mensais é R$ 200,00.');
+                    value={isEditingParc3 ? parc3InputText : (valParc3 > 0 ? formatCurrency(valParc3) : '')}
+                    onFocus={() => {
+                      setIsEditingParc3(true);
+                      setParc3InputText(valParc3 > 0 ? formatCurrency(valParc3) : '');
+                    }}
+                    onChange={(e) => {
+                      setParc3InputText(e.target.value);
+                      const parsed = parseFlexibleCurrency(e.target.value);
+                      if (parsed >= 0) {
+                        setValParc3(parsed);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      handleFinishParc3Edit(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleFinishParc3Edit(parc3InputText);
+                        (e.target as HTMLInputElement).blur();
                       }
                     }}
                     placeholder="R$ 0,00"
-                    className={`w-full px-2 py-1 rounded-lg font-bold text-center text-xs transition-all focus:outline-none ${
+                    className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
                       isExceededParc3
                         ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
                         : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
                     }`}
                   />
                   {isExceededParc3 && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100/80 p-1.5 rounded-lg border border-red-200">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                      <span>Atenção: parcela excede 35% da renda (Máx: {formatCurrency(limiteRenda)})!</span>
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-red-700 bg-red-100/80 p-1 rounded border border-red-200">
+                      <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                      <span>Atenção: parcela excede 35% da renda!</span>
                     </div>
                   )}
                 </div>
@@ -1213,9 +1462,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             </div>
           </div>
 
-          {/* QUADRO 2: PARCELAMENTO PRÓ-SOLUTO & BANCO DIRETO */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          {/* BLOCO 3: PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO */}
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
                   <Coins className="w-4 h-4" />
@@ -1226,14 +1475,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
             </div>
 
-            {/* LEGENDA DE AMORTIZAÇÃO REPOSICIONADA */}
-            <div className="flex justify-between items-center text-[10px] text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+            {/* FAIXA DE AMORTIZAÇÃO E JUROS */}
+            <div className="flex justify-between items-center text-[10px] text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/80">
               <span>Amortização: <strong className="text-slate-700 font-semibold">Tabela Price</strong></span>
               <span>Juros: <strong className="text-sky-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 text-xs">
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 text-center">
+            <div className="grid grid-cols-3 gap-2.5 text-xs">
+              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
                   Qtd. Mensais
                 </label>
@@ -1280,133 +1529,44 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                         alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
                       }
                     }}
-                    className="w-full bg-white px-2 py-1 rounded-lg border border-slate-200 font-bold text-sky-600 text-center focus:outline-none focus:border-sky-600 text-xs"
+                    className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-600 text-center focus:outline-none focus:border-sky-600 text-xs"
                   />
                   <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
                 </div>
               </div>
 
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 text-center">
+              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase">1ª Parcela</span>
-                <strong className="text-slate-900 font-bold text-sm block mt-1">
+                <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
                   {formatCurrency(parcela)}
                 </strong>
               </div>
 
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 text-center">
+              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase">Última Parcela</span>
-                <strong className="text-slate-900 font-bold text-sm block mt-1">
+                <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
                   {formatCurrency(parcela)}
                 </strong>
               </div>
             </div>
 
-            <div className="space-y-2 text-xs pt-1">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-2 px-1">
+            <div className="space-y-1.5 text-xs pt-0.5">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
                 <span className="text-slate-500 font-medium">
-                  Despesas Cartorárias & ITBI<span className="ml-1.5 text-[11px] text-slate-400 font-normal">(Total: {formatCurrency(valorTotalITBI)}):</span>
+                  Despesas Cartorárias & ITBI<span className="ml-1 text-[11px] text-slate-400 font-normal">(Total: {formatCurrency(valorTotalITBI)}):</span>
                 </span>
                 <strong className="text-slate-800 font-semibold">{formatCurrency(saldoITBI)}</strong>
               </div>
 
-              <div className="flex justify-between items-center border-b border-slate-100 pb-2 px-1">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
                 <span className="text-slate-500 font-medium">Pró-Soluto (Sinal Restante):</span>
                 <strong className="text-slate-900 font-bold">{formatCurrency(proSoluto)}</strong>
               </div>
 
-              <div className="flex justify-between items-center pt-2 text-sm bg-sky-50/80 p-3.5 rounded-xl border border-sky-100">
-                <span className="font-bold text-slate-900">Pró-Soluto Total c/ ITBI (Risco Máx):</span>
-                <strong className="font-extrabold text-sky-600 text-base">{formatCurrency(proSolutoTotalPainel)}</strong>
-              </div>
-
-            </div>
-          </div>
-
-          {/* CARD 4: INDICADORES DE RISCO DA OPERAÇÃO (GRÁFICOS DE PIZZA SÓLIDOS) */}
-          <div className="bg-white p-4 sm:p-4.5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
-            {/* Cabeçalho de Bases Compartilhadas */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2.5">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
-                  <PieChart className="w-4 h-4" />
-                </div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  4. Indicadores de Risco / Comprometimento
-                </h3>
-              </div>
-              <div className="flex items-center flex-wrap gap-2 text-[11px]">
-                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-0.5 rounded-lg border border-slate-200/80 text-slate-600">
-                  <span className="text-slate-400 font-medium">Base Líquida c/ ITBI:</span>
-                  <strong className="font-bold text-slate-800">{formatCurrency(baseVendaLiquidaComITBI)}</strong>
-                </div>
-                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-0.5 rounded-lg border border-slate-200/80 text-slate-600">
-                  <span className="text-slate-400 font-medium">Base da Renda:</span>
-                  <strong className="font-bold text-slate-800">{formatCurrency(baseRendaInformada)}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {/* COLUNA 1: RISCO PARCELA / COMPROMETIMENTO */}
-              <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 flex flex-col justify-between space-y-1.5">
-                <div className="border-b border-slate-200/60 pb-1.5">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-sky-600" />
-                    Risco Parcela / Comprometimento
-                  </h4>
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    1ª Parcela sobre a Base da Renda
-                  </p>
-                </div>
-
-                {/* Gráfico de Pizza Sólido sem sobreposição de textos */}
-                <div className="py-0.5 flex items-center justify-center overflow-visible">
-                  {renderSolidPie(pctRiscoParcelaRenda, '#0284c7', '#cbd5e1')}
-                </div>
-
-                {/* Resumo de Valor Inferior */}
-                <div className="w-full">
-                  <div className="flex flex-col items-center justify-center py-2 px-3 text-center bg-slate-50 border border-slate-100 rounded-xl shadow-2xs overflow-hidden w-full">
-                    <span className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 whitespace-nowrap">
-                      <span className="w-2 h-2 rounded-full bg-sky-600 shrink-0" />
-                      1ª Parcela
-                    </span>
-                    <strong className="text-sm font-semibold text-slate-800 mt-0.5 whitespace-nowrap truncate">
-                      {formatCurrency(valorRiscoParcela)}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* COLUNA 2: RISCO PRÓ-SOLUTO TOTAL */}
-              <div className="bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 flex flex-col justify-between space-y-1.5">
-                <div className="border-b border-slate-200/60 pb-1.5">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-indigo-600" />
-                    Risco Pró-Soluto Total
-                  </h4>
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    Pró-Soluto Total c/ ITBI sobre a Base Líquida com ITBI
-                  </p>
-                </div>
-
-                {/* Gráfico de Pizza Sólido sem sobreposição de textos */}
-                <div className="py-0.5 flex items-center justify-center overflow-visible">
-                  {renderSolidPie(pctRiscoProSoluto, '#4f46e5', '#cbd5e1')}
-                </div>
-
-                {/* Resumo de Valor Inferior */}
-                <div className="w-full">
-                  <div className="flex flex-col items-center justify-center py-2 px-3 text-center bg-slate-50 border border-slate-100 rounded-xl shadow-2xs overflow-hidden w-full">
-                    <span className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 whitespace-nowrap">
-                      <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
-                      Pró-Soluto Total
-                    </span>
-                    <strong className="text-sm font-semibold text-slate-800 mt-0.5 whitespace-nowrap truncate">
-                      {formatCurrency(valorRiscoProSoluto)}
-                    </strong>
-                  </div>
-                </div>
+              {/* TARJA PRÓ-SOLUTO TOTAL C/ ITBI */}
+              <div className="flex justify-between items-center bg-sky-50 px-3 py-2 rounded-lg border border-sky-200 mt-1">
+                <span className="text-xs font-semibold text-slate-700">Pró-Soluto Total c/ ITBI:</span>
+                <strong className="text-sm sm:text-base font-bold text-sky-700">{formatCurrency(proSolutoTotalPainel)}</strong>
               </div>
             </div>
           </div>
@@ -1415,6 +1575,57 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
       </div>
 
+      {/* RODAPÉ: AVISO LEGAL FULL-WIDTH (ABAIXO DO GRID DE 2 COLUNAS) */}
+      <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed text-justify shadow-sm">
+        <strong>Informações importantes:</strong> Estas informações referem-se apenas a uma simulação comercial e análise preliminar de crédito. As condições finais da operação e a efetivação dos resultados dependem de análise e aprovação formal junto ao agente financeiro e à construtora.
+      </div>
+
+      {/* MODAL DE EXPORTAÇÃO PDF */}
+      {currentProd && currentCond && (
+        <PdfExportModal
+          isOpen={isPdfModalOpen}
+          onClose={() => setIsPdfModalOpen(false)}
+          product={currentProd}
+          condition={currentCond}
+          simulationData={simulationData}
+          selectedTorre={selectedTorre}
+          selectedUnidade={selectedUnidade}
+          fase={fase}
+          tipologia={tipologia}
+          areaPriv={areaPriv}
+          areaQuintal={areaQuintal}
+          price={price}
+          evaluation={evaluation}
+          deliveryText={deliveryText}
+          income={income}
+          subsidyEfetivo={subsidyEfetivo}
+          fgtsEfetivo={fgtsEfetivo}
+          descontoAto={descontoAto}
+          maxFinancEfetivo={maxFinancEfetivo}
+          totalNegocEfetivo={totalNegocEfetivo}
+          sinalTotal={sinalTotal}
+          despCartoriasEfetivas={despCartoriasEfetivas}
+          atoAposMensais={atoAposMensais}
+          atoITBIValidado={atoITBIValidado}
+          valParc2={valParc2}
+          valParc3={valParc3}
+          qtdMensais={qtdMensais}
+          appliedRatePct={appliedRatePct}
+          parcela={parcela}
+          valorTotalITBI={valorTotalITBI}
+          saldoITBI={saldoITBI}
+          proSoluto={proSoluto}
+          proSolutoTotalPainel={proSolutoTotalPainel}
+          baseVendaLiquidaComITBI={baseVendaLiquidaComITBI}
+          baseRendaInformada={baseRendaInformada}
+          pctRiscoParcelaRenda={pctRiscoParcelaRenda}
+          valorRiscoParcela={valorRiscoParcela}
+          pctRiscoProSoluto={pctRiscoProSoluto}
+          valorRiscoProSoluto={valorRiscoProSoluto}
+        />
+      )}
+
     </div>
   );
 };
+

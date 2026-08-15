@@ -109,3 +109,20 @@ export function formatDeliveryText(p1?: string, p2?: string, legacyDate?: string
   }
   return '';
 }
+
+export function formatDateBr(dateStr?: string): string {
+  if (!dateStr) {
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  if (dateStr.includes('/')) return dateStr;
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+  }
+  return dateStr;
+}
+

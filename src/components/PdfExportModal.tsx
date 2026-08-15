@@ -1,0 +1,736 @@
+import React, { useState } from 'react';
+import { X, Calendar, FileText, Download, Loader2, AlertCircle } from 'lucide-react';
+import { CommercialCondition, Product, SimulationData } from '../types';
+import { formatCurrency, formatDateBr } from '../utils/formatters';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
+
+interface PdfExportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  product: Product;
+  condition: CommercialCondition;
+  simulationData: SimulationData;
+  selectedTorre: string;
+  selectedUnidade: string;
+  fase: string;
+  tipologia: string;
+  areaPriv: string;
+  areaQuintal: string;
+  price: number;
+  evaluation: number;
+  deliveryText: string;
+  income: number;
+  subsidyEfetivo: number;
+  fgtsEfetivo: number;
+  descontoAto: number;
+  maxFinancEfetivo: number;
+  totalNegocEfetivo: number;
+  sinalTotal: number;
+  despCartoriasEfetivas: number;
+  atoAposMensais: number;
+  atoITBIValidado: number;
+  valParc2: number;
+  valParc3: number;
+  qtdMensais: number;
+  appliedRatePct: number;
+  parcela: number;
+  valorTotalITBI: number;
+  saldoITBI: number;
+  proSoluto: number;
+  proSolutoTotalPainel: number;
+  baseVendaLiquidaComITBI: number;
+  baseRendaInformada: number;
+  pctRiscoParcelaRenda: number;
+  valorRiscoParcela: number;
+  pctRiscoProSoluto: number;
+  valorRiscoProSoluto: number;
+}
+
+export const PdfExportModal: React.FC<PdfExportModalProps> = ({
+  isOpen,
+  onClose,
+  product,
+  condition,
+  simulationData,
+  selectedTorre,
+  selectedUnidade,
+  fase,
+  tipologia,
+  areaPriv,
+  areaQuintal,
+  price,
+  evaluation,
+  deliveryText,
+  income,
+  subsidyEfetivo,
+  fgtsEfetivo,
+  descontoAto,
+  maxFinancEfetivo,
+  totalNegocEfetivo,
+  sinalTotal,
+  despCartoriasEfetivas,
+  atoAposMensais,
+  atoITBIValidado,
+  valParc2,
+  valParc3,
+  qtdMensais,
+  appliedRatePct,
+  parcela,
+  valorTotalITBI,
+  saldoITBI,
+  proSoluto,
+  proSolutoTotalPainel,
+  baseVendaLiquidaComITBI,
+  baseRendaInformada,
+  pctRiscoParcelaRenda,
+  valorRiscoParcela,
+  pctRiscoProSoluto,
+  valorRiscoProSoluto,
+}) => {
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  // Sanitizador de nome de arquivo para download
+  const sanitizeFileName = (str: string) => {
+    return (str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replace(/_+/g, '_');
+  };
+
+  const getFileName = () => {
+    const prodName = sanitizeFileName(product?.name || 'Empreendimento');
+    const unitStr = selectedUnidade ? `_Unid_${sanitizeFileName(selectedUnidade)}` : '';
+    const clientStr = simulationData.clientName ? `_${sanitizeFileName(simulationData.clientName)}` : '';
+    return `Ficha_Analise_${prodName}${unitStr}${clientStr}.pdf`;
+  };
+
+  // Download direto do PDF com html2canvas-pro (compatível com cores oklch do Tailwind v4) e jsPDF
+  const handleDownloadPdf = async () => {
+    const element = document.getElementById('pdf-content-area');
+    if (!element) {
+      alert('Erro: Conteúdo da Ficha de Análise não encontrado.');
+      return;
+    }
+
+    setIsExporting(true);
+    setErrorMessage(null);
+
+    try {
+      const filename = getFileName();
+
+      // Renderiza com escala nítida e suporte nativo a oklch / CSS Level 4
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: 1200,
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 8;
+      const contentWidth = pageWidth - margin * 2;
+      const contentHeight = (canvas.height * contentWidth) / canvas.width;
+
+      if (contentHeight <= pageHeight - margin * 2) {
+        pdf.addImage(imgData, 'JPEG', margin, margin, contentWidth, contentHeight);
+      } else {
+        // Redimensiona proporcionalmente para manter todo o conteúdo em uma única folha A4
+        const maxContentHeight = pageHeight - margin * 2;
+        const scaleFactor = maxContentHeight / contentHeight;
+        const finalWidth = contentWidth * scaleFactor;
+        const finalHeight = contentHeight * scaleFactor;
+        const offsetX = (pageWidth - finalWidth) / 2;
+        pdf.addImage(imgData, 'JPEG', offsetX, margin, finalWidth, finalHeight);
+      }
+
+      pdf.save(filename);
+    } catch (err: any) {
+      console.error('Erro ao gerar PDF:', err);
+      setErrorMessage('Ocorreu um problema ao gerar o download direto. Tentando abrir caixa de impressão...');
+      setTimeout(() => {
+        window.print();
+      }, 300);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Renderizador de Gráfico de Pizza SVG 100% estático, nítido e com alta legibilidade para impressão
+  const renderPrintPie = (
+    pct: number,
+    colorPrimary: string,
+    colorSecondary: string = '#cbd5e1',
+    primaryTextColor: string = '#ffffff',
+    secondaryTextColor: string = '#1e293b'
+  ) => {
+    const cx = 50;
+    const cy = 50;
+    const r = 40; // Raio proporcional com centro (50,50) e viewBox="-10 -10 120 120" com folga perimetral anti-clipping
+    const clampedPct = Math.min(100, Math.max(0, pct));
+    const restPct = Math.max(0, 100 - clampedPct);
+
+    // Posição radial do texto da fatia
+    const calcCentroidRadius = (sliceAngleDeg: number) => {
+      const theta = (sliceAngleDeg * Math.PI) / 180;
+      if (theta <= 0.001) return r * 0.58;
+      const factor = (2 / 3) * (Math.sin(theta / 2) / (theta / 2));
+      return r * Math.min(0.64, Math.max(0.48, factor));
+    };
+
+    if (clampedPct >= 100) {
+      return (
+        <svg
+          width="80"
+          height="80"
+          viewBox="-10 -10 120 120"
+          style={{ width: '80px', height: '80px', display: 'block', margin: '0 auto', overflow: 'visible' }}
+        >
+          <circle cx={cx} cy={cy} r={r} fill={colorPrimary} />
+          <text
+            x={cx}
+            y={cy}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={primaryTextColor}
+            fontSize="10"
+            fontWeight="500"
+          >
+            100.0%
+          </text>
+        </svg>
+      );
+    }
+
+    if (clampedPct <= 0) {
+      return (
+        <svg
+          width="80"
+          height="80"
+          viewBox="-10 -10 120 120"
+          style={{ width: '80px', height: '80px', display: 'block', margin: '0 auto', overflow: 'visible' }}
+        >
+          <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
+          <text
+            x={cx}
+            y={cy}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={secondaryTextColor}
+            fontSize="10"
+            fontWeight="500"
+          >
+            0.0%
+          </text>
+        </svg>
+      );
+    }
+
+    const angle = (clampedPct / 100) * 360;
+    const rad = (angle - 90) * (Math.PI / 180);
+    const x = cx + r * Math.cos(rad);
+    const y = cy + r * Math.sin(rad);
+    const largeArcFlag = clampedPct > 50 ? 1 : 0;
+    const pathD = `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${largeArcFlag} 1 ${x} ${y} Z`;
+
+    const midAngle1 = angle / 2;
+    const rLabel1 = calcCentroidRadius(angle);
+    const rad1 = (midAngle1 - 90) * (Math.PI / 180);
+    const textX1 = cx + rLabel1 * Math.cos(rad1);
+    const textY1 = cy + rLabel1 * Math.sin(rad1);
+
+    const restAngle = 360 - angle;
+    const midAngle2 = angle + restAngle / 2;
+    const rLabel2 = calcCentroidRadius(restAngle);
+    const rad2 = (midAngle2 - 90) * (Math.PI / 180);
+    const textX2 = cx + rLabel2 * Math.cos(rad2);
+    const textY2 = cy + rLabel2 * Math.sin(rad2);
+
+    return (
+      <svg
+        width="80"
+        height="80"
+        viewBox="-10 -10 120 120"
+        style={{ width: '80px', height: '80px', display: 'block', margin: '0 auto', overflow: 'visible' }}
+      >
+        {/* CÍRCULO BASE COMPLETO */}
+        <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
+        {/* FATIA PRIMÁRIA */}
+        <path d={pathD} fill={colorPrimary} />
+        {/* LINHAS DIVISÓRIAS */}
+        <line x1={cx} y1={cy} x2={cx} y2={cy - r} stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
+        <line x1={cx} y1={cy} x2={x} y2={y} stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
+        
+        {/* PERCENTUAL FATIA PRIMÁRIA */}
+        {clampedPct >= 6 && (
+          <text
+            x={textX1}
+            y={textY1}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={primaryTextColor}
+            fontSize={clampedPct < 14 ? '9' : '10'}
+            fontWeight="500"
+          >
+            {clampedPct.toFixed(1)}%
+          </text>
+        )}
+        
+        {/* PERCENTUAL FATIA RESTANTE */}
+        {restPct >= 6 && (
+          <text
+            x={textX2}
+            y={textY2}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={secondaryTextColor}
+            fontSize={restPct < 14 ? '9' : '10'}
+            fontWeight="500"
+          >
+            {restPct.toFixed(1)}%
+          </text>
+        )}
+      </svg>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+      {/* DIALOG CONTAINER */}
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[96vh] flex flex-col overflow-hidden animate-fade-in">
+        
+        {/* BARRA SUPERIOR DO MODAL (NÃO IMPRESSA) */}
+        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between no-print shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-sky-100 text-sky-700">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Visualização de Impressão & Exportação PDF</h2>
+              <p className="text-[11px] text-slate-500 font-medium">Layout ajustado e otimizado para formato A4</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* BOTÃO: BAIXAR ARQUIVO PDF */}
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isExporting}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-200/80 disabled:opacity-60"
+              title="Baixar arquivo .pdf diretamente no dispositivo"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                  <span>Gerando PDF...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Baixar PDF</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
+              title="Fechar"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* ALERTA DE ERRO SE HOUVER */}
+        {errorMessage && (
+          <div className="mx-4 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2 no-print">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* CORPO DO DOCUMENTO IMPRESSO */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100/60">
+          <div
+            id="pdf-content-area"
+            className="printable-document bg-white mx-auto border border-slate-200 shadow-md rounded-xl p-5 sm:p-7 space-y-4 max-w-[210mm] text-slate-900 text-xs"
+          >
+            
+            {/* 1. CABEÇALHO PRINCIPAL */}
+            <div className="flex items-start justify-between border-b border-slate-200 pb-3 gap-4">
+              <div className="space-y-1">
+                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                  Simulação Comercial & Ficha de Análise de Crédito
+                </h1>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
+                  <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
+                  <span>•</span>
+                  <span>Condição: <strong className="text-slate-900 font-bold">{condition.name}</strong></span>
+                  {deliveryText && (
+                    <>
+                      <span>•</span>
+                      <span className="text-amber-700 font-bold">Chaves: {deliveryText}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* DATA DA SIMULAÇÃO À DIREITA */}
+              <div className="bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap shadow-2xs shrink-0 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span>Data da Simulação: {formatDateBr()}</span>
+              </div>
+            </div>
+
+            {/* BARRA DE CLIENTE E IMOBILIÁRIA */}
+            <div className="bg-slate-50/90 px-3.5 py-2 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between text-xs gap-2">
+              <div className="flex items-center justify-between w-full flex-wrap gap-2">
+                <span className="text-slate-600 font-medium">
+                  Cliente: <strong className="text-slate-900 font-bold">{simulationData.clientName || 'Cliente Não Informado'}</strong>
+                </span>
+                <span className="text-slate-600 font-medium">
+                  Imobiliária: <strong className="text-slate-900 font-bold">{simulationData.agency?.trim() || 'Imobiliária Não Informada'}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* 2. RESUMO DA UNIDADE */}
+            <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 overflow-hidden w-full">
+              
+              {/* LINHA 1 (col-span-2 / col-span-2 / col-span-2 / col-span-6) */}
+              <div className="grid grid-cols-12 gap-2 text-xs w-full">
+                {/* TORRE (col-span-2) */}
+                <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-sky-700 font-bold uppercase mb-0.5 whitespace-nowrap">
+                    Torre
+                  </span>
+                  <strong className="text-slate-900 font-bold text-xs whitespace-nowrap truncate w-full">
+                    {selectedTorre || '-'}
+                  </strong>
+                </div>
+
+                {/* UNIDADE (col-span-2) */}
+                <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-sky-700 font-bold uppercase mb-0.5 whitespace-nowrap">
+                    Unidade
+                  </span>
+                  <strong className="text-slate-900 font-bold text-xs whitespace-nowrap truncate w-full">
+                    {selectedUnidade || '-'}
+                  </strong>
+                </div>
+
+                {/* FASE (col-span-2) */}
+                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
+                    Fase
+                  </span>
+                  <strong className="text-slate-700 font-bold text-xs whitespace-nowrap truncate w-full">
+                    {fase || '-'}
+                  </strong>
+                </div>
+
+                {/* TIPOLOGIA (col-span-6) */}
+                <div className="col-span-6 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
+                    Tipologia
+                  </span>
+                  <strong className="text-slate-700 font-bold text-xs whitespace-nowrap truncate w-full" title={tipologia}>
+                    {tipologia || '-'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* LINHA 2 (col-span-2 / col-span-2 / col-span-4 / col-span-4) */}
+              <div className="grid grid-cols-12 gap-2 text-xs w-full">
+                {/* ÁREA PRIVATIVA (col-span-2) */}
+                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
+                    Área Privativa
+                  </span>
+                  <strong className="text-slate-700 font-bold text-xs whitespace-nowrap truncate w-full">
+                    {areaPriv}
+                  </strong>
+                </div>
+
+                {/* QUINTAL (col-span-2) */}
+                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
+                    Quintal
+                  </span>
+                  <strong className="text-slate-700 font-bold text-xs whitespace-nowrap truncate w-full">
+                    {areaQuintal}
+                  </strong>
+                </div>
+
+                {/* PREÇO DE TABELA (col-span-4) */}
+                <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
+                    Preço de Tabela
+                  </span>
+                  <strong className="text-slate-900 font-bold text-xs whitespace-nowrap truncate w-full">
+                    {formatCurrency(price)}
+                  </strong>
+                </div>
+
+                {/* AVALIAÇÃO BANCÁRIA (col-span-4) */}
+                <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
+                    Avaliação Bancária
+                  </span>
+                  <strong className="text-emerald-600 font-bold text-xs whitespace-nowrap truncate w-full">
+                    {formatCurrency(evaluation)}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* GRID PRINCIPAL: 2 COLUNAS DE BLOCOS */}
+            <div className="grid grid-cols-2 gap-3.5 items-stretch">
+              
+              {/* COLUNA ESQUERDA: BLOCO 1 & BLOCO 4 */}
+              <div className="flex flex-col justify-between space-y-3">
+                
+                {/* 1. DADOS DA APROVAÇÃO DE CRÉDITO */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                    1. Dados da Aprovação de Crédito
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 space-y-1">
+                      <span className="text-[9px] font-bold uppercase text-slate-400 block border-b border-slate-200/60 pb-0.5 mb-1 whitespace-nowrap">
+                        Recursos Cliente
+                      </span>
+                      <div className="flex justify-between items-center py-0.5 border-b border-slate-200/40">
+                        <span className="text-slate-600">Renda:</span>
+                        <strong className="text-slate-800 font-semibold">{formatCurrency(income)}</strong>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5 border-b border-slate-200/40">
+                        <span className="text-slate-600">Subsídio:</span>
+                        <strong className="text-emerald-600 font-semibold">{formatCurrency(subsidyEfetivo)}</strong>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5 border-b border-slate-200/40">
+                        <span className="text-slate-600">FGTS:</span>
+                        <strong className="text-sky-600 font-semibold">{formatCurrency(fgtsEfetivo)}</strong>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-slate-600">Desc. Ato:</span>
+                        <strong className="text-emerald-600 font-semibold">{formatCurrency(descontoAto)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 space-y-1">
+                      <span className="text-[9px] font-bold uppercase text-slate-400 block border-b border-slate-200/60 pb-0.5 mb-1 whitespace-nowrap">
+                        Operação Bancária
+                      </span>
+                      <div className="flex justify-between items-center py-0.5 border-b border-slate-200/40">
+                        <span className="text-slate-600">Max Financ:</span>
+                        <strong className="text-sky-600 font-bold">{formatCurrency(maxFinancEfetivo)}</strong>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5 border-b border-slate-200/40">
+                        <span className="text-slate-600">Total Negoc:</span>
+                        <strong className="text-slate-800 font-semibold">{formatCurrency(totalNegocEfetivo)}</strong>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5 border-b border-slate-200/40">
+                        <span className="text-slate-600">Sinal Total:</span>
+                        <strong className="text-amber-600 font-bold">{formatCurrency(sinalTotal)}</strong>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-slate-600">Sinal + ITBI:</span>
+                        <strong className="text-emerald-600 font-bold">{formatCurrency(sinalTotal + despCartoriasEfetivas)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. INDICADORES DE RISCO / COMPROMETIMENTO */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 flex-1 flex flex-col justify-between overflow-visible">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                    4. Indicadores de Risco / Comprometimento
+                  </h3>
+
+                  <div className="flex justify-between gap-2.5 items-stretch w-full text-[11px] flex-1 overflow-visible">
+                    {/* RISCO PARCELA / RENDA */}
+                    <div
+                      className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/70 text-center flex flex-col items-center justify-between overflow-visible"
+                      style={{ width: '48.5%' }}
+                    >
+                      <span className="block text-[10px] font-bold text-slate-700 uppercase tracking-tight mb-1.5 text-center w-full">
+                        Risco Parcela / Renda
+                      </span>
+                      <div style={{ width: '80px', height: '80px', margin: '0 auto', overflow: 'visible' }}>
+                        {renderPrintPie(pctRiscoParcelaRenda, '#0284c7', '#cbd5e1', '#ffffff', '#1e293b')}
+                      </div>
+                      <div className="mt-2 pt-1.5 border-t border-slate-200/70 w-full text-center">
+                        <span className="text-[9px] text-slate-500 font-medium block">1ª Parcela</span>
+                        <span className="text-xs font-medium text-slate-800 block">{formatCurrency(valorRiscoParcela)}</span>
+                      </div>
+                    </div>
+
+                    {/* RISCO PRÓ-SOLUTO TOTAL */}
+                    <div
+                      className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/70 text-center flex flex-col items-center justify-between overflow-visible"
+                      style={{ width: '48.5%' }}
+                    >
+                      <span className="block text-[10px] font-bold text-slate-700 uppercase tracking-tight mb-1.5 text-center w-full">
+                        Risco Pró-Soluto Total
+                      </span>
+                      <div style={{ width: '80px', height: '80px', margin: '0 auto', overflow: 'visible' }}>
+                        {renderPrintPie(pctRiscoProSoluto, '#4f46e5', '#cbd5e1', '#ffffff', '#1e293b')}
+                      </div>
+                      <div className="mt-2 pt-1.5 border-t border-slate-200/70 w-full text-center">
+                        <span className="text-[9px] text-slate-500 font-medium block">Pró-Soluto Total</span>
+                        <span className="text-xs font-medium text-slate-800 block">{formatCurrency(valorRiscoProSoluto)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* COLUNA DIREITA: BLOCO 2 & BLOCO 3 */}
+              <div className="flex flex-col justify-between space-y-3">
+                
+                {/* 2. FLUXO DE ENTRADA C/ CONSTRUTORA */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                    2. FLUXO DE ENTRADA C/ CONSTRUTORA
+                  </h3>
+
+                  {/* LINHA SUPERIOR COM 3 COLUNAS IGUAIS (ATO IMÓVEL, ITBI NO ATO, ATO PREMIADO) */}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 text-center flex flex-col justify-between">
+                      <span className="block text-[9px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">
+                        Ato (Imóvel)
+                      </span>
+                      <strong className="text-slate-800 font-bold text-xs whitespace-nowrap">
+                        {formatCurrency(atoAposMensais)}
+                      </strong>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 text-center flex flex-col justify-between">
+                      <span className="block text-[9px] font-bold text-sky-800 uppercase mb-1 whitespace-nowrap">
+                        ITBI no Ato
+                      </span>
+                      <strong className="text-sky-900 font-bold text-xs whitespace-nowrap">
+                        {formatCurrency(atoITBIValidado)}
+                      </strong>
+                    </div>
+
+                    <div className="bg-amber-50/60 p-2 rounded-lg border border-amber-200 text-center flex flex-col justify-between">
+                      <span className="block text-[9px] font-bold text-amber-800 uppercase mb-1 whitespace-nowrap">
+                        Ato Premiado
+                      </span>
+                      <strong className="text-amber-800 font-extrabold text-xs whitespace-nowrap">
+                        {formatCurrency(descontoAto)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* LINHA INFERIOR COM 2 COLUNAS IGUAIS (50% CADA): 1ª MENSAL (30 DIAS) E 2ª MENSAL (60 DIAS) */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 text-center">
+                      <span className="block text-[9px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">
+                        1ª Mensal (30 Dias)
+                      </span>
+                      <strong className="text-slate-800 font-bold text-xs whitespace-nowrap">
+                        {formatCurrency(valParc2)}
+                      </strong>
+                    </div>
+
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 text-center">
+                      <span className="block text-[9px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">
+                        2ª Mensal (60 Dias)
+                      </span>
+                      <strong className="text-slate-800 font-bold text-xs whitespace-nowrap">
+                        {formatCurrency(valParc3)}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 flex-1 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                      3. Parcelamento Pró-Soluto / Banco Direto
+                    </h3>
+
+                    <div className="flex justify-between items-center text-[10px] text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 mt-2">
+                      <span>Amortização: <strong className="text-slate-700 font-semibold">Tabela Price</strong></span>
+                      <span>Juros: <strong className="text-sky-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-xs mt-2">
+                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 text-center">
+                        <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Qtd. Mensais</span>
+                        <strong className="text-sky-600 font-extrabold text-xs">{qtdMensais}x</strong>
+                      </div>
+
+                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 text-center">
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">1ª Parcela</span>
+                        <strong className="text-slate-900 font-bold text-xs">{formatCurrency(parcela)}</strong>
+                      </div>
+
+                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 text-center">
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5">Última Parcela</span>
+                        <strong className="text-slate-900 font-bold text-xs">{formatCurrency(parcela)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs pt-2">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-1 px-1 text-[11px]">
+                        <span className="text-slate-500">Despesas Cartorárias & ITBI (Total {formatCurrency(valorTotalITBI)}):</span>
+                        <strong className="text-slate-800 font-semibold">{formatCurrency(saldoITBI)}</strong>
+                      </div>
+
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-1 px-1 text-[11px]">
+                        <span className="text-slate-500">Pró-Soluto (Sinal Restante):</span>
+                        <strong className="text-slate-900 font-bold">{formatCurrency(proSoluto)}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* TARJA "PRÓ-SOLUTO TOTAL C/ ITBI" */}
+                  <div className="flex justify-between items-center bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200 mt-2">
+                    <span className="text-xs font-semibold text-slate-700">Pró-Soluto Total c/ ITBI:</span>
+                    <strong className="text-sm font-bold text-sky-700">{formatCurrency(proSolutoTotalPainel)}</strong>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* RODAPÉ / AVISO LEGAL */}
+            <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200 text-[9.5px] text-amber-900 leading-relaxed text-justify mt-2">
+              <strong>Informações importantes:</strong> Estas informações referem-se apenas a uma simulação comercial e análise preliminar de crédito. As condições finais da operação e a efetivação dos resultados dependem de análise e aprovação formal junto ao agente financeiro e à construtora.
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+};

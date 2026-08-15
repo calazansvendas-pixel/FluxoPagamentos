@@ -14,9 +14,9 @@ import {
   Sparkles, 
   CheckCircle2 
 } from 'lucide-react';
-import { CommercialCondition, Product, SelectedUnit } from '../types';
+import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
-import { calculatePresentValue, ensureProductConditions } from '../utils/calculations';
+import { calculatePresentValue, ensureProductConditions, calculatePolicyRiskValues } from '../utils/calculations';
 
 interface PoliciesViewProps {
   products: Product[];
@@ -27,6 +27,8 @@ interface PoliciesViewProps {
   onOpenNewProductModal: () => void;
   onShowToast: (message: string) => void;
   clientIncome: number;
+  isFirstHome?: boolean;
+  simulationData?: SimulationData;
   selectedUnits?: Record<string, SelectedUnit>;
 }
 
@@ -53,6 +55,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   onOpenNewProductModal,
   onShowToast,
   clientIncome,
+  isFirstHome = true,
+  simulationData,
   selectedUnits
 }) => {
   const activeProd = products.find(p => p.id === activeProductId) || products[0];
@@ -340,24 +344,52 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const vpVal = rendaVal > 0 ? calculatePresentValue(appliedRatePct, numParcelas, rendaVal) : 0;
 
   let propertyPrice = 0;
+  let propertyEvaluation = 0;
   let propertyITBI = 0;
   const selUnit = selectedUnits?.[activeProductId];
 
   if (selUnit && selUnit.torre && selUnit.unidade && prodWithConds?.tableInfo?.rows) {
     const matchingRow = prodWithConds.tableInfo.rows.find(
-      r => String(r[1]).trim() === selUnit.torre.trim() && String(r[2]).trim() === selUnit.unidade.trim()
+      r => String(r[1] || '').trim().toLowerCase() === selUnit.torre.trim().toLowerCase() &&
+           String(r[2] || '').trim().toLowerCase() === selUnit.unidade.trim().toLowerCase()
     );
     if (matchingRow) {
+      if (matchingRow[6] !== undefined) propertyEvaluation = parseCurrency(matchingRow[6]);
       if (matchingRow[7] !== undefined) propertyPrice = parseCurrency(matchingRow[7]);
-      if (matchingRow[8] !== undefined) propertyITBI = parseCurrency(matchingRow[8]);
+      const itbi1 = matchingRow[8] !== undefined ? parseCurrency(matchingRow[8]) : 0;
+      const itbi2 = matchingRow[9] !== undefined ? parseCurrency(matchingRow[9]) : 0;
+      propertyITBI = (isFirstHome ?? true) ? (itbi1 || itbi2) : (itbi2 || itbi1);
     }
   }
 
-  const totalBaseImovel = propertyPrice + propertyITBI;
-  const riscoImovelVal = totalBaseImovel > 0 ? totalBaseImovel * (riscoImovelPct / 100) : 0;
-  const minRiskVal = (vpVal > 0 && riscoImovelVal > 0) ? Math.min(vpVal, riscoImovelVal) : 0;
-
   const activeCondObj = prodWithConds?.conditions.find(c => c.id === activeConditionId);
+  const currentCondition = activeCondObj || prodWithConds?.conditions[0];
+
+  let valorAtoPremiado = 0;
+  if (currentCondition && prodWithConds && (propertyPrice > 0 || propertyEvaluation > 0)) {
+    const riskCalc = calculatePolicyRiskValues(
+      prodWithConds,
+      currentCondition,
+      clientIncome,
+      numParcelas,
+      propertyPrice,
+      propertyITBI,
+      propertyEvaluation,
+      undefined,
+      simulationData?.financing || Infinity,
+      simulationData?.subsidy || 0,
+      simulationData?.fgts || 0,
+      simulationData?.finPercent || 0.80
+    );
+    valorAtoPremiado = riskCalc.atoPremiado || 0;
+  }
+
+  const baseMaiorVendaAvaliacao = Math.max(propertyPrice, propertyEvaluation);
+  const totalBaseRiscoImovel = baseMaiorVendaAvaliacao > 0 
+    ? Math.max(0, (baseMaiorVendaAvaliacao + propertyITBI) - valorAtoPremiado) 
+    : 0;
+  const riscoImovelVal = totalBaseRiscoImovel > 0 ? totalBaseRiscoImovel * (riscoImovelPct / 100) : 0;
+  const minRiskVal = (vpVal > 0 && riscoImovelVal > 0) ? Math.min(vpVal, riscoImovelVal) : 0;
 
   const quickConditionSuggestions = [
     'Sinal em 36X c/ Direto',
@@ -613,7 +645,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </div>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1 truncate" title="Valor do Risco (Preço Venda + ITBI) * %">
+                  <label className="block font-semibold text-slate-700 mb-1 truncate" title="Valor do Risco (Maior valor Venda/Avaliação + ITBI - Ato Premiado) * %">
                     Val. Risco Imóvel
                   </label>
                   <input
@@ -753,7 +785,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                       8. Val. Risco Imóvel
                     </span>
                     <span className="text-[10px] text-slate-500 font-medium block truncate">
-                      =(Preço Venda + ITBI) * % Risco
+                      =(Maior valor Venda/Avaliação + ITBI - Ato Premiado) * % Risco
                     </span>
                   </div>
                 </div>
