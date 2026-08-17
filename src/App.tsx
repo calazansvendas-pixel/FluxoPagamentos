@@ -8,6 +8,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
 import { SimulatorView } from './components/SimulatorView';
 import { DetailsView } from './components/DetailsView';
+import { FichaMorar } from './components/FichaMorar';
 import { PoliciesView } from './components/PoliciesView';
 import { ImportTableView } from './components/ImportTableView';
 import { NewProductModal } from './components/NewProductModal';
@@ -127,6 +128,12 @@ export default function App() {
     }
   };
 
+  // Helper function to check if condition is of "Morar" type or "Banco Direto" type
+  const isMorarCondition = (condName: string): boolean => {
+    const lower = condName.toLowerCase();
+    return lower.includes('morar') || lower.includes('incc') || lower.includes('obra') || lower.includes('ipca');
+  };
+
   const handleSelectCondition = (productId: string, conditionId: string) => {
     setSelectedConditions(prev => ({ ...prev, [productId]: conditionId }));
   };
@@ -137,7 +144,71 @@ export default function App() {
 
     setActiveAnalysisProduct(prodWithConds);
     setActiveAnalysisCondition(cond);
-    setActiveTab('details');
+
+    // Roteamento inteligente baseado na condição selecionada
+    if (cond && isMorarCondition(cond.name)) {
+      setActiveTab('ficha-morar');
+    } else {
+      setActiveTab('details');
+    }
+    window.scrollTo(0, 0);
+  };
+
+  // Handler para troca de condição comercial com redirecionamento/roteamento inteligente
+  const handleSelectConditionWithRouting = (cond: CommercialCondition) => {
+    setActiveAnalysisCondition(cond);
+    if (isMorarCondition(cond.name)) {
+      if (activeTab !== 'ficha-morar') {
+        setActiveTab('ficha-morar');
+        window.scrollTo(0, 0);
+      }
+    } else {
+      if (activeTab !== 'details') {
+        setActiveTab('details');
+        window.scrollTo(0, 0);
+      }
+    }
+  };
+
+  // Ao alternar abas pelo menu lateral, sincroniza a condição ativa para corresponder ao tipo da ficha (se houver incompatibilidade)
+  const handleSidebarTabSelect = (tab: ActiveTab) => {
+    if (tab === 'details') {
+      // Se não temos produto ativo, inicializa com o primeiro
+      if (!activeAnalysisProduct && products.length > 0) {
+        const prodWithConds = ensureProductConditions({ ...products[0] });
+        setActiveAnalysisProduct(prodWithConds);
+        const nonMorarCond = prodWithConds.conditions.find(c => !isMorarCondition(c.name)) || prodWithConds.conditions[0];
+        setActiveAnalysisCondition(nonMorarCond);
+      } else if (activeAnalysisProduct) {
+        const prodWithConds = ensureProductConditions({ ...activeAnalysisProduct });
+        // Se a condição atual for Morar, ajusta para uma condição Banco Direto se disponível
+        if (activeAnalysisCondition && isMorarCondition(activeAnalysisCondition.name)) {
+          const nonMorarCond = prodWithConds.conditions.find(c => !isMorarCondition(c.name));
+          if (nonMorarCond) {
+            setActiveAnalysisCondition(nonMorarCond);
+          }
+        }
+      }
+    } else if (tab === 'ficha-morar') {
+      // Se não temos produto ativo, inicializa com o primeiro
+      if (!activeAnalysisProduct && products.length > 0) {
+        const prodWithConds = ensureProductConditions({ ...products[0] });
+        setActiveAnalysisProduct(prodWithConds);
+        const morarCond = prodWithConds.conditions.find(c => isMorarCondition(c.name)) || prodWithConds.conditions[0];
+        setActiveAnalysisCondition(morarCond);
+      } else if (activeAnalysisProduct) {
+        const prodWithConds = ensureProductConditions({ ...activeAnalysisProduct });
+        // Se a condição atual for Banco Direto, ajusta para uma condição Morar se disponível
+        if (activeAnalysisCondition && !isMorarCondition(activeAnalysisCondition.name)) {
+          const morarCond = prodWithConds.conditions.find(c => isMorarCondition(c.name));
+          if (morarCond) {
+            setActiveAnalysisCondition(morarCond);
+          }
+        }
+      }
+    }
+
+    setActiveTab(tab);
     window.scrollTo(0, 0);
   };
 
@@ -241,10 +312,7 @@ export default function App() {
         {/* SIDEBAR */}
         <Sidebar
           activeTab={activeTab}
-          onSelectTab={(tab) => {
-            setActiveTab(tab);
-            window.scrollTo(0, 0);
-          }}
+          onSelectTab={handleSidebarTabSelect}
           isCollapsed={isSidebarCollapsed}
         />
 
@@ -266,6 +334,39 @@ export default function App() {
             <DetailsView
               product={activeAnalysisProduct}
               condition={activeAnalysisCondition}
+              products={products}
+              onSelectProduct={(prod, condId) => {
+                const prodWithConds = ensureProductConditions({ ...prod });
+                const cond = prodWithConds.conditions.find(c => c.id === condId) || prodWithConds.conditions[0];
+                setActiveAnalysisProduct(prodWithConds);
+                handleSelectConditionWithRouting(cond);
+              }}
+              onSelectCondition={handleSelectConditionWithRouting}
+              simulationData={simulationData}
+              selectedUnits={selectedUnits}
+              onUnitSelectChange={handleUnitSelectChange}
+              onBackToSimulator={() => setActiveTab('simulator')}
+              onNavigateToImport={(prodId) => {
+                setActiveImportProductId(prodId);
+                setActiveTab('import-table');
+                window.scrollTo(0, 0);
+              }}
+              onShowToast={showToast}
+            />
+          )}
+
+          {activeTab === 'ficha-morar' && (
+            <FichaMorar
+              product={activeAnalysisProduct}
+              condition={activeAnalysisCondition}
+              products={products}
+              onSelectProduct={(prod, condId) => {
+                const prodWithConds = ensureProductConditions({ ...prod });
+                const cond = prodWithConds.conditions.find(c => c.id === condId) || prodWithConds.conditions[0];
+                setActiveAnalysisProduct(prodWithConds);
+                handleSelectConditionWithRouting(cond);
+              }}
+              onSelectCondition={handleSelectConditionWithRouting}
               simulationData={simulationData}
               selectedUnits={selectedUnits}
               onUnitSelectChange={handleUnitSelectChange}

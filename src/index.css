@@ -58,11 +58,14 @@
   }
 
   #pdf-content-area,
-  #pdf-content-area * {
+  #pdf-content-area-morar,
+  #pdf-content-area *,
+  #pdf-content-area-morar * {
     visibility: visible !important;
   }
 
-  #pdf-content-area {
+  #pdf-content-area,
+  #pdf-content-area-morar {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
@@ -71,6 +74,15 @@
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
+  }
+
+  /* Input fields become seamless text on print */
+  input.morar-input,
+  select.morar-input {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
   }
 
   header,

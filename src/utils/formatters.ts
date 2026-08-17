@@ -33,7 +33,12 @@ export function parseCurrency(val: any): number {
 
 export function formatCurrency(val: number): string {
   if (typeof val !== 'number' || isNaN(val)) val = 0;
-  return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return val.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 }
 
 export function formatM2(val: any): string {

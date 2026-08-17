@@ -21,7 +21,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'details' as ActiveTab,
-      label: 'Ficha de Análise',
+      label: 'Sinal c/ Banco Direto',
+      icon: FileCheck2
+    },
+    {
+      id: 'ficha-morar' as ActiveTab,
+      label: 'Sinal c/ Morar',
       icon: FileCheck2
     },
     {

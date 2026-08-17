@@ -10,6 +10,21 @@ export interface CommercialCondition {
   mesesTabela2: number;
   taxaJuros2: number;
   policy: string;
+
+  // Campos específicos para a condição "Sinal c/ Morar"
+  mesesObra?: number;
+  mesesPos?: number;
+  percMaxProSolutoGlobal?: number; // % Max Pró-Soluto Global (ex: 17.0%)
+  percMaxPosObra?: number; // % Max Pós-Obra (ex: 8.0%)
+  riscoPosPct?: number; // Compatibilidade retroativa
+  // Séries Contínuas Globais (Blocos de 12 meses)
+  globalSerie1Pct?: number; // Ano 1
+  globalSerie2Pct?: number; // Ano 2
+  globalSerie3Pct?: number; // Ano 3
+  globalSerie4Pct?: number; // Ano 4
+  globalSerie5Pct?: number; // Ano 5
+  globalSerie6Pct?: number; // Ano 6
+  torresHabilitadas?: string[]; // Lista de torres liberadas para simulação nesta política
 }
 
 export interface TableRow {
@@ -67,4 +82,4 @@ export interface SelectedUnit {
   unidade: string;
 }
 
-export type ActiveTab = 'simulator' | 'details' | 'policies' | 'import-table';
+export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table';

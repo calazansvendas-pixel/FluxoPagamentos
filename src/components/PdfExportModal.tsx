@@ -24,7 +24,7 @@ interface PdfExportModalProps {
   subsidyEfetivo: number;
   fgtsEfetivo: number;
   descontoAto: number;
-  maxFinancEfetivo: number;
+  maxFinanc: number;
   totalNegocEfetivo: number;
   sinalTotal: number;
   despCartoriasEfetivas: number;
@@ -66,7 +66,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
   subsidyEfetivo,
   fgtsEfetivo,
   descontoAto,
-  maxFinancEfetivo,
+  maxFinanc,
   totalNegocEfetivo,
   sinalTotal,
   despCartoriasEfetivas,
@@ -184,12 +184,16 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
     const clampedPct = Math.min(100, Math.max(0, pct));
     const restPct = Math.max(0, 100 - clampedPct);
 
+    const formatPct = (val: number) => {
+      return (val < 10 && val > 0) ? val.toFixed(2) : val.toFixed(1);
+    };
+
     // Posição radial do texto da fatia
     const calcCentroidRadius = (sliceAngleDeg: number) => {
       const theta = (sliceAngleDeg * Math.PI) / 180;
       if (theta <= 0.001) return r * 0.58;
       const factor = (2 / 3) * (Math.sin(theta / 2) / (theta / 2));
-      return r * Math.min(0.64, Math.max(0.48, factor));
+      return r * Math.min(0.68, Math.max(0.48, factor));
     };
 
     if (clampedPct >= 100) {
@@ -208,7 +212,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             dominantBaseline="central"
             fill={primaryTextColor}
             fontSize="10"
-            fontWeight="500"
+            fontWeight="bold"
           >
             100.0%
           </text>
@@ -232,7 +236,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             dominantBaseline="central"
             fill={secondaryTextColor}
             fontSize="10"
-            fontWeight="500"
+            fontWeight="bold"
           >
             0.0%
           </text>
@@ -264,7 +268,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
       <svg
         width="80"
         height="80"
-        viewBox="-10 -10 120 120"
+        viewBox="-12 -12 124 124"
         style={{ width: '80px', height: '80px', display: 'block', margin: '0 auto', overflow: 'visible' }}
       >
         {/* CÍRCULO BASE COMPLETO */}
@@ -275,31 +279,54 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
         <line x1={cx} y1={cy} x2={cx} y2={cy - r} stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
         <line x1={cx} y1={cy} x2={x} y2={y} stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
         
-        {/* PERCENTUAL FATIA PRIMÁRIA */}
-        {clampedPct >= 6 && (
+        {/* PERCENTUAL FATIA PRIMÁRIA (RISCO) */}
+        {clampedPct >= 14 ? (
           <text
             x={textX1}
             y={textY1}
             textAnchor="middle"
             dominantBaseline="central"
             fill={primaryTextColor}
-            fontSize={clampedPct < 14 ? '9' : '10'}
-            fontWeight="500"
+            fontSize="10"
+            fontWeight="bold"
           >
-            {clampedPct.toFixed(1)}%
+            {formatPct(clampedPct)}%
           </text>
+        ) : (
+          <g>
+            <rect
+              x={textX1 - 16}
+              y={textY1 - 6}
+              width="32"
+              height="12"
+              rx="4"
+              fill={colorPrimary}
+              opacity="0.95"
+            />
+            <text
+              x={textX1}
+              y={textY1}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#ffffff"
+              fontSize="8"
+              fontWeight="bold"
+            >
+              {formatPct(clampedPct)}%
+            </text>
+          </g>
         )}
         
         {/* PERCENTUAL FATIA RESTANTE */}
-        {restPct >= 6 && (
+        {restPct >= 18 && (
           <text
             x={textX2}
             y={textY2}
             textAnchor="middle"
             dominantBaseline="central"
             fill={secondaryTextColor}
-            fontSize={restPct < 14 ? '9' : '10'}
-            fontWeight="500"
+            fontSize="10"
+            fontWeight="bold"
           >
             {restPct.toFixed(1)}%
           </text>
@@ -542,7 +569,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                       </span>
                       <div className="flex justify-between items-center py-0.5 border-b border-slate-200/40">
                         <span className="text-slate-600">Max Financ:</span>
-                        <strong className="text-sky-600 font-bold">{formatCurrency(maxFinancEfetivo)}</strong>
+                        <strong className="text-sky-600 font-bold">{formatCurrency(maxFinanc)}</strong>
                       </div>
                       <div className="flex justify-between items-center py-0.5 border-b border-slate-200/40">
                         <span className="text-slate-600">Total Negoc:</span>
@@ -554,7 +581,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                       </div>
                       <div className="flex justify-between items-center py-0.5">
                         <span className="text-slate-600">Sinal + ITBI:</span>
-                        <strong className="text-emerald-600 font-bold">{formatCurrency(sinalTotal + despCartoriasEfetivas)}</strong>
+                        <strong className="text-emerald-600 font-bold">{formatCurrency(sinalTotal + saldoITBI)}</strong>
                       </div>
                     </div>
                   </div>
@@ -579,9 +606,15 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                       <div style={{ width: '80px', height: '80px', margin: '0 auto', overflow: 'visible' }}>
                         {renderPrintPie(pctRiscoParcelaRenda, '#0284c7', '#cbd5e1', '#ffffff', '#1e293b')}
                       </div>
-                      <div className="mt-2 pt-1.5 border-t border-slate-200/70 w-full text-center">
-                        <span className="text-[9px] text-slate-500 font-medium block">1ª Parcela</span>
-                        <span className="text-xs font-medium text-slate-800 block">{formatCurrency(valorRiscoParcela)}</span>
+                      <div className="mt-2 pt-1.5 border-t border-slate-200/70 w-full text-center space-y-0.5">
+                        <div className="flex justify-between items-center text-[9.5px] px-1">
+                          <span className="text-slate-500 font-medium">Comprometimento:</span>
+                          <strong className="text-sky-700 font-bold">{pctRiscoParcelaRenda < 10 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%</strong>
+                        </div>
+                        <div className="flex justify-between items-center text-[9.5px] px-1">
+                          <span className="text-slate-500 font-medium">1ª Parcela:</span>
+                          <span className="text-xs font-semibold text-slate-800">{formatCurrency(valorRiscoParcela)}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -596,9 +629,15 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                       <div style={{ width: '80px', height: '80px', margin: '0 auto', overflow: 'visible' }}>
                         {renderPrintPie(pctRiscoProSoluto, '#4f46e5', '#cbd5e1', '#ffffff', '#1e293b')}
                       </div>
-                      <div className="mt-2 pt-1.5 border-t border-slate-200/70 w-full text-center">
-                        <span className="text-[9px] text-slate-500 font-medium block">Pró-Soluto Total</span>
-                        <span className="text-xs font-medium text-slate-800 block">{formatCurrency(valorRiscoProSoluto)}</span>
+                      <div className="mt-2 pt-1.5 border-t border-slate-200/70 w-full text-center space-y-0.5">
+                        <div className="flex justify-between items-center text-[9.5px] px-1">
+                          <span className="text-slate-500 font-medium">Comprometimento:</span>
+                          <strong className="text-indigo-700 font-bold">{pctRiscoProSoluto < 10 ? pctRiscoProSoluto.toFixed(2) : pctRiscoProSoluto.toFixed(1)}%</strong>
+                        </div>
+                        <div className="flex justify-between items-center text-[9.5px] px-1">
+                          <span className="text-slate-500 font-medium">Pró-Soluto Total:</span>
+                          <span className="text-xs font-semibold text-slate-800">{formatCurrency(valorRiscoProSoluto)}</span>
+                        </div>
                       </div>
                     </div>
                   </div>

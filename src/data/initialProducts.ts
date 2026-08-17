@@ -10,8 +10,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     deliveryDatePhase2: '2027-11-30',
     conditions: [
       {
-        id: 'cond_amo_60x',
-        name: 'Sinal em 60X c/ Direto',
+        id: 'cond_amo_direto',
+        name: 'Sinal c/ Banco Direto (60X)',
         numParcelas: 60,
         sinalMinimo: 'R$ 2.000,00',
         riscoRendaPct: 35,
@@ -20,7 +20,31 @@ export const INITIAL_PRODUCTS: Product[] = [
         taxaJuros1: 1.9,
         mesesTabela2: 60,
         taxaJuros2: 1.9,
-        policy: 'POLÍTICA COLINA DAS AMORAS (60X):\n- Sinal parcelado em até 60x direto com a construtora.\n- Entrada mínima R$ 2.000,00.'
+        policy: 'POLÍTICA COLINA DAS AMORAS - SINAL C/ BANCO DIRETO:\n- Sinal parcelado em até 60x direto com a construtora.\n- Entrada mínima R$ 2.000,00.'
+      },
+      {
+        id: 'cond_amo_morar',
+        name: 'Sinal c/ Morar',
+        numParcelas: 60,
+        sinalMinimo: 'R$ 2.000,00',
+        riscoRendaPct: 30,
+        riscoImovelPct: 17,
+        percMaxProSolutoGlobal: 17.0,
+        percMaxPosObra: 8.0,
+        riscoPosPct: 8.0,
+        mesesObra: 33,
+        mesesPos: 27,
+        globalSerie1Pct: 30.0,
+        globalSerie2Pct: 25.0,
+        globalSerie3Pct: 20.0,
+        globalSerie4Pct: 15.0,
+        globalSerie5Pct: 10.0,
+        globalSerie6Pct: 5.0,
+        mesesTabela1: 36,
+        taxaJuros1: 0.0,
+        mesesTabela2: 72,
+        taxaJuros2: 1.0,
+        policy: 'POLÍTICA COLINA DAS AMORAS - SINAL C/ MORAR:\n- Fluxo com períodos de Obra (INCC) e Pós-Obra (IPCA+1%).\n- ITBI e Registro parcelados (IGPM+1%).'
       }
     ],
     tableInfo: {

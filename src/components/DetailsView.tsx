@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown } from 'lucide-react';
+import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
@@ -8,6 +8,9 @@ import { PdfExportModal } from './PdfExportModal';
 interface DetailsViewProps {
   product: Product | null;
   condition: CommercialCondition | null;
+  products?: Product[];
+  onSelectProduct?: (product: Product, conditionId: string) => void;
+  onSelectCondition?: (condition: CommercialCondition) => void;
   simulationData: SimulationData;
   selectedUnits: Record<string, SelectedUnit>;
   onUnitSelectChange: (productId: string, unit: SelectedUnit) => void;
@@ -19,6 +22,9 @@ interface DetailsViewProps {
 export const DetailsView: React.FC<DetailsViewProps> = ({
   product,
   condition,
+  products = [],
+  onSelectProduct,
+  onSelectCondition,
   simulationData,
   selectedUnits,
   onUnitSelectChange,
@@ -26,7 +32,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   onNavigateToImport,
   onShowToast
 }) => {
-  const currentProd = product || null;
+  const currentProd = useMemo(() => {
+    if (product) return product;
+    if (products && products.length > 0) return products[0];
+    return null;
+  }, [product, products]);
+
   const currentCond = useMemo(() => {
     if (!currentProd) return null;
     const prodWithConds = ensureProductConditions({ ...currentProd });
@@ -134,7 +145,61 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // Get table rows for current product
   const tableRows = currentProd.tableInfo?.rows || [];
-  const uniqueTorres = Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== '')));
+  const uniqueTorres = React.useMemo(() => {
+    return Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== '')));
+  }, [tableRows]);
+
+  // Torres habilitadas para simulação nesta política comercial
+  const availableTorres = React.useMemo(() => {
+    if (currentCond?.torresHabilitadas === undefined) return uniqueTorres;
+    const allowed = (currentCond.torresHabilitadas || []).map(t => String(t || '').trim().toLowerCase());
+    return uniqueTorres.filter(t => allowed.includes(String(t || '').trim().toLowerCase()));
+  }, [uniqueTorres, currentCond?.torresHabilitadas]);
+
+  // Regra de Fallback e Troca: Ao alternar de produto ou modalidade, validar torre e unidade
+  useEffect(() => {
+    if (!currentProd) return;
+
+    if (availableTorres.length > 0) {
+      if (!selectedTorre || !availableTorres.some(t => t.toLowerCase() === selectedTorre.toLowerCase())) {
+        const fallbackTorre = availableTorres[0];
+        setSelectedTorre(fallbackTorre);
+
+        const unitsOfFallback = Array.from(new Set(
+          tableRows
+            .filter(r => String(r[1] || '').trim().toLowerCase() === fallbackTorre.toLowerCase())
+            .map(r => String(r[2] || '').trim())
+            .filter(u => u !== '')
+        ));
+
+        const newUnidade = (selectedUnidade && unitsOfFallback.some(u => String(u).toLowerCase() === selectedUnidade.toLowerCase()))
+          ? selectedUnidade
+          : (unitsOfFallback[0] || '');
+
+        setSelectedUnidade(newUnidade);
+        onUnitSelectChange(currentProd.id, { torre: fallbackTorre, unidade: newUnidade });
+      } else {
+        const unitsOfCurrent = Array.from(new Set(
+          tableRows
+            .filter(r => String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase())
+            .map(r => String(r[2] || '').trim())
+            .filter(u => u !== '')
+        ));
+
+        if (selectedUnidade && !unitsOfCurrent.some(u => String(u).toLowerCase() === selectedUnidade.toLowerCase())) {
+          const newUnidade = unitsOfCurrent[0] || '';
+          setSelectedUnidade(newUnidade);
+          onUnitSelectChange(currentProd.id, { torre: selectedTorre, unidade: newUnidade });
+        }
+      }
+    } else {
+      if (selectedTorre || selectedUnidade) {
+        setSelectedTorre('');
+        setSelectedUnidade('');
+        onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
+      }
+    }
+  }, [availableTorres, currentProd?.id, currentCond?.id]);
 
   // Filter units by selected torre
   const filteredUnits = selectedTorre 
@@ -189,6 +254,23 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: selectedTorre, unidade });
+    }
+  };
+
+  const handleProductDropdownChange = (prodId: string) => {
+    const targetProd = products.find(p => p.id === prodId);
+    if (targetProd && onSelectProduct) {
+      const prodWithConds = ensureProductConditions({ ...targetProd });
+      const firstCond = prodWithConds.conditions[0];
+      onSelectProduct(prodWithConds, firstCond?.id || '');
+    }
+  };
+
+  const handleConditionDropdownChange = (condId: string) => {
+    if (!currentProd) return;
+    const targetCond = currentProd.conditions.find(c => c.id === condId);
+    if (targetCond && onSelectCondition) {
+      onSelectCondition(targetCond);
     }
   };
 
@@ -391,9 +473,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const mens60d = valParc3 || 0;
   const somaMensais = mens30d + mens60d;
 
-  const atoImovelDigitado = (valAtoManual !== null && valAtoManual >= atoMinimoCalculado)
+  // Teto Máximo do Ato Imóvel: O valor máximo possível é o saldo que quita integralmente a unidade
+  // atoMaximoPossivel = precoTabela - subsidio - descontoAto (usamos atoPremiadoAtual já calculado)
+  const atoMaximoPossivel = hasUnitSelected ? Math.max(0, price - subsidy - atoPremiadoAtual) : 0;
+
+  const atoImovelDigitadoBruto = (valAtoManual !== null && valAtoManual >= atoMinimoCalculado)
     ? valAtoManual
     : atoMinimoCalculado;
+
+  const atoImovelDigitado = Math.min(atoImovelDigitadoBruto, atoMaximoPossivel);
 
   // Se o usuário digitou mensais 30d/60d, abate primeiro do Ato (até o piso configurado da política)
   let saldoParaAbater = somaMensais;
@@ -421,49 +509,43 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     novoAtoPremiado = currAtoPremiado;
   }
 
-  // CASCATA OBRIGATÓRIA DE AMORTIZAÇÃO DO SALDO EXCEDENTE:
-  // Saldo Excedente = (Valor Digitado no Ato - Valor Sugerido Inicial) + sobras de mensais
-  const excedenteAto = Math.max(0, atoImovelDigitado - atoMinimoCalculado);
-  let saldoExcedente = excedenteAto + saldoParaAbater;
+  // CASCATA DE AMORTIZAÇÃO DO FINANCIAMENTO (NOVA REGRA)
+  const descontoAto = isAtoPremiadoEnabled ? novoAtoPremiado : 0;
 
-  // Base do Pró-Soluto do Imóvel (apenas a parcela da construtora, excluindo ITBI)
-  const proSolutoImovelBase = hasUnitSelected 
-    ? Math.max(0, riscoMaximoApuradoBruto - despCartorias) 
+  // 1. Cálculo do Teto dos Recursos Bancários/Negociados:
+  // O montante máximo que pode ser negociado via banco/governo não pode ultrapassar o saldo restante do imóvel.
+  // Consideramos aqui o aporte direto do Ato.
+  const saldoNecessarioImovel = hasUnitSelected 
+    ? Math.max(0, price - atoImovelDigitado - descontoAto)
     : 0;
 
-  // a) 1º Nível - Abater o Pró-Soluto do Imóvel
-  let proSolutoImovelAbatido = 0;
-  let novoProSolutoImovel = proSolutoImovelBase;
-  if (saldoExcedente > 0) {
-    proSolutoImovelAbatido = Math.min(proSolutoImovelBase, saldoExcedente);
-    novoProSolutoImovel = proSolutoImovelBase - proSolutoImovelAbatido;
-    saldoExcedente -= proSolutoImovelAbatido;
-  }
-
-  // b) 2º Nível - Abater o Financiamento Bancário
+  // 2. Amortização do Excedente no Financiamento:
+  const somaRecursosAprovados = maxFinanc + subsidy + fgts;
   let maxFinancEfetivo = maxFinanc;
-  let bancoAbatido = 0;
-  if (saldoExcedente > 0) {
-    bancoAbatido = Math.min(maxFinancEfetivo, saldoExcedente);
-    maxFinancEfetivo -= bancoAbatido;
-    saldoExcedente -= bancoAbatido;
-  }
-
-  // c) 3º Nível - Abater o FGTS e Subsídio
   let fgtsEfetivo = fgts;
-  let fgtsAbatido = 0;
-  if (saldoExcedente > 0) {
-    fgtsAbatido = Math.min(fgtsEfetivo, saldoExcedente);
-    fgtsEfetivo -= fgtsAbatido;
-    saldoExcedente -= fgtsAbatido;
-  }
-
   let subsidyEfetivo = subsidy;
-  let subsidyAbatido = 0;
-  if (saldoExcedente > 0) {
-    subsidyAbatido = Math.min(subsidyEfetivo, saldoExcedente);
-    subsidyEfetivo -= subsidyAbatido;
-    saldoExcedente -= subsidyAbatido;
+
+  if (somaRecursosAprovados > saldoNecessarioImovel) {
+    let excessoAmortizar = somaRecursosAprovados - saldoNecessarioImovel;
+
+    // Abate primeiramente no campo Max Financ (Financiamento Bancário)
+    const abateFinanc = Math.min(maxFinancEfetivo, excessoAmortizar);
+    maxFinancEfetivo -= abateFinanc;
+    excessoAmortizar -= abateFinanc;
+
+    // Se ainda houver excesso, abate do FGTS
+    if (excessoAmortizar > 0) {
+      const abateFgts = Math.min(fgtsEfetivo, excessoAmortizar);
+      fgtsEfetivo -= abateFgts;
+      excessoAmortizar -= abateFgts;
+    }
+
+    // Se ainda houver excesso, abate do Subsídio
+    if (excessoAmortizar > 0) {
+      const abateSubsidy = Math.min(subsidyEfetivo, excessoAmortizar);
+      subsidyEfetivo -= abateSubsidy;
+      excessoAmortizar -= abateSubsidy;
+    }
   }
 
   // 3. REGRA ISOLADA PARA DESPESAS CARTORÁRIAS & ITBI:
@@ -474,14 +556,31 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
   const despCartoriasEfetivas = saldoITBI;
 
-  const totalNegocEfetivo = hasUnitSelected ? (maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo) : 0;
-  const sinalTotal = Math.max(0, price - totalNegocEfetivo);
-  const descontoAto = isAtoPremiadoEnabled ? novoAtoPremiado : 0;
+  // Base Líquida c/ ITBI da Operação
+  const valorBaseImovel = hasUnitSelected ? Math.max(price, evaluation) : 0;
+  const baseVendaLiquidaComITBI = hasUnitSelected
+    ? Math.max(0, (valorBaseImovel + valorTotalITBI) - descontoAto)
+    : 0;
 
-  // 1. REGRA DE DEDUÇÃO NO PRÓ-SOLUTO (SINAL RESTANTE):
-  // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - 1ª Mensal - 2ª Mensal - Ato Premiado (Desconto Ato)
+  // 1. Definição do "Total Negoc.":
+  // O campo Total Negoc. representa a soma de todos os recursos da operação bancária/recursos do cliente (Financiamento + Subsídio + FGTS):
+  // totalNegoc = maxFinancEfetivo + subsidio + fgts
+  const totalNegocEfetivo = hasUnitSelected
+    ? (maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo)
+    : 0;
+
+  // 2. Definição do "Sinal Total":
+  // O Sinal Total deduz o Desconto do Ato Premiado do saldo restante do imóvel:
+  // sinalTotal = precoTabela - totalNegoc - descontoAto
+  const sinalTotal = hasUnitSelected
+    ? Math.max(0, price - totalNegocEfetivo - descontoAto)
+    : 0;
+
+  // 3. REGRA DE DEDUÇÃO NO PRÓ-SOLUTO (SINAL RESTANTE):
+  // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - 1ª Mensal - 2ª Mensal
+  // (Nota: o descontoAto já foi deduzido diretamente na formação do sinalTotal)
   const proSolutoSinalRestante = hasUnitSelected
-    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d - descontoAto)
+    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d)
     : 0;
   const proSoluto = proSolutoSinalRestante;
 
@@ -675,14 +774,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const totalEntradaMorar = atoAposMensais + atoITBIValidado + mens30d + mens60d + descontoAto;
 
   // --- INDICADORES DE RISCO DA OPERAÇÃO ---
-  // Identifique o Maior Valor entre o Preço e a Avaliação:
-  // ValorBaseImovel = Math.max(PrecoTabela, AvaliacaoBanco)
-  // Base Líquida c/ ITBI = (ValorBaseImovel + Despesas Cartorárias & ITBI) - Ato Premiado (se aplicado) - Outros Descontos aplicados
-  const valorBaseImovel = hasUnitSelected ? Math.max(price, evaluation) : 0;
-  const baseVendaLiquidaComITBI = hasUnitSelected
-    ? Math.max(0, (valorBaseImovel + valorTotalITBI) - descontoAto)
-    : 0;
-
   const baseRendaInformada = (simulationData.income && simulationData.income > 0) ? simulationData.income : 0;
 
   // Gráfico 1: "Risco Parcela / Comprometimento" (Fatia 1: 1ª Parcela sobre a Base da Renda | Fatia 2: Restante da Renda)
@@ -715,11 +806,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     const clampedPct = Math.min(100, Math.max(0, pct));
     const restPct = Math.max(0, 100 - clampedPct);
 
-    const calcCentroidRadius = (sliceAngleDeg: number) => {
-      const theta = (sliceAngleDeg * Math.PI) / 180;
-      if (theta <= 0.001) return r * 0.58;
-      const factor = (2 / 3) * (Math.sin(theta / 2) / (theta / 2));
-      return r * Math.min(0.68, Math.max(0.48, factor));
+    const formatPct = (val: number) => {
+      return (val < 10 && val > 0) ? val.toFixed(2) : val.toFixed(1);
     };
 
     if (clampedPct >= 100) {
@@ -736,7 +824,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             dominantBaseline="central"
             fill={primaryTextColor}
             fontSize="10"
-            fontWeight="500"
+            fontWeight="bold"
           >
             100.0%
           </text>
@@ -758,7 +846,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             dominantBaseline="central"
             fill={secondaryTextColor}
             fontSize="10"
-            fontWeight="500"
+            fontWeight="bold"
           >
             0.0%
           </text>
@@ -773,6 +861,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     const largeArcFlag = clampedPct > 50 ? 1 : 0;
 
     const pathD = `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${largeArcFlag} 1 ${x} ${y} Z`;
+
+    const calcCentroidRadius = (sliceAngleDeg: number) => {
+      const theta = (sliceAngleDeg * Math.PI) / 180;
+      if (theta <= 0.001) return r * 0.58;
+      const factor = (2 / 3) * (Math.sin(theta / 2) / (theta / 2));
+      return r * Math.min(0.68, Math.max(0.48, factor));
+    };
 
     const midAngle1 = angle / 2;
     const rLabel1 = calcCentroidRadius(angle);
@@ -790,41 +885,64 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     return (
       <svg
         className="w-24 h-24 sm:w-28 sm:h-28 mx-auto select-none overflow-visible block"
-        viewBox="-10 -10 120 120"
+        viewBox="-12 -12 124 124"
       >
-        {/* Fatia 2 (Círculo de Fundo Neutro) */}
+        {/* Fatia 2 (Círculo de Fundo Neutro / Saldo Livre) */}
         <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
-        {/* Fatia 1 (Arco Primário de Destaque) */}
+        {/* Fatia 1 (Arco Primário de Comprometimento / Risco) */}
         <path d={pathD} fill={colorPrimary} />
         {/* Linhas de Separação Brancas Nítidas */}
         <line x1={cx} y1={cy} x2={cx} y2={cy - r} stroke="#ffffff" strokeWidth="1.5" />
         <line x1={cx} y1={cy} x2={x} y2={y} stroke="#ffffff" strokeWidth="1.5" />
 
-        {/* Rótulo Interno Fatia 1 */}
-        {clampedPct >= 5 && (
+        {/* Rótulo Interno Fatia 1 (Risco / Comprometimento) */}
+        {clampedPct >= 14 ? (
           <text
             x={textX1}
             y={textY1}
             textAnchor="middle"
             dominantBaseline="central"
             fill={primaryTextColor}
-            fontSize={clampedPct < 14 ? '9' : '10'}
-            fontWeight="500"
+            fontSize="10"
+            fontWeight="bold"
           >
-            {clampedPct.toFixed(1)}%
+            {formatPct(clampedPct)}%
           </text>
+        ) : (
+          <g>
+            <rect
+              x={textX1 - 16}
+              y={textY1 - 6}
+              width="32"
+              height="12"
+              rx="4"
+              fill={colorPrimary}
+              opacity="0.95"
+            />
+            <text
+              x={textX1}
+              y={textY1}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#ffffff"
+              fontSize="8"
+              fontWeight="bold"
+            >
+              {formatPct(clampedPct)}%
+            </text>
+          </g>
         )}
 
-        {/* Rótulo Interno Fatia 2 */}
-        {restPct >= 5 && (
+        {/* Rótulo Interno Fatia 2 (Restante / Livre) */}
+        {restPct >= 18 && (
           <text
             x={textX2}
             y={textY2}
             textAnchor="middle"
             dominantBaseline="central"
             fill={secondaryTextColor}
-            fontSize={restPct < 14 ? '9' : '10'}
-            fontWeight="500"
+            fontSize="10"
+            fontWeight="bold"
           >
             {restPct.toFixed(1)}%
           </text>
@@ -881,12 +999,50 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             <span>Voltar</span>
           </button>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="text-xs sm:text-sm font-extrabold text-sky-600 bg-sky-50 px-3 py-1 rounded-lg border border-sky-100 uppercase tracking-wide">
-              {currentProd.name}
-            </span>
-            <span className="text-xs font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80">
-              {currentCond.name}
-            </span>
+            {/* DROPDOWN DE EMPREENDIMENTO */}
+            {products && products.length > 1 && onSelectProduct ? (
+              <div className="relative inline-block">
+                <select
+                  value={currentProd.id}
+                  onChange={(e) => handleProductDropdownChange(e.target.value)}
+                  className="appearance-none bg-sky-50 hover:bg-sky-100 text-sky-700 font-extrabold text-xs sm:text-sm pl-3 pr-7 py-1.5 rounded-lg border border-sky-200 uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                >
+                  {products.map(p => (
+                    <option key={p.id} value={p.id} className="text-slate-800 font-semibold bg-white">
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-sky-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            ) : (
+              <span className="text-xs sm:text-sm font-extrabold text-sky-600 bg-sky-50 px-3 py-1 rounded-lg border border-sky-100 uppercase tracking-wide">
+                {currentProd.name}
+              </span>
+            )}
+
+            {/* DROPDOWN DE CONDIÇÃO COMERCIAL */}
+            {currentProd.conditions && currentProd.conditions.length > 0 && onSelectCondition ? (
+              <div className="relative inline-block">
+                <select
+                  value={currentCond.id}
+                  onChange={(e) => handleConditionDropdownChange(e.target.value)}
+                  className="appearance-none bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs pl-2.5 pr-6 py-1.5 rounded-lg border border-slate-200/80 cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                >
+                  {currentProd.conditions.map(c => (
+                    <option key={c.id} value={c.id} className="text-slate-800 font-medium bg-white">
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3 h-3 text-slate-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            ) : (
+              <span className="text-xs font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80">
+                {currentCond.name}
+              </span>
+            )}
+
             {deliveryText && (
               <span
                 id="badge-data-entrega"
@@ -973,7 +1129,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center"
             >
               <option value="">--</option>
-              {uniqueTorres.map(t => (
+              {availableTorres.map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
@@ -1127,7 +1283,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </div>
                   <div className="flex justify-between items-center py-1 mt-2">
                     <span className="text-slate-600">Sinal + ITBI:</span>
-                    <strong className="text-emerald-600 font-bold">{formatCurrency(sinalTotal + despCartoriasEfetivas)}</strong>
+                    <strong className="text-emerald-600 font-bold">{formatCurrency(sinalTotal + saldoITBI)}</strong>
                   </div>
                 </div>
               </div>
@@ -1176,13 +1332,19 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   {renderSolidPie(pctRiscoParcelaRenda, '#0284c7', '#cbd5e1')}
                 </div>
 
-                <div className="w-full pt-1 border-t border-slate-200/70 text-center">
-                  <span className="block text-[10px] text-slate-500 font-medium">
-                    1ª Parcela
-                  </span>
-                  <strong className="text-xs font-semibold text-slate-800 block">
-                    {formatCurrency(valorRiscoParcela)}
-                  </strong>
+                <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
+                  <div className="flex items-center justify-between px-1 text-[10px]">
+                    <span className="text-slate-500 font-medium">Comprometimento:</span>
+                    <strong className="text-sky-700 font-bold">
+                      {pctRiscoParcelaRenda < 10 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between px-1 text-[10px]">
+                    <span className="text-slate-500 font-medium">1ª Parcela:</span>
+                    <strong className="text-slate-800 font-semibold">
+                      {formatCurrency(valorRiscoParcela)}
+                    </strong>
+                  </div>
                 </div>
               </div>
 
@@ -1202,13 +1364,19 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   {renderSolidPie(pctRiscoProSoluto, '#4f46e5', '#cbd5e1')}
                 </div>
 
-                <div className="w-full pt-1 border-t border-slate-200/70 text-center">
-                  <span className="block text-[10px] text-slate-500 font-medium">
-                    Pró-Soluto Total
-                  </span>
-                  <strong className="text-xs font-semibold text-slate-800 block">
-                    {formatCurrency(valorRiscoProSoluto)}
-                  </strong>
+                <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
+                  <div className="flex items-center justify-between px-1 text-[10px]">
+                    <span className="text-slate-500 font-medium">Comprometimento:</span>
+                    <strong className="text-indigo-700 font-bold">
+                      {pctRiscoProSoluto < 10 ? pctRiscoProSoluto.toFixed(2) : pctRiscoProSoluto.toFixed(1)}%
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between px-1 text-[10px]">
+                    <span className="text-slate-500 font-medium">Pró-Soluto Total:</span>
+                    <strong className="text-slate-800 font-semibold">
+                      {formatCurrency(valorRiscoProSoluto)}
+                    </strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1402,9 +1570,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     }`}
                   />
                   {isExceededParc2 && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-red-700 bg-red-100/80 p-1 rounded border border-red-200">
-                      <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
-                      <span>Atenção: parcela excede 35% da renda!</span>
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
+                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                      <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
                     </div>
                   )}
                 </div>
@@ -1452,9 +1620,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     }`}
                   />
                   {isExceededParc3 && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-red-700 bg-red-100/80 p-1 rounded border border-red-200">
-                      <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
-                      <span>Atenção: parcela excede 35% da renda!</span>
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
+                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                      <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
                     </div>
                   )}
                 </div>
@@ -1601,7 +1769,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           subsidyEfetivo={subsidyEfetivo}
           fgtsEfetivo={fgtsEfetivo}
           descontoAto={descontoAto}
-          maxFinancEfetivo={maxFinancEfetivo}
+          maxFinanc={maxFinancEfetivo}
           totalNegocEfetivo={totalNegocEfetivo}
           sinalTotal={sinalTotal}
           despCartoriasEfetivas={despCartoriasEfetivas}
