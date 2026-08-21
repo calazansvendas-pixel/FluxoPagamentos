@@ -149,25 +149,25 @@ export const imoveisService = {
         
         const empId = '11111111-1111-1111-1111-111111111111';
         
-        const { error: insertEmpErr } = await supabase.from('empreendimentos').insert([{
+        const { error: insertEmpErr } = await supabase.from('empreendimentos').upsert([{
           id: empId,
           nome: 'Vista dos Colibris',
           delivery_date_phase1: '2026-02-28',
           delivery_date_phase2: '2027-02-28'
-        }]);
+        }], { onConflict: 'id' });
 
-        if (insertEmpErr) {
+        if (insertEmpErr && insertEmpErr.code !== '23505') {
           console.error('Erro ao inserir empreendimento de teste:', insertEmpErr);
           return;
         }
 
-        const { error: insertUnitsErr } = await supabase.from('unidades').insert([
+        const { error: insertUnitsErr } = await supabase.from('unidades').upsert([
           { empreendimento_id: empId, torre: 'D', unidade: '303', tipologia: '2Q', area_privativa: 44.02, quintal: 0.00, preco_tabela: 241902.00, avaliacao_bancaria: 218000.00, itbi_total: 4806.00, itbi_primeiro_imovel: 4806.00, status: 'DISPONÍVEL' },
           { empreendimento_id: empId, torre: 'D', unidade: '801', tipologia: '2Q', area_privativa: 42.14, quintal: 0.00, preco_tabela: 246902.00, avaliacao_bancaria: 218000.00, itbi_total: 4806.00, itbi_primeiro_imovel: 4806.00, status: 'DISPONÍVEL' },
           { empreendimento_id: empId, torre: 'C', unidade: '304', tipologia: '2Q', area_privativa: 44.02, quintal: 0.00, preco_tabela: 239902.00, avaliacao_bancaria: 218000.00, itbi_total: 4806.00, itbi_primeiro_imovel: 4806.00, status: 'DISPONÍVEL' }
-        ]);
+        ], { onConflict: 'empreendimento_id, torre, unidade' });
 
-        if (insertUnitsErr) {
+        if (insertUnitsErr && insertUnitsErr.code !== '23505') {
           console.error('Erro ao inserir unidades de teste:', insertUnitsErr);
         } else {
           console.log('Carga inicial concluída com sucesso! (Vista dos Colibris)');
