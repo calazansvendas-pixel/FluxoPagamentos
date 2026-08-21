@@ -267,92 +267,68 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const activePosCapacities = mPos.map((qtd, idx) => qtd * (renda > 0 ? (renda * ((globalSeriesPct[idx] || 0) / 100)) : 0));
   const capacidadeTotalRenda = activeObraCapacities.reduce((a, b) => a + b, 0) + activePosCapacities.reduce((a, b) => a + b, 0);
 
-  // 2. Apuração do Desconto do Ato Premiado
+  // RESOLUÇÃO ALGÉBRICA DO LOOP DO ATO PREMIADO
+  // O Desconto abate a Base Líquida, e a Base Líquida define o limite do fluxo, o que define o Ato.
+  const baseInicial = precoTabela + itbiRegistro;
+  const limiteRisco = pctProSolutoGlobal / 100;
+  
   let atoPremiado = 0;
   if (isAtoPremiadoEnabled && !isAtoZerado && sinalComITBI > 0) {
     if (params.atoManual !== undefined && params.atoManual > 0) {
-      // Quando o usuário informa/edita manualmente o Ato (Imóvel), o Ato Premiado é calculado diretamente sobre o Ato Efetivo
       atoPremiado = calcularDescontoAtoPremiado(params.atoManual);
     } else if (params.atoPremiado !== undefined && params.atoPremiado > 0) {
       atoPremiado = params.atoPremiado;
     } else {
-      // Loop de Convergência da Referência Circular para o Ato Sugerido Padrão
-      let ap = 0;
-      for (let i = 0; i < 20; i++) {
-        // PASSO 1: Recalcular a Base de Risco (Usando estritamente Preço de Tabela)
-        const baseRiscoLoop = Math.max(0, precoTabela + itbiRegistro - (2 * ap));
-        // PASSO 2: Recalcular as Âncoras
-        const tetoPoliticaLoop = baseRiscoLoop * (pctProSolutoGlobal / 100);
-        const maxFluxoLoop = (renda > 0 && capacidadeTotalRenda > 0)
-          ? Math.min(tetoPoliticaLoop, capacidadeTotalRenda)
-          : tetoPoliticaLoop;
-        const atoBrutoLoop = Math.max(0, sinalComITBI - maxFluxoLoop);
-
-        // PASSO 3: Apurar o Novo Ato Premiado
-        // Como o Desconto é 10% do Ato Líquido (Imóvel) até R$ 5.000 (para Ato Imóvel >= 50.000),
-        // temos AtoBruto = AtoImovel + Desconto = 1.10 * AtoImovel.
-        // Se AtoBruto >= 55.000, AtoImovel >= 50.000 e Desconto = 5.000.
-        // Se AtoBruto >= 5.500, Desconto = AtoBruto / 11.
-        let novoAtoPremiado = 0;
-        if (atoBrutoLoop >= 55000) {
-          novoAtoPremiado = 5000;
-        } else if (atoBrutoLoop >= 5500) {
-          novoAtoPremiado = Math.min(5000, Math.round((atoBrutoLoop / 11) * 100) / 100);
-        } else {
-          novoAtoPremiado = 0;
-        }
-
-        if (Math.abs(novoAtoPremiado - ap) < 0.005) {
-          ap = novoAtoPremiado;
-          break;
-        }
-        ap = novoAtoPremiado;
+      // Fórmula O(1): D = (SinalBruto - (Limite * BaseInicial)) / (11 - Limite)
+      const descontoCalculado = (sinalComITBI - (limiteRisco * baseInicial)) / (11 - limiteRisco);
+      const atoBrutoTeorico = descontoCalculado * 11;
+      
+      if (atoBrutoTeorico >= 50000) {
+        atoPremiado = 5000;
+      } else if (atoBrutoTeorico >= 5000) {
+        atoPremiado = Math.round(descontoCalculado * 100) / 100;
+      } else {
+        atoPremiado = 0;
       }
-      atoPremiado = ap;
     }
   }
 
-  // Base de Cálculo e Max Fluxo (Pró-Soluto Global):
-  // A dedução do Ato Premiado na base equivale ao desconto dobrado (2 * atoPremiado)
-  const deducaoBaseAto = (isAtoPremiadoEnabled && !isAtoZerado && atoPremiado > 0) ? (atoPremiado * 2) : 0;
-  const baseCalculo = Math.max(0, precoTabela + itbiRegistro - deducaoBaseAto);
-  const tetoPoliticaGeral = Math.round(baseCalculo * (pctProSolutoGlobal / 100) * 100) / 100;
+  // 2. Apuração da Base de Risco (Após dedução exata do desconto)
+  const baseCalculo = Math.max(0, baseInicial - atoPremiado);
+  const tetoPoliticaGeral = Math.round(baseCalculo * limiteRisco * 100) / 100;
+  
   const maxFluxoGeral = (renda > 0 && capacidadeTotalRenda > 0)
     ? Math.min(tetoPoliticaGeral, Math.round(capacidadeTotalRenda * 100) / 100)
     : tetoPoliticaGeral;
+  
   const tetoPosGlobal = Math.round(baseCalculo * (pctTetoPosGlobal / 100) * 100) / 100;
 
-  // 3. Ato Residual e Determinação do Fluxo a Distribuir
-  // O fluxo de parcelamento da construtora financia a parcela do Sinal Total que não foi quitada no Ato nem pelo ITBI no Ato nem pelo Desconto.
-  // Como o cliente paga Sinal Total Com ITBI = SinalSemITBI + ITBITotal, e no Ato ele paga Ato(Imóvel) + DescontoAto + ITBINoAto,
-  // O saldo que sobra para parcelar na construtora (parcelas líquidas) é o sinal do imóvel restante:
-  // sinalSemITBI - DescontoAto - Ato(Imóvel).
-  const sinalLiquidoTotal = Math.max(0, sinalSemITBI - atoPremiado);
-
-  // O volume a parcelar nas séries nunca pode ultrapassar o saldo restante após reservar o Sinal Mínimo obrigatório (R$ 2.000,00)
-  const saldoMaximoDisponivel = Math.max(0, Math.round((sinalSemITBI - atoPremiado - sinalMinimo) * 100) / 100);
-
-  // O fluxo efetivo é o MENOR entre o risco da política/capacidade de renda e o saldo que o cliente realmente deve do Imóvel:
-  const fluxoEfetivo = Math.min(maxFluxoGeral, saldoMaximoDisponivel);
-
-  let fluxoDistribuir = fluxoEfetivo;
-  let atoResidualPadrao = Math.max(0, Math.round((sinalSemITBI - atoPremiado - fluxoEfetivo) * 100) / 100);
-
-  if (sinalLiquidoTotal <= sinalMinimo) {
-    atoResidualPadrao = sinalLiquidoTotal;
-    fluxoDistribuir = 0;
+  // 3. Ato Bruto e Determinação do Fluxo a Distribuir
+  // O fluxo Efetivo nunca pode ultrapassar o Saldo Devedor real
+  const saldoMaximoDisponivelComITBI = Math.max(0, Math.round((sinalComITBI - atoPremiado - sinalMinimo - (params.atoITBI || 0)) * 100) / 100);
+  
+  let fluxoDistribuirComITBI = Math.min(maxFluxoGeral, saldoMaximoDisponivelComITBI);
+  
+  // Ato Bruto = Total Com ITBI - ITBI no Ato - Fluxo - DescontoAto
+  let atoBruto = Math.max(0, Math.round((sinalComITBI - (params.atoITBI || 0) - fluxoDistribuirComITBI) * 100) / 100);
+  
+  // Ato Líquido Exibido (Residual Padrão)
+  let atoResidualPadrao = Math.max(0, Math.round((atoBruto - atoPremiado) * 100) / 100);
+  
+  // Proteção para não gerar fluxo se o sinal líquido (sinal - desconto) for menor ou igual ao sinal mínimo
+  if (sinalComITBI - atoPremiado <= sinalMinimo) {
+    atoResidualPadrao = Math.max(0, sinalComITBI - atoPremiado);
+    fluxoDistribuirComITBI = 0;
   }
-
-  const atoBruto = Math.max(0, Math.round((sinalSemITBI - fluxoDistribuir) * 100) / 100);
 
   let atoResidual = atoResidualPadrao;
 
   if (params.atoManual !== undefined && params.atoManual > 0) {
     atoResidual = params.atoManual;
     // Quando o Ato é informado manualmente (ex: R$ 20.000,00):
-    // fluxoDistribuir = Math.max(0, sinalSemITBI - atoImovel - descontoAto)
-    fluxoDistribuir = Math.max(0, Math.round((sinalSemITBI - atoResidual - atoPremiado) * 100) / 100);
+    fluxoDistribuirComITBI = Math.max(0, Math.round((sinalComITBI - atoResidual - atoPremiado - (params.atoITBI || 0)) * 100) / 100);
   }
+
 
   // 4. Decomposição Contínua das Séries (Blocos de 12 Meses)
   // Soma dos pesos ponderados de todas as séries ativas (Obra e Pós-Obra)
@@ -379,7 +355,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     // Rateio proporcional entre as séries ativas
     const pesoSerie = activeObraWeights[idx];
     const pctRateioSerie = sumActiveWeights > 0 ? (pesoSerie / sumActiveWeights) : 0;
-    const volumeSerie = fluxoDistribuir * pctRateioSerie;
+    const volumeSerie = fluxoDistribuirComITBI * pctRateioSerie;
     const parcelaBrutaFinal = qtd > 0 ? (volumeSerie / qtd) : 0;
     const parcelaLiquida = Math.max(0, Math.round((parcelaBrutaFinal - parcelaMensalITBIExato) * 100) / 100);
     const subtotalLiquido = Math.round(parcelaLiquida * qtd * 100) / 100;
@@ -415,7 +391,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     // Rateio proporcional entre as séries ativas
     const pesoSerie = activePosWeights[idx];
     const pctRateioSerie = sumActiveWeights > 0 ? (pesoSerie / sumActiveWeights) : 0;
-    const volumeSerie = fluxoDistribuir * pctRateioSerie;
+    const volumeSerie = fluxoDistribuirComITBI * pctRateioSerie;
     const parcelaBrutaFinal = qtd > 0 ? (volumeSerie / qtd) : 0;
     const parcelaLiquida = Math.max(0, Math.round((parcelaBrutaFinal - parcelaMensalITBIExato) * 100) / 100);
     const subtotalLiquido = Math.round(parcelaLiquida * qtd * 100) / 100;
@@ -435,7 +411,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const subtotalObraLiquido = obraSeries.reduce((acc, s) => acc + s.subtotalLiquido, 0);
   const subtotalPosLiquido = posSeries.reduce((acc, s) => acc + s.subtotalLiquido, 0);
   const somaSubtotaisLiquidos = Math.round((subtotalObraLiquido + subtotalPosLiquido) * 100) / 100;
-  const totalProSolutoGerado = fluxoDistribuir;
+  const totalProSolutoGerado = somaSubtotaisLiquidos;
 
   // Absorve o resíduo de arredondamento de centavos no Ato Residual padrão para fechar 100% exato
   const itbiParceladoTotal = mesesTotaisGeral * parcelaMensalITBI;
@@ -445,6 +421,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
 
   const distribuidoTotal = Math.round((atoResidual + (params.atoITBI || 0) + somaSubtotaisLiquidos + itbiParceladoTotal + atoPremiado) * 100) / 100;
   const totalComITBI = sinalComITBI;
+  const sinalLiquidoTotal = Math.max(0, sinalSemITBI - atoPremiado);
 
   return {
     baseCalculo,

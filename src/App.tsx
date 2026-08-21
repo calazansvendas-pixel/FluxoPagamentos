@@ -12,6 +12,7 @@ import { FichaMorar } from './components/FichaMorar';
 import { PoliciesView } from './components/PoliciesView';
 import { ImportTableView } from './components/ImportTableView';
 import { NewProductModal } from './components/NewProductModal';
+import { imoveisService } from './services/imoveisService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('simulator');
@@ -19,6 +20,32 @@ export default function App() {
   const [currentDate, setCurrentDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+
+  React.useEffect(() => {
+    // Inicialização do Banco de Dados (Seed Inicial) e Sincronização
+    const initDB = async () => {
+      await imoveisService.inicializarBancoSeNecessario();
+      
+      const dbEmps = await imoveisService.listarEmpreendimentos();
+      // If we got real data from Supabase (not the fallback array which uses 'name', whereas Supabase uses 'nome')
+      if (dbEmps && Array.isArray(dbEmps) && dbEmps.length > 0 && 'nome' in dbEmps[0]) {
+        setProducts(prev => {
+          return dbEmps.map(dbEmp => {
+            // Find existing product to keep its conditions/policies, or fallback to the first default product
+            const existing = prev.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS[0];
+            return {
+              ...existing,
+              id: dbEmp.id,
+              name: dbEmp.nome,
+              deliveryDatePhase1: dbEmp.delivery_date_phase1 || existing.deliveryDatePhase1,
+              deliveryDatePhase2: dbEmp.delivery_date_phase2 || existing.deliveryDatePhase2,
+            };
+          });
+        });
+      }
+    };
+    initDB();
+  }, []);
 
   // Products state with localStorage persistence
   const [products, setProducts] = useState<Product[]>(() => {

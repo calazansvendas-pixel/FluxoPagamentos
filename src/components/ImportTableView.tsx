@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { FileCheck, CheckCircle, AlertCircle, Trash2, CalendarClock, UploadCloud, Search, XCircle, Table as TableIcon, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { FileCheck, CheckCircle, AlertCircle, Trash2, CalendarClock, UploadCloud, Search, XCircle, Table as TableIcon, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, TableInfo } from '../types';
 import { COLUMN_DEFINITIONS, formatCurrency, normalizeHeader } from '../utils/formatters';
+import { supabase } from '../lib/supabaseClient';
 
 interface ImportTableViewProps {
   products: Product[];
@@ -56,6 +57,8 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
     rows: (string | number)[][];
     fileName: string;
   } | null>(null);
+
+  const [isSaving, setIsSaving] = useState(false);
 
   // When active import product changes, update local fields
   React.useEffect(() => {
@@ -190,7 +193,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
     }
   };
 
-  const handleSaveTable = (e: React.FormEvent) => {
+  const handleSaveTable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeProd) return;
 
@@ -208,18 +211,61 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
     const currentHeaders = tempParsedData?.headers || activeProd.tableInfo?.headers || COLUMN_DEFINITIONS.map(d => d.label);
     const currentRows = tempParsedData?.rows || activeProd.tableInfo?.rows || [];
 
-    const newTableInfo: TableInfo = {
-      validFrom,
-      validTo,
-      fileName: currentFileName,
-      headers: currentHeaders,
-      rows: currentRows,
-      active: true
-    };
+    if (currentRows.length === 0) {
+      onShowToast("A tabela está vazia. Nenhuma unidade para salvar.");
+      return;
+    }
 
-    onSaveTableInfo(activeProd.id, newTableInfo);
-    setTempParsedData(null);
-    onShowToast(`Tabela do ${activeProd.name} salva e ativada até ${new Date(validTo + 'T00:00:00').toLocaleDateString('pt-BR')}!`);
+    setIsSaving(true);
+    
+    // Mapeamento dos dados processados para o formato esperado pelo Supabase
+    const unidadesProcessadas = currentRows.map(row => {
+      return {
+        empreendimento_id: activeProd.id,
+        status: String(row[0] || '1ª Fase').trim(),
+        torre: String(row[1] || '').trim(),
+        unidade: String(row[2] || '').trim(),
+        area_privativa: parseFloat(String(row[3] || '0').replace(/\./g, '').replace(',', '.')),
+        quintal: parseFloat(String(row[4] || '0').replace(/\./g, '').replace(',', '.')),
+        tipologia: String(row[5] || ''),
+        avaliacao_bancaria: parseFloat(String(row[6] || '0').replace(/\./g, '').replace(',', '.')),
+        preco_tabela: parseFloat(String(row[7] || '0').replace(/\./g, '').replace(',', '.')),
+        itbi_primeiro_imovel: parseFloat(String(row[8] || '0').replace(/\./g, '').replace(',', '.')),
+        itbi_total: parseFloat(String(row[9] || '0').replace(/\./g, '').replace(',', '.')),
+      };
+    }).filter(u => u.torre !== '' && u.unidade !== '');
+
+    try {
+      const { error } = await supabase
+        .from('unidades')
+        .upsert(unidadesProcessadas, {
+          onConflict: 'empreendimento_id, torre, unidade'
+        });
+
+      if (error) throw error;
+      
+      const newTableInfo: TableInfo = {
+        validFrom,
+        validTo,
+        fileName: currentFileName,
+        headers: currentHeaders,
+        rows: currentRows,
+        active: true
+      };
+
+      onSaveTableInfo(activeProd.id, newTableInfo);
+      setTempParsedData(null);
+      onShowToast(`Sucesso! ${unidadesProcessadas.length} unidades sincronizadas no banco Supabase.`);
+      
+      // Dispatch custom event to trigger refresh in other components
+      window.dispatchEvent(new CustomEvent('tabela_atualizada'));
+
+    } catch (err) {
+      console.error(err);
+      onShowToast("Erro ao sincronizar com Supabase. Apenas salvamento local foi concluído.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const currentHeaders = tempParsedData?.headers || activeProd?.tableInfo?.headers || [];
@@ -503,10 +549,11 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                    disabled={isSaving}
+                    className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Salvar e Ativar Tabela</span>
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    <span>{isSaving ? 'Salvando...' : 'Salvar e Ativar Tabela'}</span>
                   </button>
                 </div>
               </div>
@@ -572,10 +619,11 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                disabled={isSaving}
+                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Salvar e Ativar Tabela</span>
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>{isSaving ? 'Salvando...' : 'Salvar e Ativar Tabela'}</span>
               </button>
             </div>
           )}

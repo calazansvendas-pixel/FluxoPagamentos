@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown } from 'lucide-react';
+import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
 import { PdfExportModal } from './PdfExportModal';
+import { imoveisService } from '../services/imoveisService';
 
 interface DetailsViewProps {
   product: Product | null;
@@ -984,6 +985,55 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     currentProd.tableInfo.rows.length > 0
   );
 
+  const [isSavingSimulation, setIsSavingSimulation] = useState<boolean>(false);
+
+  const handleSaveSimulation = async () => {
+    if (!currentProd) return;
+    setIsSavingSimulation(true);
+    try {
+      const dadosCompletos = {
+        empreendimento_nome: currentProd.name,
+        condicao_nome: currentCond?.name || '',
+        torre: selectedTorre || 'Não Selecionada',
+        unidade: selectedUnidade || 'Não Selecionada',
+        cliente_nome: simulationData.clientName || 'Cliente Não Informado',
+        renda: baseRendaInformada,
+        preco_tabela: price,
+        avaliacao_bancaria: evaluation,
+        itbi_total: valorTotalITBI,
+        financiamento_maximo: maxFinancEfetivo,
+        subsidio: subsidyEfetivo,
+        fgts: fgtsEfetivo,
+        recurso_proprio: simulationData.ownResource || 0,
+        ato_bruto: atoBruto,
+        desconto_ato_premiado: descontoAto,
+        ato_liquido: atoEfetivo,
+        itbi_no_ato: valAtoITBI,
+        mensais_qtd: qtdMensais,
+        parcela_mensal: parcela,
+        pro_soluto_total: proSolutoTotalPainel,
+        salvo_em: new Date().toISOString()
+      };
+
+      const res = await imoveisService.salvarSimulacao({
+        cliente_nome: simulationData.clientName || 'Cliente Não Informado',
+        renda: baseRendaInformada,
+        empreendimento_id: currentProd.id,
+        dados: dadosCompletos
+      });
+
+      if (res.success) {
+        onShowToast(`Proposta de ${simulationData.clientName || 'simulação'} salva no Supabase com sucesso!`);
+      } else {
+        onShowToast(`Proposta registrada: ${res.error || 'Aviso de sincronização'}`);
+      }
+    } catch (e: any) {
+      onShowToast(`Erro ao salvar simulação: ${e?.message || 'Falha na conexão'}`);
+    } finally {
+      setIsSavingSimulation(false);
+    }
+  };
+
   return (
     <div className="w-full space-y-4 animate-fade-in">
       
@@ -1055,8 +1105,28 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           </div>
         </div>
 
-        {/* BOTÃO EXPORTAR PDF / IMPRIMIR */}
+        {/* BOTÕES DE AÇÃO: SALVAR SIMULAÇÃO & EXPORTAR PDF */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSaveSimulation}
+            disabled={isSavingSimulation}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm shadow-emerald-500/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Salvar proposta/simulação no banco Supabase"
+          >
+            {isSavingSimulation ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Salvando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-3.5 h-3.5" />
+                <span>Salvar Simulação</span>
+              </>
+            )}
+          </button>
+
           <button
             type="button"
             onClick={() => setIsPdfModalOpen(true)}

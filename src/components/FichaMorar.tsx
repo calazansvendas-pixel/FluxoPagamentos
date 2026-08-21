@@ -12,12 +12,18 @@ import {
   ChevronDown,
   FileCheck2,
   Building,
-  Check
+  Check,
+  PieChart,
+  Save,
+  Loader2
 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, parseCurrency, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado } from '../utils/calculations';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
+import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
+
+import { imoveisService } from '../services/imoveisService';
 
 interface FichaMorarProps {
   product: Product | null;
@@ -190,10 +196,28 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     );
   }
 
-  const tableRows = currentProd.tableInfo?.rows || [];
+  const [dbUnits, setDbUnits] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchUnits = () => {
+      if (currentProd) {
+        imoveisService.listarUnidadesPorEmpreendimento(currentProd.id).then(data => {
+          setDbUnits(data || []);
+        });
+      }
+    };
+
+    fetchUnits();
+
+    window.addEventListener('tabela_atualizada', fetchUnits);
+    return () => {
+      window.removeEventListener('tabela_atualizada', fetchUnits);
+    };
+  }, [currentProd?.id]);
+
   const uniqueTorres = React.useMemo(() => {
-    return Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== '')));
-  }, [tableRows]);
+    return Array.from(new Set(dbUnits.map(u => String(u.torre || '').trim()).filter(t => t !== '')));
+  }, [dbUnits]);
 
   // Torres habilitadas para simulação nesta política comercial
   const availableTorres = React.useMemo(() => {
@@ -212,9 +236,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         setSelectedTorre(fallbackTorre);
 
         const unitsOfFallback = Array.from(new Set(
-          tableRows
-            .filter(r => String(r[1] || '').trim().toLowerCase() === fallbackTorre.toLowerCase())
-            .map(r => String(r[2] || '').trim())
+          dbUnits
+            .filter(u => String(u.torre || '').trim().toLowerCase() === fallbackTorre.toLowerCase())
+            .map(u => String(u.unidade || '').trim())
             .filter(u => u !== '')
         ));
 
@@ -226,9 +250,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         onUnitSelectChange(currentProd.id, { torre: fallbackTorre, unidade: newUnidade });
       } else {
         const unitsOfCurrent = Array.from(new Set(
-          tableRows
-            .filter(r => String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase())
-            .map(r => String(r[2] || '').trim())
+          dbUnits
+            .filter(u => String(u.torre || '').trim().toLowerCase() === selectedTorre.toLowerCase())
+            .map(u => String(u.unidade || '').trim())
             .filter(u => u !== '')
         ));
 
@@ -245,36 +269,37 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
       }
     }
-  }, [availableTorres, currentProd?.id, currentCond?.id]);
+  }, [availableTorres, currentProd?.id, currentCond?.id, dbUnits]);
 
   const filteredUnits = selectedTorre 
     ? Array.from(new Set(
-        tableRows
-          .filter(r => String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase())
-          .map(r => String(r[2] || '').trim())
+        dbUnits
+          .filter(u => String(u.torre || '').trim().toLowerCase() === selectedTorre.toLowerCase())
+          .map(u => String(u.unidade || '').trim())
           .filter(u => u !== '')
       ))
     : [];
 
   const matchingRow = (selectedTorre && selectedUnidade)
-    ? tableRows.find(r => 
-        String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase() &&
-        String(r[2] || '').trim().toLowerCase() === selectedUnidade.toLowerCase()
+    ? dbUnits.find(u => 
+        String(u.torre || '').trim().toLowerCase() === selectedTorre.toLowerCase() &&
+        String(u.unidade || '').trim().toLowerCase() === selectedUnidade.toLowerCase()
       )
     : null;
 
   const hasUnitSelected = Boolean(selectedTorre && selectedUnidade && matchingRow);
 
-  const fase = matchingRow ? String(matchingRow[0] || '1ª') : '-';
-  const tipologia = matchingRow ? String(matchingRow[5] || '2 Quartos') : '-';
-  const areaPriv = matchingRow ? formatM2(matchingRow[3]) : '0,00 m²';
-  const areaQuintal = matchingRow ? formatM2(matchingRow[4]) : '0,00 m²';
+  // Mapeamento dos atributos vindos do Supabase / Mocks
+  const fase = matchingRow ? String(matchingRow.status || '1ª') : '-';
+  const tipologia = matchingRow ? String(matchingRow.tipologia || '2 Quartos') : '-';
+  const areaPriv = matchingRow ? `${Number(matchingRow.area_privativa || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits:2})} m²` : '0,00 m²';
+  const areaQuintal = matchingRow ? `${Number(matchingRow.quintal || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits:2})} m²` : '0,00 m²';
 
-  const price = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[7]) : 0;
-  const evaluation = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[6]) : 0;
+  const price = hasUnitSelected && matchingRow ? Number(matchingRow.preco_tabela || 0) : 0;
+  const evaluation = hasUnitSelected && matchingRow ? Number(matchingRow.avaliacao_bancaria || 0) : 0;
 
   const itbiValTabela = (hasUnitSelected && matchingRow) 
-    ? (isFirstHomeLocal ? parseCurrency(matchingRow[8]) : parseCurrency(matchingRow[9]))
+    ? (isFirstHomeLocal ? Number(matchingRow.itbi_primeiro_imovel || 0) : Number(matchingRow.itbi_total || 0))
     : 0;
 
   const handleTorreChange = (torre: string) => {
@@ -474,7 +499,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
   // Desconto do Ato Premiado baseado no Ato Efetivo
   const descontoAtoPremiadoCalculado = calcularDescontoAtoPremiado(valorAtoEfetivo);
-  const descontoAto = (!isAtoZerado && isAtoPremiadoEnabled) ? descontoAtoPremiadoCalculado : 0;
+  const descontoAto = (!isAtoZerado && isAtoPremiadoEnabled) 
+    ? (valAtoManual !== null ? descontoAtoPremiadoCalculado : (morarEngineBase?.atoPremiado ?? 0))
+    : 0;
 
   // =========================================================================
   // CASCATA COMPLETA DE AMORTIZAÇÃO PROGRESSIVA (REGRA MORAR):
@@ -576,6 +603,109 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // DIFERENÇA EM TEMPO REAL ENTRE DISTRIBUÍDO E COM ITBI
   const diferencaDistribuicao = Math.round((totalDistribuido - sinalTotalComITBIEfetivo) * 100) / 100;
   const isDistribuicaoValidada = hasUnitSelected && Math.abs(diferencaDistribuicao) <= 0.10;
+
+  // INDICADORES DE RISCO E COMPROMETIMENTO
+  const baseLiquidaComITBI = hasUnitSelected ? Math.max(0, (price + despCartoriasEfetivas) - descontoAto) : 0;
+  const baseRendaInformada = income;
+  const nomeFaixaRenda = currentCond?.name || 'Não informada';
+  
+  // Limites da Política
+  const limiteMaximoRiscoRenda = currentCond?.riscoRendaPct ?? 0;
+  const limiteMaximoProSoluto = currentCond?.percMaxProSolutoGlobal ?? currentCond?.riscoImovelPct ?? 17.0;
+
+  // 1ª Parcela sobre a Base da Renda
+  const primeiraParcelaObraLiquida = faixasObra.length > 0 ? (Number(faixasObra[0].valor) || 0) : 0;
+  const valorRiscoParcela = hasUnitSelected ? (primeiraParcelaObraLiquida + (itbiObraTotalMeses > 0 ? itbiParcelaObraValor : 0)) : 0;
+  const pctRiscoParcelaRenda = (baseRendaInformada > 0 && valorRiscoParcela > 0) ? Math.min(100, Math.max(0, (valorRiscoParcela / baseRendaInformada) * 100)) : 0;
+
+  // Pró-Soluto Total c/ ITBI s/ Base Líquida
+  const valorRiscoProSoluto = totalFaseObraComITBI + totalFasePosComITBI;
+  const pctRiscoProSoluto = (baseLiquidaComITBI > 0 && valorRiscoProSoluto > 0) ? Math.min(100, Math.max(0, (valorRiscoProSoluto / baseLiquidaComITBI) * 100)) : 0;
+
+  // Função auxiliar para renderizar Gráficos de Pizza Sólidos com percentuais internos refinados
+  const renderSolidPie = (
+    pct: number,
+    colorPrimary: string,
+    colorSecondary: string = '#cbd5e1',
+    primaryTextColor: string = '#ffffff',
+    secondaryTextColor: string = '#1e293b'
+  ) => {
+    const cx = 50;
+    const cy = 50;
+    const r = 40;
+    const clampedPct = Math.min(100, Math.max(0, pct));
+    const restPct = Math.max(0, 100 - clampedPct);
+
+    const formatPct = (val: number) => {
+      return (val < 10 && val > 0) ? val.toFixed(2) : val.toFixed(1);
+    };
+
+    if (clampedPct >= 100) {
+      return (
+        <svg
+          className="w-24 h-24 sm:w-28 sm:h-28 mx-auto select-none overflow-visible block"
+          viewBox="-10 -10 120 120"
+        >
+          <circle cx={cx} cy={cy} r={r} fill={colorPrimary} />
+          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fill={primaryTextColor} fontSize="10" fontWeight="bold">
+            100.0%
+          </text>
+        </svg>
+      );
+    }
+
+    if (clampedPct <= 0) {
+      return (
+        <svg
+          className="w-24 h-24 sm:w-28 sm:h-28 mx-auto select-none overflow-visible block"
+          viewBox="-10 -10 120 120"
+        >
+          <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
+          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fill={secondaryTextColor} fontSize="10" fontWeight="bold">
+            0.0%
+          </text>
+        </svg>
+      );
+    }
+
+    const angle = (clampedPct / 100) * 360;
+    const rad = (angle - 90) * (Math.PI / 180);
+    const x = cx + r * Math.cos(rad);
+    const y = cy + r * Math.sin(rad);
+    const largeArcFlag = clampedPct > 50 ? 1 : 0;
+
+    const pathD = `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${largeArcFlag} 1 ${x} ${y} Z`;
+
+    const calcCentroidRadius = (sliceAngleDeg: number) => {
+      const theta = (sliceAngleDeg * Math.PI) / 180;
+      if (theta <= 0.001) return r * 0.58;
+      const factor = (2 / 3) * (Math.sin(theta / 2) / (theta / 2));
+      return r * Math.min(0.68, Math.max(0.48, factor));
+    };
+
+    const midAngle1 = angle / 2;
+    const rLabel1 = calcCentroidRadius(angle);
+    const rad1 = (midAngle1 - 90) * (Math.PI / 180);
+    const textX1 = cx + rLabel1 * Math.cos(rad1);
+    const textY1 = cy + rLabel1 * Math.sin(rad1);
+
+    return (
+      <svg
+        className="w-24 h-24 sm:w-28 sm:h-28 mx-auto select-none overflow-visible block"
+        viewBox="-12 -12 124 124"
+      >
+        <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
+        <path d={pathD} fill={colorPrimary} />
+        <line x1={cx} y1={cy} x2={cx} y2={cy - r} stroke="#ffffff" strokeWidth="1.5" />
+        <line x1={cx} y1={cy} x2={x} y2={y} stroke="#ffffff" strokeWidth="1.5" />
+        {clampedPct >= 14 ? (
+          <text x={textX1} y={textY1} textAnchor="middle" dominantBaseline="central" fill={primaryTextColor} fontSize="10" fontWeight="bold">
+            {formatPct(clampedPct)}%
+          </text>
+        ) : null}
+      </svg>
+    );
+  };
 
   // CURVA OFICIAL MORAR DE DISTRIBUIÇÃO AUTOMÁTICA
   // Calcula dinamicamente as séries por teto de renda, extração do ITBI e fechamento do ato residual
@@ -1104,7 +1234,126 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         ? formatDeliveryText(currentProd.deliveryDatePhase1)
         : '';
 
-  const hasTable = tableRows.length > 0;
+  const hasTable = dbUnits.length > 0;
+
+  const pctObra = baseLiquidaComITBI > 0 ? (totalFaseObraComITBI / baseLiquidaComITBI) * 100 : 0;
+  const pctPos = baseLiquidaComITBI > 0 ? (totalFasePosComITBI / baseLiquidaComITBI) * 100 : 0;
+  const pctProSoluto = pctObra + pctPos;
+  
+  const pieData1 = [
+    { name: 'Total Pró-Soluto', value: pctProSoluto, fill: '#059669', label: `${pctProSoluto.toFixed(2)}%` },
+    { name: 'Total Obra', value: pctObra, fill: '#0284C7', label: `${pctObra.toFixed(2)}%` },
+    { name: 'Total Pós-Obra', value: pctPos, fill: '#6366F1', label: `${pctPos.toFixed(2)}%` }
+  ].filter(d => d.value > 0);
+
+  const pieData2 = [
+    { name: 'Total Pró-Soluto', value: totalFaseObraComITBI + totalFasePosComITBI, fill: '#059669', label: formatCurrency(totalFaseObraComITBI + totalFasePosComITBI) },
+    { name: 'Total Obra', value: totalFaseObraComITBI, fill: '#0284C7', label: formatCurrency(totalFaseObraComITBI) },
+    { name: 'Total Pós-Obra', value: totalFasePosComITBI, fill: '#6366F1', label: formatCurrency(totalFasePosComITBI) }
+  ].filter(d => d.value > 0);
+
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, index, payload }: any) => {
+    if (payload.value <= 0) return null;
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize="13" fontWeight="bold">
+        {payload.label}
+      </text>
+    );
+  };
+
+  const barData = [0, 1, 2, 3, 4, 5].map(idx => {
+    const oSerie = morarEngineBase?.obraSeries[idx] || { qtd: 0, parcelaBrutaFinal: 0 };
+    const pSerie = morarEngineBase?.posSeries[idx] || { qtd: 0, parcelaBrutaFinal: 0 };
+    const qtdTotal = oSerie.qtd + pSerie.qtd;
+    const parcelaBruta = oSerie.qtd > 0 ? oSerie.parcelaBrutaFinal : pSerie.parcelaBrutaFinal;
+    const subtotalBruto = qtdTotal * parcelaBruta;
+    const percBase = baseLiquidaComITBI > 0 ? (subtotalBruto / baseLiquidaComITBI) * 100 : 0;
+    const percRenda = income > 0 ? (parcelaBruta / income) * 100 : 0;
+
+    return {
+      name: `Série ${idx + 1}`,
+      percBase: Number(percBase.toFixed(2)),
+      percBaseRaw: percBase,
+      parcelaBruta,
+      percRenda: Number(percRenda.toFixed(2)),
+      percRendaRaw: percRenda,
+      qtdTotal,
+      labelFormatado: `${percRenda.toFixed(2)}%`
+    };
+  }).filter(d => d.qtdTotal > 0);
+
+  const CustomBarTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-200 text-xs z-50 relative">
+          <strong className="block text-slate-800 mb-1">{data.name}</strong>
+          <div className="space-y-1">
+            <div className="flex justify-between gap-4"><span className="text-slate-500">Parcela:</span><strong className="text-slate-800">{formatCurrency(data.parcelaBruta)}</strong></div>
+            <div className="flex justify-between gap-4"><span className="text-slate-500">Renda:</span><strong className="text-slate-800">{formatCurrency(income)}</strong></div>
+            <div className="flex justify-between gap-4 pt-1 border-t border-slate-100"><span className="text-slate-500 font-semibold">Comprometimento:</span><strong className="text-rose-600">{data.percRenda}%</strong></div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const [isSavingSimulation, setIsSavingSimulation] = useState<boolean>(false);
+
+  const handleSaveSimulation = async () => {
+    if (!currentProd) return;
+    setIsSavingSimulation(true);
+    try {
+      const dadosCompletos = {
+        empreendimento_nome: currentProd.name,
+        condicao_nome: currentCond?.name || '',
+        torre: selectedTorre || 'Não Selecionada',
+        unidade: selectedUnidade || 'Não Selecionada',
+        cliente_nome: simulationData.clientName || 'Cliente Não Informado',
+        renda: income,
+        preco_tabela: price,
+        avaliacao_bancaria: evaluation,
+        itbi_total: itbiValTabela,
+        financiamento_maximo: maxFinancEfetivo,
+        subsidio: subsidyEfetivo,
+        fgts: fgtsEfetivo,
+        recurso_proprio: simulationData.ownResource || 0,
+        ato_bruto: valorAtoEfetivo,
+        desconto_ato_premiado: descontoAto,
+        ato_liquido: valorAtoEfetivo - descontoAto,
+        itbi_no_ato: atoITBIValidado,
+        total_obra: totalFaseObraComITBI,
+        total_pos_obra: totalFasePosComITBI,
+        pro_soluto_total: totalFaseObraComITBI + totalFasePosComITBI,
+        faixas_obra: faixasObra,
+        faixas_pos: faixasPos,
+        salvo_em: new Date().toISOString()
+      };
+
+      const res = await imoveisService.salvarSimulacao({
+        cliente_nome: simulationData.clientName || 'Cliente Não Informado',
+        renda: income,
+        empreendimento_id: currentProd.id,
+        dados: dadosCompletos
+      });
+
+      if (res.success) {
+        onShowToast(`Proposta de ${simulationData.clientName || 'simulação'} salva no Supabase com sucesso!`);
+      } else {
+        onShowToast(`Proposta registrada: ${res.error || 'Aviso de sincronização'}`);
+      }
+    } catch (e: any) {
+      onShowToast(`Erro ao salvar simulação: ${e?.message || 'Falha na conexão'}`);
+    } finally {
+      setIsSavingSimulation(false);
+    }
+  };
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
@@ -1177,8 +1426,28 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           </div>
         </div>
 
-        {/* BOTÃO EXPORTAR PDF / IMPRIMIR */}
+        {/* BOTÕES DE AÇÃO: SALVAR SIMULAÇÃO & EXPORTAR PDF */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSaveSimulation}
+            disabled={isSavingSimulation}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm shadow-emerald-500/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Salvar proposta/simulação no banco Supabase"
+          >
+            {isSavingSimulation ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Salvando...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-3.5 h-3.5" />
+                <span>Salvar Simulação</span>
+              </>
+            )}
+          </button>
+
           <button
             type="button"
             onClick={() => setIsPdfModalOpen(true)}
@@ -1461,6 +1730,101 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             <p>
               <strong>Obs:</strong> As parcelas que compõem o sinal e ITBI tem vencimento juntas, ou seja, na mesma data.
             </p>
+          </div>
+
+          {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO */}
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+            {/* Cabeçalho de Bases Compartilhadas */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <PieChart className="w-4 h-4" />
+                </div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  4. Indicadores de Risco / Comprometimento
+                </h3>
+              </div>
+              <div className="flex items-center flex-wrap gap-2 text-[10px]">
+                <div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-600">
+                  <span className="text-slate-400 font-medium">Base Líq. c/ ITBI:</span>
+                  <strong className="font-bold text-slate-800">{formatCurrency(baseLiquidaComITBI)}</strong>
+                </div>
+                <div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-600">
+                  <span className="text-slate-400 font-medium">Base Renda:</span>
+                  <strong className="font-bold text-slate-800">{formatCurrency(baseRendaInformada)}</strong>
+                </div>
+                <div className="flex items-center gap-1 bg-sky-50 px-2 py-0.5 rounded border border-sky-100 text-sky-700">
+                  <span className="font-semibold tracking-tight truncate max-w-[120px]" title={nomeFaixaRenda}>{nomeFaixaRenda}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* GRÁFICOS DE PIZZA LADO A LADO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* SUB-CARD 1: RISCO PARCELA / COMPROMETIMENTO */}
+              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between space-y-1">
+                <div className="border-b border-slate-200/60 pb-1 text-center">
+                  <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'bg-red-500' : 'bg-sky-600'}`} />
+                    Risco Parcela / Renda
+                  </h4>
+                  <p className="text-[9.5px] text-slate-500 mt-0.5">
+                    1ª Parcela sobre a Base da Renda
+                  </p>
+                </div>
+
+                <div className="py-1 flex items-center justify-center overflow-visible">
+                  {renderSolidPie(pctRiscoParcelaRenda, pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? '#ef4444' : '#0284c7', '#cbd5e1')}
+                </div>
+
+                <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
+                  <div className="flex items-center justify-between px-1 text-[10px]">
+                    <span className="text-slate-500 font-medium">Comprometimento:</span>
+                    <strong className={`font-bold ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'text-red-600' : 'text-sky-700'}`}>
+                      {pctRiscoParcelaRenda < 10 && pctRiscoParcelaRenda > 0 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between px-1 text-[10px]">
+                    <span className="text-slate-500 font-medium">1ª Parcela:</span>
+                    <strong className="text-slate-800 font-semibold">
+                      {formatCurrency(valorRiscoParcela)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* SUB-CARD 2: RISCO PRÓ-SOLUTO TOTAL */}
+              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between space-y-1">
+                <div className="border-b border-slate-200/60 pb-1 text-center">
+                  <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${pctRiscoProSoluto > limiteMaximoProSoluto ? 'bg-red-500' : 'bg-indigo-600'}`} />
+                    Risco Pró-Soluto Total
+                  </h4>
+                  <p className="text-[9.5px] text-slate-500 mt-0.5">
+                    Pró-Soluto Total c/ ITBI s/ Base Líquida
+                  </p>
+                </div>
+
+                <div className="py-1 flex items-center justify-center overflow-visible">
+                  {renderSolidPie(pctRiscoProSoluto, pctRiscoProSoluto > limiteMaximoProSoluto ? '#ef4444' : '#4f46e5', '#cbd5e1')}
+                </div>
+
+                <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
+                  <div className="flex items-center justify-between px-1 text-[10px]">
+                    <span className="text-slate-500 font-medium">Comprometimento:</span>
+                    <strong className={`font-bold ${pctRiscoProSoluto > limiteMaximoProSoluto ? 'text-red-600' : 'text-indigo-700'}`}>
+                      {pctRiscoProSoluto < 10 && pctRiscoProSoluto > 0 ? pctRiscoProSoluto.toFixed(2) : pctRiscoProSoluto.toFixed(1)}%
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between px-1 text-[10px]">
+                    <span className="text-slate-500 font-medium">Pró-Soluto Total:</span>
+                    <strong className="text-slate-800 font-semibold">
+                      {formatCurrency(valorRiscoProSoluto)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2060,6 +2424,83 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         </div>
 
       </div>
+
+      {/* ANÁLISE DETALHADA DE RISCO E SÉRIES */}
+      {hasUnitSelected && (
+        <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-5 mt-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+            <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+              <PieChart className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+              Análise Detalhada de Risco e Séries
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Gráfico 1: Percentual */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
+              <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-2 tracking-wide">Percentual de Risco por Fase</h4>
+              <div className="w-full h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPieChart>
+                    <Pie data={pieData1} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={115} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderCustomizedLabel}>
+                      {pieData1.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                    </Pie>
+                    <RechartsTooltip formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]} />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 flex items-center justify-center gap-4 text-xs font-medium text-slate-500 flex-wrap">
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0284C7]"></span>Total Obra</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#6366F1]"></span>Total Pós-Obra</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#059669]"></span>Total Pró-Soluto</span>
+              </div>
+            </div>
+
+            {/* Gráfico 2: Valor R$ */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
+              <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-2 tracking-wide">Volume Financeiro por Fase (R$)</h4>
+              <div className="w-full h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPieChart>
+                    <Pie data={pieData2} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={115} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderCustomizedLabel}>
+                      {pieData2.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                    </Pie>
+                    <RechartsTooltip formatter={(value: number, name: string) => [formatCurrency(value), name]} />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 flex items-center justify-center gap-4 text-xs font-medium text-slate-500 flex-wrap">
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0284C7]"></span>Total Obra</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#6366F1]"></span>Total Pós-Obra</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#059669]"></span>Total Pró-Soluto</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Gráfico 3: BarChart Funil */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-4 tracking-wide">Comprometimento por Série (Parcela / Renda)</h4>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" width={50} tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                  <RechartsTooltip content={<CustomBarTooltip />} cursor={{ fill: '#f1f5f9' }} />
+                  <Bar dataKey="percRendaRaw" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={24}>
+                    {barData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={['#312e81', '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8'][index % 6]} />
+                    ))}
+                    <LabelList dataKey="labelFormatado" fill="#FFFFFF" fontSize={11} fontWeight="bold" position="insideRight" offset={10} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE EXPORTAÇÃO PDF ESPECÍFICO MORAR */}
       {isPdfModalOpen && (
