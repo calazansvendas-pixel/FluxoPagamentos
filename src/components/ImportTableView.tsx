@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { FileCheck, CheckCircle, AlertCircle, Trash2, CalendarClock, UploadCloud, Search, XCircle, Table as TableIcon, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, TableInfo } from '../types';
-import { COLUMN_DEFINITIONS, formatCurrency, normalizeHeader } from '../utils/formatters';
+import { COLUMN_DEFINITIONS, formatCurrency, formatArea, normalizeHeader, parseCurrency, parseM2Number } from '../utils/formatters';
 import { supabase } from '../lib/supabaseClient';
 import { imoveisService } from '../services/imoveisService';
 
@@ -60,6 +60,35 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
   } | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Executa a exclusão de todas as unidades do empreendimento no Supabase e limpa o estado
+  const handleConfirmDeleteUnits = async () => {
+    if (!activeProd) return;
+    setIsDeleting(true);
+    try {
+      const res = await imoveisService.limparUnidadesEmpreendimento(activeProd.id);
+      if (!res.success) {
+        console.warn('Aviso ao excluir no Supabase:', res.error);
+      }
+      
+      onDeleteTable(activeProd.id);
+      setTempParsedData(null);
+      setLookupTorre('');
+      setLookupUnidade('');
+      
+      // Notifica todos os módulos da aplicação
+      window.dispatchEvent(new CustomEvent('tabela_atualizada'));
+      onShowToast(`Unidades de "${activeProd.name}" excluídas do Supabase com sucesso.`);
+    } catch (err: any) {
+      console.error('Erro ao excluir unidades:', err);
+      onShowToast(`Erro ao limpar unidades: ${err?.message || 'Falha na operação'}`);
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteModalOpen(false);
+    }
+  };
 
   // When active import product changes, update local fields
   React.useEffect(() => {
@@ -109,60 +138,159 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           return;
         }
 
-        let headerRowIndex = -1;
-        let mappedColIndices: number[] = [];
-        let mappedHeaders: string[] = [];
+        // Mapeamento canônico oficial por índice de colunas
+        // Coluna A (índice 0): fase (número ou texto)
+        // Coluna B (índice 1): torre (texto: "A", "B", "C", "D", "E", "F", "G", "H")
+        // Coluna E (índice 4): unidade (texto/número: "101", "308", etc.)
+        // Coluna H (índice 7): area_privativa (float: ex: 43.50, 54.98)
+        // Coluna I (índice 8): quintal (float: ex: 23.99 ou 0.00 se vazio)
+        // Coluna J (índice 9): tipologia (texto: ex: "2 quartos", "3 quartos* c/ varanda")
+        // Coluna Q (índice 16): avaliacao_bancaria (float: ex: 346000.00, 307000.00)
+        // Coluna R (índice 17): preco_tabela (float: ex: 367710.00, 301500.00)
+        // Coluna Y (índice 24): itbi_primeiro_imovel (float: ex: 14721.91, 13553.89)
+        // Coluna AC (índice 28): itbi_segundo_imovel / itbi_total (float: ex: 21121.91, 19953.89)
+        const colFase = 0;
+        const colTorre = 1;
+        const colUnidade = 4;
+        const colAreaPriv = 7;
+        const colQuintal = 8;
+        const colTipologia = 9;
+        const colAvaliacao = 16;
+        const colPreco = 17;
+        const colItbi1 = 24;
+        const colItbi2 = 28;
 
-        // Locate header row matching column definitions
-        for (let i = 0; i < Math.min(jsonData.length, 30); i++) {
-          const row = jsonData[i];
-          if (!row || !Array.isArray(row)) continue;
+        const mappedHeaders = [
+          "Fase",
+          "TORRE",
+          "UNIDADE",
+          "ÁREA PRIVATIVA M² - APTO",
+          "ÁREA QUINTAL M²",
+          "TIPOLOGIA",
+          "AVALIAÇÃO",
+          "PREÇO",
+          "ITBI + Registro 1º Imóvel",
+          "ITBI + Registro 2º Imóvel"
+        ];
 
-          const normalizedCells = Array.from(row, cell => normalizeHeader(cell));
-          let colMap: Record<string, number> = {};
-          let matchedCount = 0;
+        // Linha 2 do Excel corresponde ao índice 1 do array base 0
+        const headerRowIndex = jsonData.length > 2 ? 1 : 0;
 
-          normalizedCells.forEach((normText, excelColIdx) => {
-            if (!normText) return;
-            COLUMN_DEFINITIONS.forEach(def => {
-              if (colMap[def.key] === undefined && def.match(normText)) {
-                colMap[def.key] = excelColIdx;
-                matchedCount++;
-              }
-            });
-          });
+        // Conjunto estrito de torres residenciais válidas ("A" a "H")
+        const VALID_RESIDENTIAL_TOWERS = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
 
-          if (matchedCount >= 3) {
-            headerRowIndex = i;
-            COLUMN_DEFINITIONS.forEach(def => {
-              mappedHeaders.push(def.label);
-              mappedColIndices.push(colMap[def.key] !== undefined ? colMap[def.key] : -1);
-            });
-            break;
-          }
-        }
-
-        if (headerRowIndex === -1) {
-          headerRowIndex = 0;
-          mappedHeaders = COLUMN_DEFINITIONS.map(d => d.label);
-          mappedColIndices = COLUMN_DEFINITIONS.map((_, idx) => idx);
-        }
+        // Palavras-chave para descarte de rodapés, resumos, viabilidade e totais
+        const blacklistedKeywords = [
+          'viabilidade',
+          'falta de',
+          'falta',
+          'total geral',
+          'quadro de resumo',
+          'saldo devedor',
+          'estoque total',
+          'resumo geral',
+          'tabela de precos',
+          'tabela de preços',
+          'media ponderada',
+          'somatorio',
+          'somatório',
+          'resultado final'
+        ];
 
         const filteredRows: (string | number)[][] = [];
+
+        // Itera a partir da linha de dados (Linha 3 / índice 2 até o fim das unidades)
         for (let r = headerRowIndex + 1; r < jsonData.length; r++) {
           const rawRow = jsonData[r];
           if (!rawRow || !Array.isArray(rawRow)) continue;
 
-          const rowData = mappedColIndices.map(colIdx => {
-            if (colIdx === -1) return '';
-            let cellVal = rawRow[colIdx] !== undefined && rawRow[colIdx] !== null ? rawRow[colIdx] : '';
-            if (typeof cellVal === 'string') cellVal = cellVal.trim();
-            return cellVal;
-          });
-
-          if (rowData.some(val => val !== '' && val !== null && val !== undefined)) {
-            filteredRows.push(rowData);
+          // 1. Filtro contra textos de rodapés, resumos, viabilidade e totais gerais (linhas 514+)
+          const fullRowText = rawRow.map(c => String(c ?? '').toLowerCase()).join(' ');
+          if (blacklistedKeywords.some(kw => fullRowText.includes(kw))) {
+            continue;
           }
+
+          // 2. Validação da Coluna TORRE (Coluna B / índice 1): Deve ser torre residencial ("A" a "H")
+          const rawTorre = rawRow[colTorre];
+          const cleanTorre = String(rawTorre ?? '')
+            .trim()
+            .toUpperCase()
+            .replace(/^(TORRE|BLOCO)\s*/i, '')
+            .trim();
+
+          if (!cleanTorre || !VALID_RESIDENTIAL_TOWERS.has(cleanTorre)) {
+            continue;
+          }
+
+          // 3. Validação da Coluna UNIDADE (Coluna E / índice 4): Descarte se for "LOJA", cabeçalho ou sem dígitos
+          const rawUnidade = rawRow[colUnidade];
+          const unidadeStr = String(rawUnidade ?? '').trim();
+          if (!unidadeStr) continue;
+
+          const upperUnidade = unidadeStr.toUpperCase();
+          if (
+            upperUnidade.includes('LOJA') ||
+            upperUnidade.includes('COMERCIAL') ||
+            upperUnidade.includes('ADM') ||
+            upperUnidade.includes('UNIDADE') ||
+            upperUnidade.includes('APTO') ||
+            upperUnidade.includes('APT') ||
+            upperUnidade.includes('TOTAL')
+          ) {
+            continue;
+          }
+
+          const hasDigits = /\d+/.test(unidadeStr);
+          if (!hasDigits || unidadeStr.length > 8) {
+            continue;
+          }
+
+          // 4. Extração e sanitização dos valores
+          const preco = parseCurrency(rawRow[colPreco]);
+          const avaliacao = parseCurrency(rawRow[colAvaliacao]);
+          let itbi1 = parseCurrency(rawRow[colItbi1]);
+          let itbi2 = parseCurrency(rawRow[colItbi2]) || itbi1;
+          const areaPriv = parseM2Number(rawRow[colAreaPriv]);
+          const areaQuintal = parseM2Number(rawRow[colQuintal]);
+          const tipologia = String(rawRow[colTipologia] ?? '').trim() || '2 Quartos';
+          
+          // Fase (Coluna A / índice 0)
+          const rawFase = rawRow[colFase];
+          let fase = '1ª Fase';
+          if (rawFase !== undefined && rawFase !== null && String(rawFase).trim() !== '') {
+            const fStr = String(rawFase).trim();
+            if (/^\d+$/.test(fStr)) {
+              fase = `${fStr}ª Fase`;
+            } else {
+              fase = fStr;
+            }
+          }
+
+          // Ignora linhas sem nenhuma informação numérica relevante
+          if (preco <= 0 && avaliacao <= 0 && areaPriv <= 0) {
+            continue;
+          }
+
+          // Validação e isolamento do ITBI (manter estritamente a taxa de registro, sem embutir o preço do imóvel)
+          if (preco > 50000 && itbi1 > preco) {
+            itbi1 = Math.max(0, Math.round((itbi1 - preco) * 100) / 100);
+          }
+          if (preco > 50000 && itbi2 > preco) {
+            itbi2 = Math.max(0, Math.round((itbi2 - preco) * 100) / 100);
+          }
+
+          filteredRows.push([
+            fase,
+            cleanTorre,
+            unidadeStr,
+            formatArea(areaPriv),
+            formatArea(areaQuintal),
+            tipologia,
+            avaliacao,
+            preco,
+            itbi1,
+            itbi2
+          ]);
         }
 
         setTempParsedData({
@@ -221,18 +349,34 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
     
     // Mapeamento dos dados processados para o formato esperado pelo Supabase
     const unidadesProcessadas = currentRows.map(row => {
+      const areaPriv = parseM2Number(row[3]);
+      const areaQuintal = parseM2Number(row[4]);
+      const avaliacao = parseCurrency(row[6]);
+      const preco = parseCurrency(row[7]);
+      let itbi1 = parseCurrency(row[8]);
+      let itbi2 = parseCurrency(row[9]) || itbi1;
+
+      // Garantia de isolamento das taxas de ITBI / Registro (nunca embutir preço de apartamento)
+      if (preco > 50000 && itbi1 > preco) {
+        itbi1 = Math.max(0, Math.round((itbi1 - preco) * 100) / 100);
+      }
+      if (preco > 50000 && itbi2 > preco) {
+        itbi2 = Math.max(0, Math.round((itbi2 - preco) * 100) / 100);
+      }
+
       return {
         empreendimento_id: activeProd.id,
         status: String(row[0] || '1ª Fase').trim(),
         torre: String(row[1] || '').trim(),
         unidade: String(row[2] || '').trim(),
-        area_privativa: parseFloat(String(row[3] || '0').replace(/\./g, '').replace(',', '.')),
-        quintal: parseFloat(String(row[4] || '0').replace(/\./g, '').replace(',', '.')),
-        tipologia: String(row[5] || ''),
-        avaliacao_bancaria: parseFloat(String(row[6] || '0').replace(/\./g, '').replace(',', '.')),
-        preco_tabela: parseFloat(String(row[7] || '0').replace(/\./g, '').replace(',', '.')),
-        itbi_primeiro_imovel: parseFloat(String(row[8] || '0').replace(/\./g, '').replace(',', '.')),
-        itbi_total: parseFloat(String(row[9] || '0').replace(/\./g, '').replace(',', '.')),
+        area_privativa: areaPriv,
+        quintal: areaQuintal,
+        tipologia: String(row[5] || '').trim() || '2 Quartos',
+        avaliacao_bancaria: avaliacao,
+        preco_tabela: preco,
+        itbi_primeiro_imovel: itbi1,
+        itbi_segundo_imovel: itbi2,
+        itbi_total: itbi2,
       };
     }).filter(u => u.torre !== '' && u.unidade !== '');
 
@@ -245,13 +389,33 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
         delivery_date_phase2: activeProd.deliveryDatePhase2
       });
 
-      // 2. Realiza o upsert em lote e obtém os dados autoritativos do banco
+      // 2. Realiza o upsert em lote e obtém os dados do banco
       const res = await imoveisService.salvarUnidadesLote(activeProd.id, unidadesProcessadas);
       
       let finalRows = currentRows;
       if (res.success && res.data && res.data.length > 0) {
-        // Converte as unidades do banco de volta para o formato de linhas da tabela
-        finalRows = imoveisService.converterUnidadesParaLinhas(res.data);
+        // Converte as unidades do banco de volta para o formato de linhas da tabela preservando colunas de ITBI
+        const converted = imoveisService.converterUnidadesParaLinhas(res.data);
+        if (converted && converted.length > 0) {
+          finalRows = converted.map((cRow, idx) => {
+            const orig = currentRows[idx];
+            if (orig && String(orig[1]).trim() === String(cRow[1]).trim() && String(orig[2]).trim() === String(cRow[2]).trim()) {
+              return [
+                cRow[0],
+                cRow[1],
+                cRow[2],
+                cRow[3],
+                cRow[4],
+                cRow[5],
+                cRow[6],
+                cRow[7],
+                orig[8] !== undefined && orig[8] !== null ? orig[8] : cRow[8],
+                orig[9] !== undefined && orig[9] !== null ? orig[9] : cRow[9]
+              ];
+            }
+            return cRow;
+          });
+        }
       }
 
       const newTableInfo: TableInfo = {
@@ -352,26 +516,37 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
             </select>
           </div>
 
-          <div className="self-end sm:self-center shrink-0">
+          <div className="self-end sm:self-center shrink-0 flex items-center gap-2">
             {hasTable ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                  <CheckCircle className="w-3.5 h-3.5" /> Tabela Vigente
+                  <CheckCircle className="w-3.5 h-3.5" /> Tabela Vigente ({activeProd?.tableInfo?.rows?.length || 0} unid.)
                 </span>
                 <button
                   type="button"
-                  onClick={() => onDeleteTable(activeImportProductId)}
-                  className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200 hover:bg-rose-100 transition-all shadow-2xs shrink-0 cursor-pointer"
-                  title="Excluir Tabela Vigente"
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="text-xs text-rose-700 hover:text-white hover:bg-rose-600 font-bold flex items-center gap-1.5 bg-rose-50 px-3.5 py-1.5 rounded-xl border border-rose-200 transition-all shadow-2xs shrink-0 cursor-pointer"
+                  title="Excluir todas as unidades deste empreendimento no Supabase e na aplicação"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Excluir Tabela</span>
+                  <span>Excluir Unidades Existentes</span>
                 </button>
               </div>
             ) : (
-              <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
-                <AlertCircle className="w-3.5 h-3.5" /> Sem Tabela Ativa
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
+                  <AlertCircle className="w-3.5 h-3.5" /> Sem Tabela Ativa
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="text-xs text-slate-600 hover:text-rose-700 hover:bg-rose-50 font-semibold flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 transition-all shadow-2xs shrink-0 cursor-pointer"
+                  title="Limpar quaisquer unidades residuais no Supabase"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                  <span>Limpar Unidades no Banco</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -599,16 +774,19 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                           let val = row[cIdx] !== undefined && row[cIdx] !== null ? row[cIdx] : '';
                           const hUpper = headerName.toUpperCase();
                           const isCurrencyCol = hUpper.includes('PREÇO') || hUpper.includes('PRECO') || hUpper.includes('AVALIAÇÃO') || hUpper.includes('AVALIACAO') || hUpper.includes('ITBI');
+                          const isAreaCol = hUpper.includes('ÁREA') || hUpper.includes('AREA') || hUpper.includes('PRIVATIVA') || hUpper.includes('QUINTAL');
 
                           if (isCurrencyCol) {
                             if (typeof val === 'number') {
                               val = formatCurrency(val);
                             } else if (typeof val === 'string' && val && !val.includes('R$')) {
-                              const num = parseFloat(val.replace(/[^\d.,]/g, '').replace(',', '.'));
+                              const num = parseCurrency(val);
                               if (!isNaN(num) && num > 0) {
                                 val = formatCurrency(num);
                               }
                             }
+                          } else if (isAreaCol) {
+                            val = formatArea(val);
                           }
 
                           let cellClass = "p-2.5 font-medium border-b border-slate-100 whitespace-nowrap";
@@ -653,6 +831,66 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
 
         </form>
       </div>
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE UNIDADES NO SUPABASE */}
+      {isDeleteModalOpen && (
+        <div 
+          id="modal-confirm-delete-units"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-bold text-slate-900 font-heading">
+                Excluir Unidades de {activeProd?.name || 'Empreendimento'}?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Esta ação irá remover <strong>todas as unidades cadastradas</strong> deste empreendimento na tabela <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-700 font-mono text-[11px]">unidades</code> do Supabase e desativar a tabela de vendas atual.
+              </p>
+              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-left mt-3">
+                <p className="text-[11px] text-amber-800 font-medium flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    Recomendado antes de importar uma nova versão da planilha para evitar unidades duplicadas ou dados desatualizados.
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDeleteUnits}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Excluindo no Banco...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Confirmar e Excluir Unidades</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

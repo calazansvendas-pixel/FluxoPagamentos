@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
+import { parseM2Number, parseCurrency, formatArea } from '../utils/formatters';
 
 /*
  * SQL DE CRIAÇÃO DO BANCO DE DADOS SUPABASE
@@ -26,17 +27,14 @@ import { INITIAL_PRODUCTS } from '../data/initialProducts';
  *   preco_tabela NUMERIC,
  *   avaliacao_bancaria NUMERIC,
  *   itbi_total NUMERIC,
+ *   itbi_primeiro_imovel NUMERIC,
+ *   itbi_segundo_imovel NUMERIC,
  *   status TEXT
  * );
  * 
- * -- Carga Inicial de Teste (Mock Data - Vista dos Colibris)
- * INSERT INTO empreendimentos (id, nome, delivery_date_phase1, delivery_date_phase2) 
- * VALUES ('11111111-1111-1111-1111-111111111111', 'Vista dos Colibris', '2026-02-28', '2027-02-28');
- * 
- * INSERT INTO unidades (empreendimento_id, torre, unidade, tipologia, area_privativa, quintal, preco_tabela, avaliacao_bancaria, itbi_total, status) VALUES 
- * ('11111111-1111-1111-1111-111111111111', 'D', '303', '2Q', 44.02, 0.00, 241902.00, 218000.00, 4806.00, 'DISPONÍVEL'),
- * ('11111111-1111-1111-1111-111111111111', 'D', '801', '2Q', 42.14, 0.00, 246902.00, 218000.00, 4806.00, 'DISPONÍVEL'),
- * ('11111111-1111-1111-1111-111111111111', 'C', '304', '2Q', 44.02, 0.00, 239902.00, 218000.00, 4806.00, 'DISPONÍVEL');
+ * -- Se sua tabela unidades já existir, execute para adicionar as colunas opcionais:
+ * -- ALTER TABLE unidades ADD COLUMN IF NOT EXISTS itbi_primeiro_imovel NUMERIC;
+ * -- ALTER TABLE unidades ADD COLUMN IF NOT EXISTS itbi_segundo_imovel NUMERIC;
  */
 
 export const imoveisService = {
@@ -47,13 +45,13 @@ export const imoveisService = {
       u.status || '1ª Fase',
       String(u.torre || '').trim(),
       String(u.unidade || '').trim(),
-      `${Number(u.area_privativa || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²`,
-      `${Number(u.quintal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²`,
+      formatArea(u.area_privativa),
+      formatArea(u.quintal),
       u.tipologia || '2 Quartos',
       Number(u.avaliacao_bancaria || 0),
       Number(u.preco_tabela || 0),
-      Number(u.itbi_primeiro_imovel || u.itbi_total || 0),
-      Number(u.itbi_total || 0)
+      Number(u.itbi_primeiro_imovel !== undefined && u.itbi_primeiro_imovel !== null ? u.itbi_primeiro_imovel : (u.itbi_total || 0)),
+      Number(u.itbi_segundo_imovel !== undefined && u.itbi_segundo_imovel !== null ? u.itbi_segundo_imovel : (u.itbi_total || u.itbi_primeiro_imovel || 0))
     ]);
   },
 
@@ -90,16 +88,61 @@ export const imoveisService = {
     }
   },
 
-  // Salva lote de unidades no Supabase e recarrega a lista atualizada
+  // Salva lote de unidades no Supabase e recarrega a lista atualizada com suporte resiliente a esquemas legados
   async salvarUnidadesLote(empId: string, unidades: any[]) {
-    try {
-      const { error } = await supabase
+    if (!unidades || unidades.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // Helper para tentar upsert
+    const tryUpsert = async (payload: any[]) => {
+      return await supabase
         .from('unidades')
-        .upsert(unidades, {
+        .upsert(payload, {
           onConflict: 'empreendimento_id, torre, unidade'
         });
+    };
 
-      if (error) throw error;
+    try {
+      // 1. Tenta salvar com todas as colunas
+      let { error } = await tryUpsert(unidades);
+
+      // 2. Se a coluna 'itbi_segundo_imovel' ou 'itbi_primeiro_imovel' não existir no schema cache do Supabase
+      if (error && (error.code === 'PGRST204' || String(error.message || '').includes('itbi_segundo_imovel'))) {
+        console.warn('Aviso: Coluna itbi_segundo_imovel não encontrada no Supabase. Removendo do payload e tentando novamente...');
+        const payloadSemItbi2 = unidades.map(u => {
+          const { itbi_segundo_imovel, ...rest } = u;
+          return {
+            ...rest,
+            itbi_total: u.itbi_segundo_imovel || u.itbi_total || u.itbi_primeiro_imovel
+          };
+        });
+        const res2 = await tryUpsert(payloadSemItbi2);
+        error = res2.error;
+
+        // Se ainda falhar por falta de itbi_primeiro_imovel
+        if (error && (error.code === 'PGRST204' || String(error.message || '').includes('itbi_primeiro_imovel'))) {
+          console.warn('Aviso: Coluna itbi_primeiro_imovel não encontrada no Supabase. Removendo do payload...');
+          const payloadBase = payloadSemItbi2.map(u => {
+            const { itbi_primeiro_imovel, ...rest } = u;
+            return rest;
+          });
+          const res3 = await tryUpsert(payloadBase);
+          error = res3.error;
+        }
+      } else if (error && (error.code === 'PGRST204' || String(error.message || '').includes('itbi_primeiro_imovel'))) {
+        console.warn('Aviso: Coluna itbi_primeiro_imovel não encontrada no Supabase. Removendo do payload...');
+        const payloadSemItbi1 = unidades.map(u => {
+          const { itbi_primeiro_imovel, ...rest } = u;
+          return rest;
+        });
+        const res3 = await tryUpsert(payloadSemItbi1);
+        error = res3.error;
+      }
+
+      if (error) {
+        throw error;
+      }
 
       // Recarrega unidades diretamente do banco para garantir consistência
       const { data: freshUnits, error: fetchErr } = await supabase
@@ -107,11 +150,35 @@ export const imoveisService = {
         .select('*')
         .eq('empreendimento_id', empId);
 
-      if (fetchErr) throw fetchErr;
+      if (fetchErr) {
+        console.warn('Aviso ao recarregar unidades após upsert:', fetchErr);
+        return { success: true, data: unidades };
+      }
+
       return { success: true, data: freshUnits || unidades };
     } catch (e: any) {
       console.error('Erro no salvamento em lote de unidades no Supabase:', e);
-      return { success: false, error: e?.message || 'Erro ao sincronizar' };
+      return { success: false, error: e?.message || 'Erro ao sincronizar com o banco' };
+    }
+  },
+
+  // Limpa/Exclui todas as unidades vinculadas a um empreendimento específico no Supabase
+  async limparUnidadesEmpreendimento(empId: string) {
+    try {
+      const { error } = await supabase
+        .from('unidades')
+        .delete()
+        .eq('empreendimento_id', empId);
+
+      if (error) {
+        console.error('Erro ao excluir unidades do empreendimento no Supabase:', error);
+        throw error;
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Exceção ao excluir unidades:', e);
+      return { success: false, error: e?.message || 'Falha ao limpar unidades no banco' };
     }
   },
 
@@ -126,7 +193,16 @@ export const imoveisService = {
       if (error || !data || data.length === 0) {
         throw new Error('Fallback para Mock local');
       }
-      return data;
+      return data.map(u => ({
+        ...u,
+        area_privativa: parseM2Number(u.area_privativa),
+        quintal: parseM2Number(u.quintal),
+        preco_tabela: parseCurrency(u.preco_tabela),
+        avaliacao_bancaria: parseCurrency(u.avaliacao_bancaria),
+        itbi_primeiro_imovel: parseCurrency(u.itbi_primeiro_imovel !== undefined && u.itbi_primeiro_imovel !== null ? u.itbi_primeiro_imovel : u.itbi_total),
+        itbi_segundo_imovel: parseCurrency(u.itbi_segundo_imovel !== undefined && u.itbi_segundo_imovel !== null ? u.itbi_segundo_imovel : u.itbi_total),
+        itbi_total: parseCurrency(u.itbi_segundo_imovel !== undefined && u.itbi_segundo_imovel !== null ? u.itbi_segundo_imovel : u.itbi_total)
+      }));
     } catch (e) {
       // Tenta achar o empreendimento nos mocks
       const prod = INITIAL_PRODUCTS.find(p => p.id === empId) || INITIAL_PRODUCTS[0];
@@ -135,18 +211,21 @@ export const imoveisService = {
         return prod.tableInfo.rows.map((row: any[]) => {
           // O formato padrão do CSV no Mock:
           // 0=Fase, 1=Torre, 2=Unidade, 3=Area Priv, 4=Area Quintal, 5=Tipologia, 6=Avaliacao, 7=PrecoTabela, 8=ITBI (1o), 9=ITBI (2o)
+          const itbi1 = parseCurrency(row[8]);
+          const itbi2 = parseCurrency(row[9]) || itbi1;
           return {
             id: `${row[1]}-${row[2]}`,
             empreendimento_id: empId,
             torre: row[1]?.trim() || '',
             unidade: row[2]?.trim() || '',
-            tipologia: row[5] || '',
-            area_privativa: parseFloat(String(row[3] || '0').replace(/\./g, '').replace(',', '.')),
-            quintal: parseFloat(String(row[4] || '0').replace(/\./g, '').replace(',', '.')),
-            preco_tabela: parseFloat(String(row[7] || '0').replace(/\./g, '').replace(',', '.')),
-            avaliacao_bancaria: parseFloat(String(row[6] || '0').replace(/\./g, '').replace(',', '.')),
-            itbi_total: parseFloat(String(row[9] || '0').replace(/\./g, '').replace(',', '.')),
-            itbi_primeiro_imovel: parseFloat(String(row[8] || '0').replace(/\./g, '').replace(',', '.')),
+            tipologia: row[5] || '2 Quartos',
+            area_privativa: parseM2Number(row[3]),
+            quintal: parseM2Number(row[4]),
+            preco_tabela: parseCurrency(row[7]),
+            avaliacao_bancaria: parseCurrency(row[6]),
+            itbi_primeiro_imovel: itbi1,
+            itbi_segundo_imovel: itbi2,
+            itbi_total: itbi2,
             status: row[0] || '1ª Fase'
           };
         }).filter(u => u.torre !== '' && u.unidade !== '');
@@ -220,19 +299,37 @@ export const imoveisService = {
           return;
         }
 
-        const { error: insertUnitsErr } = await supabase.from('unidades').upsert([
-          { empreendimento_id: empId, torre: 'D', unidade: '303', tipologia: '2Q', area_privativa: 44.02, quintal: 0.00, preco_tabela: 241902.00, avaliacao_bancaria: 218000.00, itbi_total: 4806.00, itbi_primeiro_imovel: 4806.00, status: 'DISPONÍVEL' },
-          { empreendimento_id: empId, torre: 'D', unidade: '801', tipologia: '2Q', area_privativa: 42.14, quintal: 0.00, preco_tabela: 246902.00, avaliacao_bancaria: 218000.00, itbi_total: 4806.00, itbi_primeiro_imovel: 4806.00, status: 'DISPONÍVEL' },
-          { empreendimento_id: empId, torre: 'C', unidade: '304', tipologia: '2Q', area_privativa: 44.02, quintal: 0.00, preco_tabela: 239902.00, avaliacao_bancaria: 218000.00, itbi_total: 4806.00, itbi_primeiro_imovel: 4806.00, status: 'DISPONÍVEL' }
-        ], { onConflict: 'empreendimento_id, torre, unidade' });
+        const { success: insertSuccess, error: insertUnitsErr } = await this.salvarUnidadesLote(empId, [
+          { empreendimento_id: empId, torre: 'D', unidade: '303', tipologia: '2Q', area_privativa: 44.02, quintal: 0.00, preco_tabela: 241902.00, avaliacao_bancaria: 218000.00, itbi_total: 19230.00, itbi_primeiro_imovel: 4806.00, itbi_segundo_imovel: 19230.00, status: 'DISPONÍVEL' },
+          { empreendimento_id: empId, torre: 'D', unidade: '801', tipologia: '2Q', area_privativa: 42.14, quintal: 0.00, preco_tabela: 246902.00, avaliacao_bancaria: 218000.00, itbi_total: 19230.00, itbi_primeiro_imovel: 4806.00, itbi_segundo_imovel: 19230.00, status: 'DISPONÍVEL' },
+          { empreendimento_id: empId, torre: 'C', unidade: '304', tipologia: '2Q', area_privativa: 44.02, quintal: 0.00, preco_tabela: 239902.00, avaliacao_bancaria: 218000.00, itbi_total: 19230.00, itbi_primeiro_imovel: 4806.00, itbi_segundo_imovel: 19230.00, status: 'DISPONÍVEL' },
+          { empreendimento_id: empId, torre: 'C', unidade: '308', tipologia: '2Q', area_privativa: 43.50, quintal: 0.00, preco_tabela: 241902.00, avaliacao_bancaria: 218000.00, itbi_total: 19230.00, itbi_primeiro_imovel: 4806.00, itbi_segundo_imovel: 19230.00, status: 'DISPONÍVEL' }
+        ]);
 
-        if (insertUnitsErr && insertUnitsErr.code !== '23505') {
+        if (!insertSuccess) {
           console.error('Erro ao inserir unidades de teste:', insertUnitsErr);
         } else {
           console.log('Carga inicial concluída com sucesso! (Vista dos Colibris)');
         }
       } else {
-        console.log('Banco de dados já contém dados. Rotina de seed ignorada.');
+        console.log('Banco de dados já contém dados. Verificando integridade das áreas...');
+        try {
+          const { data: unitsToFix } = await supabase.from('unidades').select('*');
+          if (unitsToFix && unitsToFix.length > 0) {
+            const corruptedUnits = unitsToFix.filter(u => Number(u.area_privativa) >= 200 || Number(u.quintal) >= 200);
+            if (corruptedUnits.length > 0) {
+              const fixedUnits = corruptedUnits.map(u => ({
+                ...u,
+                area_privativa: parseM2Number(u.area_privativa),
+                quintal: parseM2Number(u.quintal)
+              }));
+              await supabase.from('unidades').upsert(fixedUnits, { onConflict: 'empreendimento_id, torre, unidade' });
+              console.log(`Corrigidas ${fixedUnits.length} unidades com área sem ponto decimal no Supabase.`);
+            }
+          }
+        } catch (cleanErr) {
+          console.warn('Aviso ao verificar integridade das unidades:', cleanErr);
+        }
       }
 
     } catch (err) {

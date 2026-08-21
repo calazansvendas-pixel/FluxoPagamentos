@@ -18,7 +18,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
-import { formatCurrency, formatM2, parseCurrency, formatDeliveryText } from '../utils/formatters';
+import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado } from '../utils/calculations';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
@@ -292,14 +292,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // Mapeamento dos atributos vindos do Supabase / Mocks
   const fase = matchingRow ? String(matchingRow.status || '1ª') : '-';
   const tipologia = matchingRow ? String(matchingRow.tipologia || '2 Quartos') : '-';
-  const areaPriv = matchingRow ? `${Number(matchingRow.area_privativa || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits:2})} m²` : '0,00 m²';
-  const areaQuintal = matchingRow ? `${Number(matchingRow.quintal || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits:2})} m²` : '0,00 m²';
+  const areaPriv = matchingRow ? formatArea(matchingRow.area_privativa) : '0,00 m²';
+  const areaQuintal = matchingRow ? formatArea(matchingRow.quintal) : '0,00 m²';
 
   const price = hasUnitSelected && matchingRow ? Number(matchingRow.preco_tabela || 0) : 0;
   const evaluation = hasUnitSelected && matchingRow ? Number(matchingRow.avaliacao_bancaria || 0) : 0;
 
   const itbiValTabela = (hasUnitSelected && matchingRow) 
-    ? (isFirstHomeLocal ? Number(matchingRow.itbi_primeiro_imovel || 0) : Number(matchingRow.itbi_total || 0))
+    ? (isFirstHomeLocal 
+        ? Number(matchingRow.itbi_primeiro_imovel || matchingRow.itbi_total || 0) 
+        : Number(matchingRow.itbi_segundo_imovel || matchingRow.itbi_total || matchingRow.itbi_primeiro_imovel || 0))
     : 0;
 
   const handleTorreChange = (torre: string) => {
@@ -605,7 +607,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const isDistribuicaoValidada = hasUnitSelected && Math.abs(diferencaDistribuicao) <= 0.10;
 
   // INDICADORES DE RISCO E COMPROMETIMENTO
-  const baseLiquidaComITBI = hasUnitSelected ? Math.max(0, (price + despCartoriasEfetivas) - descontoAto) : 0;
+  const baseLiquidaComITBI = hasUnitSelected 
+    ? (morarEngineBase?.baseCalculoComITBI || Math.max(0, (price - descontoAto) + despCartoriasEfetivas))
+    : 0;
   const baseRendaInformada = income;
   const nomeFaixaRenda = currentCond?.name || 'Não informada';
   

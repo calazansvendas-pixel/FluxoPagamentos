@@ -209,6 +209,10 @@ export interface MorarSerieResult {
 
 export interface MorarEngineResult {
   baseCalculo: number;
+  baseCalculoComITBI: number;
+  maxRiscoObra: number;
+  maxRiscoPos: number;
+  totalProSolutoMaximo: number;
   maxFluxoGeral: number;
   tetoPosGlobal: number;
   parcelaMensalITBI: number;
@@ -217,6 +221,8 @@ export interface MorarEngineResult {
   posSeries: MorarSerieResult[];
   subtotalObraLiquido: number;
   subtotalPosLiquido: number;
+  totalObraComITBI: number;
+  totalPosComITBI: number;
   atoResidual: number;
   atoPremiado: number;
   atoBruto: number;
@@ -227,10 +233,12 @@ export interface MorarEngineResult {
 }
 
 /**
- * Motor de cálculo completo da condição Sinal c/ Morar - Linha do Tempo Contínua e Loop do Ato Premiado (Referência Circular)
+ * Motor de cálculo completo da condição Sinal c/ Morar - Linha do Tempo Contínua e Distribuição Oficial das Séries (Fórmula Exata do Excel)
  */
 export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngineResult {
   const precoTabela = params.precoTabela || 0;
+  const avaliacaoBanco = params.avaliacaoBanco && params.avaliacaoBanco > 0 ? params.avaliacaoBanco : precoTabela;
+  const precoBase = Math.max(precoTabela, avaliacaoBanco);
   const itbiRegistro = params.itbiRegistro || 0;
   const renda = params.renda || 0;
   const financiamento = params.financiamento || 0;
@@ -238,12 +246,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const fgts = params.fgts || 0;
   const mesesObra = params.mesesObra !== undefined ? params.mesesObra : 33;
   const mesesPos = params.mesesPos !== undefined ? params.mesesPos : 27;
-  const pctProSolutoGlobal = params.percentualRiscoGeral !== undefined ? params.percentualRiscoGeral : 17.0;
-  const pctTetoPosGlobal = params.percentualRiscoPos !== undefined ? params.percentualRiscoPos : 8.0;
-  const globalSeriesPct = params.globalSeriesPct || [30.0, 25.0, 20.0, 15.0, 10.0, 5.0];
   const isAtoPremiadoEnabled = params.isAtoPremiadoEnabled !== undefined ? params.isAtoPremiadoEnabled : true;
   const isAtoZerado = params.isAtoZerado === true;
-  const sinalMinimo = params.sinalMinimo || 2000;
 
   // 1. Fatiamento do Tempo (Cascata Contínua de 12 Meses):
   const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos);
@@ -256,89 +260,123 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     : 0;
   const parcelaMensalITBI = Math.round(parcelaMensalITBIExato * 100) / 100;
 
-  // Sinal Total c/ ITBI = (Preço Venda - Financiamento - Subsídio - FGTS) + ITBI Total
+  // Sinal Total s/ ITBI = Preço Tabela - (Financiamento + Subsídio + FGTS)
   const totalNegociado = financiamento + subsidio + fgts;
   const sinalSemITBI = Math.max(0, precoTabela - totalNegociado);
   const sinalComITBI = Math.max(0, sinalSemITBI + itbiRegistro);
 
-  // Capacidade máxima total de fluxo suportada pela Renda do cliente em cada balde ativo:
-  // Cada série ativa tem teto de parcela bruta (com ITBI) = Renda * (globalSeriesPct[idx] / 100)
-  const activeObraCapacities = mObra.map((qtd, idx) => qtd * (renda > 0 ? (renda * ((globalSeriesPct[idx] || 0) / 100)) : 0));
-  const activePosCapacities = mPos.map((qtd, idx) => qtd * (renda > 0 ? (renda * ((globalSeriesPct[idx] || 0) / 100)) : 0));
-  const capacidadeTotalRenda = activeObraCapacities.reduce((a, b) => a + b, 0) + activePosCapacities.reduce((a, b) => a + b, 0);
+  const pctMaxProSoluto = (params.percentualRiscoGeral !== undefined ? params.percentualRiscoGeral : 17.0) / 100;
+  const pctMaxObra = (params.percentualRiscoObra !== undefined ? params.percentualRiscoObra : 11.9) / 100;
+  const pctMaxPos = (params.percentualRiscoPos !== undefined ? params.percentualRiscoPos : 5.1) / 100;
 
-  // RESOLUÇÃO ALGÉBRICA DO LOOP DO ATO PREMIADO
-  // O Desconto abate a Base Líquida, e a Base Líquida define o limite do fluxo, o que define o Ato.
-  const baseInicial = precoTabela + itbiRegistro;
-  const limiteRisco = pctProSolutoGlobal / 100;
-  
-  let atoPremiado = 0;
-  if (isAtoPremiadoEnabled && !isAtoZerado && sinalComITBI > 0) {
-    if (params.atoManual !== undefined && params.atoManual > 0) {
-      atoPremiado = calcularDescontoAtoPremiado(params.atoManual);
-    } else if (params.atoPremiado !== undefined && params.atoPremiado > 0) {
-      atoPremiado = params.atoPremiado;
+  // 2. Determinação exata de Desconto Comercial / Desconto Ato, Base Líquida com ITBI e Ato Residual
+  let descontoAto = 0;
+  let atoResidual = 0;
+  let baseCalculoComITBI = 0;
+  let totalProSolutoMaximo = 0;
+
+  if (params.atoManual !== undefined && params.atoManual > 0) {
+    atoResidual = params.atoManual;
+    descontoAto = (!isAtoZerado && isAtoPremiadoEnabled) ? calcularDescontoAtoPremiado(atoResidual) : 0;
+    baseCalculoComITBI = Math.max(0, Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100);
+    totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
+  } else if (isAtoZerado) {
+    atoResidual = 0;
+    descontoAto = 0;
+    baseCalculoComITBI = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
+    totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
+  } else if (!isAtoPremiadoEnabled) {
+    descontoAto = 0;
+    baseCalculoComITBI = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
+    totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
+    const atoCalc = (sinalSemITBI + itbiRegistro) - totalProSolutoMaximo;
+    atoResidual = Math.max(0, Math.round(atoCalc * 100) / 100);
+  } else {
+    // Resolução Circular / Iterativa Exata do Excel da Morar:
+    // Base Líquida com ITBI = (Preço Tabela - Desconto Ato) + ITBI Total
+    // Total Pró-Soluto = Base Líquida * 17%
+    // Ato Imóvel = (Sinal Total + ITBI Total) - Total Pró-Soluto - Desconto Ato
+    //
+    // Hipótese 1: Ato >= 50.000 -> Desconto Fixo de R$ 5.000,00
+    const baseCom5k = (precoTabela - 5000) + itbiRegistro;
+    const proSoluto5k = baseCom5k * pctMaxProSoluto;
+    const atoCom5k = (sinalSemITBI + itbiRegistro) - proSoluto5k - 5000;
+
+    if (atoCom5k >= 50000) {
+      descontoAto = 5000;
+      atoResidual = Math.round(atoCom5k * 100) / 100;
+      baseCalculoComITBI = Math.round(baseCom5k * 100) / 100;
+      totalProSolutoMaximo = Math.round(proSoluto5k * 100) / 100;
     } else {
-      // Fórmula O(1): D = (SinalBruto - (Limite * BaseInicial)) / (11 - Limite)
-      const descontoCalculado = (sinalComITBI - (limiteRisco * baseInicial)) / (11 - limiteRisco);
-      const atoBrutoTeorico = descontoCalculado * 11;
-      
-      if (atoBrutoTeorico >= 50000) {
-        atoPremiado = 5000;
-      } else if (atoBrutoTeorico >= 5000) {
-        atoPremiado = Math.round(descontoCalculado * 100) / 100;
+      // Hipótese 2: Ato < 50.000 -> Desconto de 10% sobre o Ato
+      // Fórmula analítica: ato = [(Sinal + ITBI) - (Preço Tabela + ITBI) * pctMaxProSoluto] / (1 + 0.10 - (0.10 * pctMaxProSoluto))
+      const denom = 1 + 0.10 - (0.10 * pctMaxProSoluto);
+      const num = (sinalSemITBI + itbiRegistro) - ((precoTabela + itbiRegistro) * pctMaxProSoluto);
+      const atoAnalitico = denom > 0 ? num / denom : 0;
+
+      if (atoAnalitico > 0) {
+        atoResidual = Math.round(atoAnalitico * 100) / 100;
+        descontoAto = Math.round(atoResidual * 0.10 * 100) / 100;
+        baseCalculoComITBI = Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100;
+        totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
+        
+        // Ajuste de centavos fino para convergência perfeita
+        atoResidual = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - totalProSolutoMaximo - descontoAto) * 100) / 100);
+        descontoAto = Math.round(atoResidual * 0.10 * 100) / 100;
+        baseCalculoComITBI = Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100;
+        totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
+        atoResidual = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - totalProSolutoMaximo - descontoAto) * 100) / 100);
       } else {
-        atoPremiado = 0;
+        atoResidual = 0;
+        descontoAto = 0;
+        baseCalculoComITBI = Math.round((precoTabela + itbiRegistro) * 100) / 100;
+        totalProSolutoMaximo = Math.min(sinalComITBI, Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100);
       }
     }
   }
 
-  // 2. Apuração da Base de Risco (Após dedução exata do desconto)
-  const baseCalculo = Math.max(0, baseInicial - atoPremiado);
-  const tetoPoliticaGeral = Math.round(baseCalculo * limiteRisco * 100) / 100;
-  
-  const maxFluxoGeral = (renda > 0 && capacidadeTotalRenda > 0)
-    ? Math.min(tetoPoliticaGeral, Math.round(capacidadeTotalRenda * 100) / 100)
-    : tetoPoliticaGeral;
-  
-  const tetoPosGlobal = Math.round(baseCalculo * (pctTetoPosGlobal / 100) * 100) / 100;
+  // 3. Tetos e Travas de Pró-Soluto:
+  // Total Pró-Soluto (17,00% c/ ITBI) = Base Líquida * 0.17
+  // Total Obra (11,90% c/ ITBI) = Base Líquida * 0.119
+  // Total Pós-Obra (5,10% c/ ITBI) = Base Líquida * 0.051
+  const maxRiscoObra = Math.round(baseCalculoComITBI * pctMaxObra * 100) / 100;
+  const maxRiscoPos = Math.round(baseCalculoComITBI * pctMaxPos * 100) / 100;
 
-  // 3. Ato Bruto e Determinação do Fluxo a Distribuir
-  // O fluxo Efetivo nunca pode ultrapassar o Saldo Devedor real
-  const saldoMaximoDisponivelComITBI = Math.max(0, Math.round((sinalComITBI - atoPremiado - sinalMinimo - (params.atoITBI || 0)) * 100) / 100);
-  
-  let fluxoDistribuirComITBI = Math.min(maxFluxoGeral, saldoMaximoDisponivelComITBI);
-  
-  // Ato Bruto = Total Com ITBI - ITBI no Ato - Fluxo - DescontoAto
-  let atoBruto = Math.max(0, Math.round((sinalComITBI - (params.atoITBI || 0) - fluxoDistribuirComITBI) * 100) / 100);
-  
-  // Ato Líquido Exibido (Residual Padrão)
-  let atoResidualPadrao = Math.max(0, Math.round((atoBruto - atoPremiado) * 100) / 100);
-  
-  // Proteção para não gerar fluxo se o sinal líquido (sinal - desconto) for menor ou igual ao sinal mínimo
-  if (sinalComITBI - atoPremiado <= sinalMinimo) {
-    atoResidualPadrao = Math.max(0, sinalComITBI - atoPremiado);
-    fluxoDistribuirComITBI = 0;
-  }
-
-  let atoResidual = atoResidualPadrao;
-
+  // Fluxo Pró-Soluto Efetivo com ITBI
+  let fluxoProSolutoComITBI = totalProSolutoMaximo;
   if (params.atoManual !== undefined && params.atoManual > 0) {
-    atoResidual = params.atoManual;
-    // Quando o Ato é informado manualmente (ex: R$ 20.000,00):
-    fluxoDistribuirComITBI = Math.max(0, Math.round((sinalComITBI - atoResidual - atoPremiado - (params.atoITBI || 0)) * 100) / 100);
+    fluxoProSolutoComITBI = Math.max(0, Math.round((sinalComITBI - atoResidual - descontoAto) * 100) / 100);
+  } else if (isAtoZerado) {
+    fluxoProSolutoComITBI = sinalComITBI;
   }
 
+  const sinalLiquidoTotal = Math.max(0, Math.round((sinalSemITBI - descontoAto) * 100) / 100);
+  const baseCalculo = precoBase;
+  const maxFluxoGeral = fluxoProSolutoComITBI;
+  const tetoPosGlobal = maxRiscoPos;
 
-  // 4. Decomposição Contínua das Séries (Blocos de 12 Meses)
-  // Soma dos pesos ponderados de todas as séries ativas (Obra e Pós-Obra)
-  const activeObraWeights = mObra.map((qtd, idx) => (globalSeriesPct[idx] || 0) * (qtd / 12));
-  const activePosWeights = mPos.map((qtd, idx) => (globalSeriesPct[idx] || 0) * (qtd / 12));
-  const sumActiveWeights = activeObraWeights.reduce((a, b) => a + b, 0) + activePosWeights.reduce((a, b) => a + b, 0);
+  // 4. Distribuição das 5 Séries Morar ao longo de 60 meses
+  // Pesos oficiais sobre o fluxo com ITBI:
+  // Série 1 (12x): 30% -> R$ 1.345,98 c/ ITBI | Líquida: R$ 1.121,85
+  // Série 2 (12x): 25% -> R$ 1.121,65 c/ ITBI | Líquida: R$ 897,52
+  // Série 3 (12x): 20% -> R$ 897,32 c/ ITBI   | Líquida: R$ 673,19
+  // Série 4 (12x): 15% -> R$ 672,99 c/ ITBI   | Líquida: R$ 448,86
+  // Série 5 (12x): 10% -> R$ 448,66 c/ ITBI   | Líquida: R$ 224,53
+  const seriesWeights = [0.30, 0.25, 0.20, 0.15, 0.10, 0.0];
+
+  const seriesMonthlyRatesBrutas = seriesWeights.map(w => {
+    return (fluxoProSolutoComITBI * w) / 12;
+  });
+
+  const seriesMonthlyRatesLiquidas = seriesMonthlyRatesBrutas.map((brutaExata) => {
+    if (brutaExata <= 0) return 0;
+    const liquidaExata = brutaExata - parcelaMensalITBIExato;
+    return Math.max(0, Math.round(liquidaExata * 100) / 100);
+  });
 
   // Obra:
   const obraSeries: MorarSerieResult[] = mObra.map((qtd, idx) => {
-    const pctAno = globalSeriesPct[idx] || 0;
+    const pctAno = (params.globalSeriesPct && params.globalSeriesPct[idx]) || [30, 25, 20, 15, 10, 5][idx] || 0;
     const capRendaMes = renda > 0 ? Math.round((renda * (pctAno / 100)) * 100) / 100 : 0;
     if (qtd <= 0) {
       return {
@@ -352,12 +390,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         subtotalLiquido: 0
       };
     }
-    // Rateio proporcional entre as séries ativas
-    const pesoSerie = activeObraWeights[idx];
-    const pctRateioSerie = sumActiveWeights > 0 ? (pesoSerie / sumActiveWeights) : 0;
-    const volumeSerie = fluxoDistribuirComITBI * pctRateioSerie;
-    const parcelaBrutaFinal = qtd > 0 ? (volumeSerie / qtd) : 0;
-    const parcelaLiquida = Math.max(0, Math.round((parcelaBrutaFinal - parcelaMensalITBIExato) * 100) / 100);
+    const parcelaLiquida = seriesMonthlyRatesLiquidas[idx] || 0;
+    const parcelaBrutaFinal = Math.round(seriesMonthlyRatesBrutas[idx] * 100) / 100;
     const subtotalLiquido = Math.round(parcelaLiquida * qtd * 100) / 100;
 
     return {
@@ -365,8 +399,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
       qtd,
       pctMae: pctAno,
       capacidadeRenda: capRendaMes,
-      rateioFluxoGlobal: Math.round(parcelaBrutaFinal * 100) / 100,
-      parcelaBrutaFinal: Math.round(parcelaBrutaFinal * 100) / 100,
+      rateioFluxoGlobal: parcelaBrutaFinal,
+      parcelaBrutaFinal,
       parcelaLiquida,
       subtotalLiquido
     };
@@ -374,7 +408,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
 
   // Pós-Obra:
   const posSeries: MorarSerieResult[] = mPos.map((qtd, idx) => {
-    const pctAno = globalSeriesPct[idx] || 0;
+    const pctAno = (params.globalSeriesPct && params.globalSeriesPct[idx]) || [30, 25, 20, 15, 10, 5][idx] || 0;
     const capRendaMes = renda > 0 ? Math.round((renda * (pctAno / 100)) * 100) / 100 : 0;
     if (qtd <= 0) {
       return {
@@ -388,12 +422,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         subtotalLiquido: 0
       };
     }
-    // Rateio proporcional entre as séries ativas
-    const pesoSerie = activePosWeights[idx];
-    const pctRateioSerie = sumActiveWeights > 0 ? (pesoSerie / sumActiveWeights) : 0;
-    const volumeSerie = fluxoDistribuirComITBI * pctRateioSerie;
-    const parcelaBrutaFinal = qtd > 0 ? (volumeSerie / qtd) : 0;
-    const parcelaLiquida = Math.max(0, Math.round((parcelaBrutaFinal - parcelaMensalITBIExato) * 100) / 100);
+    const parcelaLiquida = seriesMonthlyRatesLiquidas[idx] || 0;
+    const parcelaBrutaFinal = Math.round(seriesMonthlyRatesBrutas[idx] * 100) / 100;
     const subtotalLiquido = Math.round(parcelaLiquida * qtd * 100) / 100;
 
     return {
@@ -401,30 +431,43 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
       qtd,
       pctMae: pctAno,
       capacidadeRenda: capRendaMes,
-      rateioFluxoGlobal: Math.round(parcelaBrutaFinal * 100) / 100,
-      parcelaBrutaFinal: Math.round(parcelaBrutaFinal * 100) / 100,
+      rateioFluxoGlobal: parcelaBrutaFinal,
+      parcelaBrutaFinal,
       parcelaLiquida,
       subtotalLiquido
     };
   });
 
-  const subtotalObraLiquido = obraSeries.reduce((acc, s) => acc + s.subtotalLiquido, 0);
-  const subtotalPosLiquido = posSeries.reduce((acc, s) => acc + s.subtotalLiquido, 0);
-  const somaSubtotaisLiquidos = Math.round((subtotalObraLiquido + subtotalPosLiquido) * 100) / 100;
-  const totalProSolutoGerado = somaSubtotaisLiquidos;
+  const subtotalObraLiquido = Math.round(obraSeries.reduce((acc, s) => acc + s.subtotalLiquido, 0) * 100) / 100;
+  const subtotalPosLiquido = Math.round(posSeries.reduce((acc, s) => acc + s.subtotalLiquido, 0) * 100) / 100;
+  const totalProSolutoGerado = Math.round((subtotalObraLiquido + subtotalPosLiquido) * 100) / 100;
 
-  // Absorve o resíduo de arredondamento de centavos no Ato Residual padrão para fechar 100% exato
-  const itbiParceladoTotal = mesesTotaisGeral * parcelaMensalITBI;
-  if (params.atoManual === undefined) {
-    atoResidual = atoResidualPadrao;
-  }
+  const itbiObraTotal = Math.round(obraSeries.reduce((acc, s) => acc + s.qtd, 0) * parcelaMensalITBI * 100) / 100;
+  const itbiPosTotal = Math.round(posSeries.reduce((acc, s) => acc + s.qtd, 0) * parcelaMensalITBI * 100) / 100;
 
-  const distribuidoTotal = Math.round((atoResidual + (params.atoITBI || 0) + somaSubtotaisLiquidos + itbiParceladoTotal + atoPremiado) * 100) / 100;
+  const totalObraComITBI = (fluxoProSolutoComITBI === totalProSolutoMaximo)
+    ? maxRiscoObra
+    : Math.round((subtotalObraLiquido + itbiObraTotal) * 100) / 100;
+
+  const totalPosComITBI = (fluxoProSolutoComITBI === totalProSolutoMaximo)
+    ? maxRiscoPos
+    : Math.round((subtotalPosLiquido + itbiPosTotal) * 100) / 100;
+
+  const itbiParceladoTotal = Math.round(mesesTotaisGeral * parcelaMensalITBI * 100) / 100;
+  const atoPremiado = descontoAto;
+  const atoBruto = Math.round((atoResidual + atoPremiado) * 100) / 100;
+
+  const distribuidoTotal = Math.round(
+    (atoResidual + (params.atoITBI || 0) + totalProSolutoGerado + itbiParceladoTotal + atoPremiado) * 100
+  ) / 100;
   const totalComITBI = sinalComITBI;
-  const sinalLiquidoTotal = Math.max(0, sinalSemITBI - atoPremiado);
 
   return {
     baseCalculo,
+    baseCalculoComITBI,
+    maxRiscoObra,
+    maxRiscoPos,
+    totalProSolutoMaximo,
     maxFluxoGeral,
     tetoPosGlobal,
     parcelaMensalITBI,
@@ -433,6 +476,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     posSeries,
     subtotalObraLiquido,
     subtotalPosLiquido,
+    totalObraComITBI,
+    totalPosComITBI,
     atoResidual,
     atoPremiado,
     atoBruto,

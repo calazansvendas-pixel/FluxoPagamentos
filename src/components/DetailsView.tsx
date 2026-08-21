@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
-import { formatCurrency, formatM2, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
+import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
 import { PdfExportModal } from './PdfExportModal';
 import { imoveisService } from '../services/imoveisService';
@@ -225,8 +225,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // Extracted row data
   const fase = matchingRow ? String(matchingRow[0] || '1ª') : '-';
   const tipologia = matchingRow ? String(matchingRow[5] || '2 Quartos') : '-';
-  const areaPriv = matchingRow ? formatM2(matchingRow[3]) : '0,00 m²';
-  const areaQuintal = matchingRow ? formatM2(matchingRow[4]) : '0,00 m²';
+  const areaPriv = matchingRow ? formatArea(matchingRow[3]) : '0,00 m²';
+  const areaQuintal = matchingRow ? formatArea(matchingRow[4]) : '0,00 m²';
 
   const price = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[7]) : 0;
   const evaluation = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[6]) : 0;

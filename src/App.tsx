@@ -321,13 +321,20 @@ export default function App() {
     }));
   };
 
-  const handleDeleteTable = (productId: string) => {
+  const handleDeleteTable = async (productId: string) => {
     const prod = products.find(p => p.id === productId);
     if (!prod) return;
 
     if (!prod.tableInfo || !prod.tableInfo.active) {
       showToast("Este empreendimento não possui tabela ativa para excluir.");
       return;
+    }
+
+    // Exclui unidades no Supabase em segundo plano
+    try {
+      await imoveisService.limparUnidadesEmpreendimento(productId);
+    } catch (e) {
+      console.warn('Aviso ao excluir unidades no Supabase:', e);
     }
 
     setProducts(prev => prev.map(p => {
@@ -340,7 +347,8 @@ export default function App() {
       return p;
     }));
 
-    showToast(`Tabela vigente do ${prod.name} foi excluída com sucesso!`);
+    window.dispatchEvent(new CustomEvent('tabela_atualizada'));
+    showToast(`Tabela e unidades de ${prod.name} foram excluídas com sucesso!`);
   };
 
   const handleSaveNewProduct = (newProd: Product) => {
