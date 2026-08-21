@@ -22,29 +22,58 @@ export default function App() {
   );
 
   React.useEffect(() => {
-    // Inicialização do Banco de Dados (Seed Inicial) e Sincronização
-    const initDB = async () => {
-      await imoveisService.inicializarBancoSeNecessario();
-      
-      const dbEmps = await imoveisService.listarEmpreendimentos();
-      // If we got real data from Supabase (not the fallback array which uses 'name', whereas Supabase uses 'nome')
-      if (dbEmps && Array.isArray(dbEmps) && dbEmps.length > 0 && 'nome' in dbEmps[0]) {
-        setProducts(prev => {
-          return dbEmps.map(dbEmp => {
-            // Find existing product to keep its conditions/policies, or fallback to the first default product
-            const existing = prev.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS[0];
+    // Inicialização do Banco de Dados (Seed Inicial) e Sincronização Completa
+    const syncFromSupabase = async () => {
+      try {
+        await imoveisService.inicializarBancoSeNecessario();
+        
+        const dbEmps = await imoveisService.listarEmpreendimentos();
+        if (dbEmps && Array.isArray(dbEmps) && dbEmps.length > 0 && 'nome' in dbEmps[0]) {
+          // Para cada empreendimento, busca as unidades mais recentes no Supabase
+          const updatedProducts = await Promise.all(dbEmps.map(async (dbEmp: any) => {
+            const existing = products.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS[0];
+            
+            let currentTableInfo = existing.tableInfo;
+            try {
+              const units = await imoveisService.listarUnidadesPorEmpreendimento(dbEmp.id);
+              if (units && units.length > 0) {
+                const rows = imoveisService.converterUnidadesParaLinhas(units);
+                currentTableInfo = {
+                  validFrom: existing.tableInfo?.validFrom || new Date().toISOString().split('T')[0],
+                  validTo: existing.tableInfo?.validTo || new Date(new Date().setMonth(new Date().getMonth() + 3)).toISOString().split('T')[0],
+                  fileName: existing.tableInfo?.fileName || `tabela_${dbEmp.id}.xlsx`,
+                  headers: existing.tableInfo?.headers || ['Fase', 'TORRE', 'UNIDADE', 'ÁREA PRIVATIVA M² - APTO', 'ÁREA QUINTAL M²', 'TIPOLOGIA', 'AVALIAÇÃO', 'PREÇO', 'ITBI + Registro 1º Imóvel', 'ITBI + Registro 2º Imóvel'],
+                  rows: rows,
+                  active: true
+                };
+              }
+            } catch (e) {
+              console.warn(`Aviso ao buscar unidades para ${dbEmp.nome}:`, e);
+            }
+
             return {
               ...existing,
               id: dbEmp.id,
               name: dbEmp.nome,
               deliveryDatePhase1: dbEmp.delivery_date_phase1 || existing.deliveryDatePhase1,
               deliveryDatePhase2: dbEmp.delivery_date_phase2 || existing.deliveryDatePhase2,
+              tableInfo: currentTableInfo
             };
-          });
-        });
+          }));
+
+          setProducts(updatedProducts);
+        }
+      } catch (err) {
+        console.warn('Sincronização com Supabase usando fallback local:', err);
       }
     };
-    initDB();
+
+    syncFromSupabase();
+
+    window.addEventListener('tabela_atualizada', syncFromSupabase);
+    return () => {
+      window.removeEventListener('tabela_atualizada', syncFromSupabase);
+    };
   }, []);
 
   // Products state with localStorage persistence

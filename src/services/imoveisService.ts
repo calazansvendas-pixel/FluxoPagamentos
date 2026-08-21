@@ -40,6 +40,23 @@ import { INITIAL_PRODUCTS } from '../data/initialProducts';
  */
 
 export const imoveisService = {
+  // Converte unidades do formato Supabase para linhas de tabela (tableInfo.rows)
+  converterUnidadesParaLinhas(unidades: any[]): (string | number)[][] {
+    if (!unidades || unidades.length === 0) return [];
+    return unidades.map(u => [
+      u.status || '1ª Fase',
+      String(u.torre || '').trim(),
+      String(u.unidade || '').trim(),
+      `${Number(u.area_privativa || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²`,
+      `${Number(u.quintal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²`,
+      u.tipologia || '2 Quartos',
+      Number(u.avaliacao_bancaria || 0),
+      Number(u.preco_tabela || 0),
+      Number(u.itbi_primeiro_imovel || u.itbi_total || 0),
+      Number(u.itbi_total || 0)
+    ]);
+  },
+
   // Lista todos os empreendimentos (Tenta Supabase, cai para Mock Local)
   async listarEmpreendimentos() {
     try {
@@ -53,6 +70,48 @@ export const imoveisService = {
     } catch (e) {
       console.warn('Erro ao conectar com Supabase. Usando Mock (INITIAL_PRODUCTS).');
       return INITIAL_PRODUCTS; // Fallback
+    }
+  },
+
+  // Garante que o empreendimento exista no Supabase antes de gravar unidades
+  async sincronizarEmpreendimento(emp: { id: string; nome: string; delivery_date_phase1?: string; delivery_date_phase2?: string }) {
+    try {
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(emp.id);
+      if (!isUUID) return;
+
+      await supabase.from('empreendimentos').upsert([{
+        id: emp.id,
+        nome: emp.nome,
+        delivery_date_phase1: emp.delivery_date_phase1 || null,
+        delivery_date_phase2: emp.delivery_date_phase2 || null
+      }], { onConflict: 'id' });
+    } catch (e) {
+      console.warn('Aviso ao sincronizar empreendimento no Supabase:', e);
+    }
+  },
+
+  // Salva lote de unidades no Supabase e recarrega a lista atualizada
+  async salvarUnidadesLote(empId: string, unidades: any[]) {
+    try {
+      const { error } = await supabase
+        .from('unidades')
+        .upsert(unidades, {
+          onConflict: 'empreendimento_id, torre, unidade'
+        });
+
+      if (error) throw error;
+
+      // Recarrega unidades diretamente do banco para garantir consistência
+      const { data: freshUnits, error: fetchErr } = await supabase
+        .from('unidades')
+        .select('*')
+        .eq('empreendimento_id', empId);
+
+      if (fetchErr) throw fetchErr;
+      return { success: true, data: freshUnits || unidades };
+    } catch (e: any) {
+      console.error('Erro no salvamento em lote de unidades no Supabase:', e);
+      return { success: false, error: e?.message || 'Erro ao sincronizar' };
     }
   },
 
@@ -73,7 +132,7 @@ export const imoveisService = {
       const prod = INITIAL_PRODUCTS.find(p => p.id === empId) || INITIAL_PRODUCTS[0];
       if (prod && prod.tableInfo && prod.tableInfo.rows) {
         // Mapeia o array do CSV (rows) para o formato de objetos que a interface entende
-        return prod.tableInfo.rows.map((row: string[]) => {
+        return prod.tableInfo.rows.map((row: any[]) => {
           // O formato padrão do CSV no Mock:
           // 0=Fase, 1=Torre, 2=Unidade, 3=Area Priv, 4=Area Quintal, 5=Tipologia, 6=Avaliacao, 7=PrecoTabela, 8=ITBI (1o), 9=ITBI (2o)
           return {
@@ -86,11 +145,11 @@ export const imoveisService = {
             quintal: parseFloat(String(row[4] || '0').replace(/\./g, '').replace(',', '.')),
             preco_tabela: parseFloat(String(row[7] || '0').replace(/\./g, '').replace(',', '.')),
             avaliacao_bancaria: parseFloat(String(row[6] || '0').replace(/\./g, '').replace(',', '.')),
-            itbi_total: parseFloat(String(row[9] || '0').replace(/\./g, '').replace(',', '.')), // ITBI para 2o Imóvel como base segura
+            itbi_total: parseFloat(String(row[9] || '0').replace(/\./g, '').replace(',', '.')),
             itbi_primeiro_imovel: parseFloat(String(row[8] || '0').replace(/\./g, '').replace(',', '.')),
             status: row[0] || '1ª Fase'
           };
-        }).filter(u => u.torre !== '' && u.unidade !== ''); // Filtra linhas vazias
+        }).filter(u => u.torre !== '' && u.unidade !== '');
       }
       return [];
     }

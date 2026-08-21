@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { Product, TableInfo } from '../types';
 import { COLUMN_DEFINITIONS, formatCurrency, normalizeHeader } from '../utils/formatters';
 import { supabase } from '../lib/supabaseClient';
+import { imoveisService } from '../services/imoveisService';
 
 interface ImportTableViewProps {
   products: Product[];
@@ -236,14 +237,44 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
     }).filter(u => u.torre !== '' && u.unidade !== '');
 
     try {
-      const { error } = await supabase
-        .from('unidades')
-        .upsert(unidadesProcessadas, {
-          onConflict: 'empreendimento_id, torre, unidade'
-        });
+      // 1. Garante que o empreendimento exista no Supabase
+      await imoveisService.sincronizarEmpreendimento({
+        id: activeProd.id,
+        nome: activeProd.name,
+        delivery_date_phase1: activeProd.deliveryDatePhase1 || activeProd.deliveryDate,
+        delivery_date_phase2: activeProd.deliveryDatePhase2
+      });
 
-      if (error) throw error;
+      // 2. Realiza o upsert em lote e obtém os dados autoritativos do banco
+      const res = await imoveisService.salvarUnidadesLote(activeProd.id, unidadesProcessadas);
       
+      let finalRows = currentRows;
+      if (res.success && res.data && res.data.length > 0) {
+        // Converte as unidades do banco de volta para o formato de linhas da tabela
+        finalRows = imoveisService.converterUnidadesParaLinhas(res.data);
+      }
+
+      const newTableInfo: TableInfo = {
+        validFrom,
+        validTo,
+        fileName: currentFileName,
+        headers: currentHeaders,
+        rows: finalRows,
+        active: true
+      };
+
+      // 3. Salva no estado global e no cache local (localStorage)
+      onSaveTableInfo(activeProd.id, newTableInfo);
+      setTempParsedData(null);
+      onShowToast(`Sucesso! ${unidadesProcessadas.length} unidades sincronizadas no banco Supabase.`);
+      
+      // 4. Dispara evento customizado para atualizar todos os componentes e abas abertas
+      window.dispatchEvent(new CustomEvent('tabela_atualizada'));
+
+    } catch (err: any) {
+      console.error(err);
+      
+      // Fallback local se o banco falhar
       const newTableInfo: TableInfo = {
         validFrom,
         validTo,
@@ -252,17 +283,9 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
         rows: currentRows,
         active: true
       };
-
       onSaveTableInfo(activeProd.id, newTableInfo);
       setTempParsedData(null);
-      onShowToast(`Sucesso! ${unidadesProcessadas.length} unidades sincronizadas no banco Supabase.`);
-      
-      // Dispatch custom event to trigger refresh in other components
-      window.dispatchEvent(new CustomEvent('tabela_atualizada'));
-
-    } catch (err) {
-      console.error(err);
-      onShowToast("Erro ao sincronizar com Supabase. Apenas salvamento local foi concluído.");
+      onShowToast("Tabela salva localmente. Aviso ao sincronizar com Supabase.");
     } finally {
       setIsSaving(false);
     }
