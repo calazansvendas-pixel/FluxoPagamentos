@@ -138,27 +138,61 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           return;
         }
 
-        // Mapeamento canônico oficial por índice de colunas
-        // Coluna A (índice 0): fase (número ou texto)
-        // Coluna B (índice 1): torre (texto: "A", "B", "C", "D", "E", "F", "G", "H")
-        // Coluna E (índice 4): unidade (texto/número: "101", "308", etc.)
-        // Coluna H (índice 7): area_privativa (float: ex: 43.50, 54.98)
-        // Coluna I (índice 8): quintal (float: ex: 23.99 ou 0.00 se vazio)
-        // Coluna J (índice 9): tipologia (texto: ex: "2 quartos", "3 quartos* c/ varanda")
-        // Coluna Q (índice 16): avaliacao_bancaria (float: ex: 346000.00, 307000.00)
-        // Coluna R (índice 17): preco_tabela (float: ex: 367710.00, 301500.00)
-        // Coluna Y (índice 24): itbi_primeiro_imovel (float: ex: 14721.91, 13553.89)
-        // Coluna AC (índice 28): itbi_segundo_imovel / itbi_total (float: ex: 21121.91, 19953.89)
-        const colFase = 0;
-        const colTorre = 1;
-        const colUnidade = 4;
-        const colAreaPriv = 7;
-        const colQuintal = 8;
-        const colTipologia = 9;
-        const colAvaliacao = 16;
-        const colPreco = 17;
-        const colItbi1 = 24;
-        const colItbi2 = 28;
+        // Detecta a linha de cabeçalho e o índice de cada coluna PELO NOME (não por posição
+        // fixa): cada tabela de venda pode ter as colunas em ordem/posição diferente, então
+        // não dá pra assumir que "ITBI 1º Imóvel" está sempre na mesma letra de coluna.
+        // Testa as primeiras linhas da planilha e usa a que casar com mais nomes conhecidos
+        // (COLUMN_DEFINITIONS, definidos em utils/formatters.ts).
+        let headerRowIndex = -1;
+        let colIndices: Record<string, number> = {};
+        let bestScore = -1;
+
+        const maxHeaderRowsToScan = Math.min(jsonData.length, 6);
+        for (let r = 0; r < maxHeaderRowsToScan; r++) {
+          const row = jsonData[r];
+          if (!row || !Array.isArray(row)) continue;
+
+          const rowMatches: Record<string, number> = {};
+          row.forEach((cell, idx) => {
+            const norm = normalizeHeader(cell);
+            if (!norm) return;
+            for (const def of COLUMN_DEFINITIONS) {
+              if (rowMatches[def.key] === undefined && def.match(norm)) {
+                rowMatches[def.key] = idx;
+                break;
+              }
+            }
+          });
+
+          const score = Object.keys(rowMatches).length;
+          if (score > bestScore) {
+            bestScore = score;
+            colIndices = rowMatches;
+            headerRowIndex = r;
+          }
+        }
+
+        // Exige um mínimo de colunas reconhecidas pelo nome para confiar no cabeçalho detectado
+        if (headerRowIndex === -1 || bestScore < 5) {
+          onShowToast("Não foi possível identificar as colunas pelo nome do cabeçalho. Confira se a planilha tem uma linha com os nomes das colunas (TORRE, UNIDADE, PREÇO, ITBI, etc).");
+          return;
+        }
+
+        const colFase = colIndices["Fase"];
+        const colTorre = colIndices["TORRE"];
+        const colUnidade = colIndices["UNIDADE"];
+        const colAreaPriv = colIndices["ÁREA PRIVATIVA M² - APTO"];
+        const colQuintal = colIndices["ÁREA QUINTAL M²"];
+        const colTipologia = colIndices["TIPOLOGIA"];
+        const colAvaliacao = colIndices["AVALIAÇÃO"];
+        const colPreco = colIndices["PREÇO"];
+        const colItbi1 = colIndices["ITBI + Registro 1º Imóvel"];
+        const colItbi2 = colIndices["ITBI + Registro 2º Imóvel"];
+
+        if (colTorre === undefined || colUnidade === undefined || colPreco === undefined) {
+          onShowToast("Colunas essenciais (TORRE, UNIDADE, PREÇO) não foram encontradas pelo nome do cabeçalho. Verifique os títulos das colunas na planilha.");
+          return;
+        }
 
         const mappedHeaders = [
           "Fase",
@@ -172,9 +206,6 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           "ITBI + Registro 1º Imóvel",
           "ITBI + Registro 2º Imóvel"
         ];
-
-        // Linha 2 do Excel corresponde ao índice 1 do array base 0
-        const headerRowIndex = jsonData.length > 2 ? 1 : 0;
 
         // Conjunto estrito de torres residenciais válidas ("A" a "H")
         const VALID_RESIDENTIAL_TOWERS = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
