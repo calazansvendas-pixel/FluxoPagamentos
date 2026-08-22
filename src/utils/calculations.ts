@@ -266,7 +266,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const sinalComITBI = Math.max(0, sinalSemITBI + itbiRegistro);
 
   const pctMaxProSoluto = (params.percentualRiscoGeral !== undefined ? params.percentualRiscoGeral : 17.0) / 100;
-  const pctMaxObra = (params.percentualRiscoObra !== undefined ? params.percentualRiscoObra : 11.9) / 100;
+  // Risco Max Obra não é mais um percentual independente: é o resíduo de
+  // (Total Pró-Soluto - Risco Max Pós), calculado mais abaixo.
   const pctMaxPos = (params.percentualRiscoPos !== undefined ? params.percentualRiscoPos : 5.1) / 100;
 
   // 2. Determinação exata de Desconto Comercial / Desconto Ato, Base Líquida com ITBI e Ato Residual
@@ -341,18 +342,18 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     }
   }
 
-  // 3. Tetos e Travas de Pró-Soluto:
-  // Total Pró-Soluto (17,00% c/ ITBI) = Base Líquida * 0.17
-  // Total Obra (11,90% c/ ITBI) = Base Líquida * 0.119
-  // Total Pós-Obra (5,10% c/ ITBI) = Base Líquida * 0.051
-  const maxRiscoObra = Math.round(baseCalculoComITBI * pctMaxObra * 100) / 100;
-  const maxRiscoPos = Math.round(baseCalculoComITBI * pctMaxPos * 100) / 100;
-
   // Fluxo Pró-Soluto Efetivo com ITBI:
   // O Ato (Imóvel), o Ato Premiado (desconto comercial) e o ITBI no Ato são rigorosamente descontados do Pró-Soluto
   const saldoAtoEfetivo = isAtoZerado ? 0 : atoResidual;
   const saldoDescontoAto = isAtoZerado ? 0 : descontoAto;
   const saldoAtoITBI = params.atoITBI || 0;
+
+  // 3. Tetos e Travas de Pró-Soluto (fórmula exata da planilha de referência):
+  // Total Pró-Soluto (17,00% c/ ITBI) = Base c/ ITBI * 0.17
+  // Risco Max Pós = (Base c/ ITBI - Desconto Ato) * pctMaxPos
+  // Risco Max Obra = Total Pró-Soluto - Risco Max Pós (resíduo, não é um percentual independente)
+  const maxRiscoPos = Math.round((baseCalculoComITBI - saldoDescontoAto) * pctMaxPos * 100) / 100;
+  const maxRiscoObra = Math.round((totalProSolutoMaximo - maxRiscoPos) * 100) / 100;
 
   const fluxoProSolutoComITBI = Math.max(
     0,
@@ -364,18 +365,23 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const maxFluxoGeral = fluxoProSolutoComITBI;
   const tetoPosGlobal = maxRiscoPos;
 
-  // 4. Distribuição das 5 Séries Morar ao longo de 60 meses
-  // Pesos oficiais sobre o fluxo com ITBI:
-  // Série 1 (12x): 30% -> R$ 1.345,98 c/ ITBI | Líquida: R$ 1.121,85
-  // Série 2 (12x): 25% -> R$ 1.121,65 c/ ITBI | Líquida: R$ 897,52
-  // Série 3 (12x): 20% -> R$ 897,32 c/ ITBI   | Líquida: R$ 673,19
-  // Série 4 (12x): 15% -> R$ 672,99 c/ ITBI   | Líquida: R$ 448,86
-  // Série 5 (12x): 10% -> R$ 448,66 c/ ITBI   | Líquida: R$ 224,53
-  const seriesWeights = [0.30, 0.25, 0.20, 0.15, 0.10, 0.0];
+  // 4. Distribuição das Séries Morar em cascata (fórmula exata da planilha de referência):
+  // Cada balde de 12 meses tem um peso (30%/25%/20%/15%/10%/5%). A série que atravessa a
+  // fronteira Obra/Pós-Obra (ex: balde 3 com 9 meses em Obra + 3 meses em Pós) mantém o MESMO
+  // peso e a MESMA parcela nas duas fases — não reinicia a numeração. A parcela bruta mensal de
+  // cada balde é proporcional ao seu peso sobre a soma (peso × meses) de todos os baldes ativos:
+  //   parcela_bruta[i] = peso[i] × fluxoProSolutoComITBI / Σ(peso[j] × meses[j])
+  const seriesWeights = (params.globalSeriesPct && params.globalSeriesPct.length === 6)
+    ? params.globalSeriesPct.map(p => (p || 0) / 100)
+    : [0.30, 0.25, 0.20, 0.15, 0.10, 0.05];
 
-  const seriesMonthlyRatesBrutas = seriesWeights.map(w => {
-    return (fluxoProSolutoComITBI * w) / 12;
-  });
+  const weightedMonthsTotal = seriesWeights.reduce(
+    (sum, w, idx) => sum + w * ((mObra[idx] || 0) + (mPos[idx] || 0)),
+    0
+  );
+  const pricePerWeightPoint = weightedMonthsTotal > 0 ? fluxoProSolutoComITBI / weightedMonthsTotal : 0;
+
+  const seriesMonthlyRatesBrutas = seriesWeights.map(w => pricePerWeightPoint * w);
 
   const seriesMonthlyRatesLiquidas = seriesMonthlyRatesBrutas.map((brutaExata) => {
     if (brutaExata <= 0) return 0;
