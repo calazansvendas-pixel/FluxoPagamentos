@@ -29,7 +29,9 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
     e.preventDefault();
     if (!name.trim()) return;
 
-    const id = 'prod_' + Date.now();
+    // UUID (não um id de texto arbitrário): o Supabase exige esse formato na coluna
+    // empreendimentos.id, senão a sincronização é silenciosamente ignorada.
+    const id = crypto.randomUUID();
     const optionsList = optionsText.trim()
       ? optionsText.split(',').map(o => o.trim()).filter(o => o !== '')
       : ['Sinal em 48X c/ Morar', 'Sinal em 72X c/ Banco Direto'];
