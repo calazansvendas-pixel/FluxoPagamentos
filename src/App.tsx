@@ -30,18 +30,41 @@ export default function App() {
     new Date().toISOString().split('T')[0]
   );
 
+  // Products state with localStorage persistence
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('simulador_products_data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao carregar produtos do localStorage:", e);
+    }
+    return INITIAL_PRODUCTS;
+  });
+
+  // Referência sempre atualizada de products, para uso dentro do listener de sincronização
+  // (que é registrado uma única vez e não pode depender de uma closure desatualizada de products).
+  const productsRef = React.useRef(products);
+  React.useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
+
   React.useEffect(() => {
     // Inicialização do Banco de Dados (Seed Inicial) e Sincronização Completa
     const syncFromSupabase = async () => {
       try {
         await imoveisService.inicializarBancoSeNecessario();
-        
+
         const dbEmps = await imoveisService.listarEmpreendimentos();
         if (dbEmps && Array.isArray(dbEmps) && dbEmps.length > 0 && 'nome' in dbEmps[0]) {
           // Para cada empreendimento, busca as unidades mais recentes no Supabase
-          const updatedProducts = await Promise.all(dbEmps.map(async (dbEmp: any) => {
-            const existing = products.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS[0];
-            
+          const updatedFromDb = await Promise.all(dbEmps.map(async (dbEmp: any) => {
+            const existing = productsRef.current.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS.find(p => p.id === dbEmp.id) || INITIAL_PRODUCTS[0];
+
             let currentTableInfo = existing.tableInfo;
             try {
               const units = await imoveisService.listarUnidadesPorEmpreendimento(dbEmp.id);
@@ -70,7 +93,11 @@ export default function App() {
             };
           }));
 
-          setProducts(updatedProducts);
+          // Mescla com o estado atual em vez de substituir: preserva empreendimentos que
+          // só existem localmente (ex.: recém-criados e ainda não sincronizados no Supabase).
+          const dbIds = new Set(updatedFromDb.map(p => p.id));
+          const localOnly = productsRef.current.filter(p => !dbIds.has(p.id));
+          setProducts([...updatedFromDb, ...localOnly]);
         }
       } catch (err) {
         console.warn('Sincronização com Supabase usando fallback local:', err);
@@ -84,22 +111,6 @@ export default function App() {
       window.removeEventListener('tabela_atualizada', syncFromSupabase);
     };
   }, []);
-
-  // Products state with localStorage persistence
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      const saved = localStorage.getItem('simulador_products_data');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error("Erro ao carregar produtos do localStorage:", e);
-    }
-    return INITIAL_PRODUCTS;
-  });
 
   // Persist products on change
   React.useEffect(() => {
@@ -366,6 +377,16 @@ export default function App() {
     setActiveImportProductId(newProd.id);
     setIsNewProductModalOpen(false);
     showToast(`Novo empreendimento "${newProd.name}" cadastrado com sucesso!`);
+
+    // Sincroniza com o Supabase imediatamente, para que o empreendimento já exista no banco
+    // antes de qualquer sincronização automática recarregar a lista (o que o apagaria, já
+    // que ela hoje mescla com o que está no banco em vez de sobrescrever pelo local).
+    imoveisService.sincronizarEmpreendimento({
+      id: newProd.id,
+      nome: newProd.name,
+      delivery_date_phase1: newProd.deliveryDatePhase1 || newProd.deliveryDate,
+      delivery_date_phase2: newProd.deliveryDatePhase2
+    }).catch(e => console.warn('Aviso ao sincronizar novo empreendimento no Supabase:', e));
   };
 
   return (
