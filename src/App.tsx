@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { ActiveTab, CommercialCondition, Product, SelectedUnit, SimulationData, TableInfo } from './types';
 import { INITIAL_PRODUCTS } from './data/initialProducts';
 import { ensureProductConditions } from './utils/calculations';
@@ -7,12 +7,21 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
 import { SimulatorView } from './components/SimulatorView';
-import { DetailsView } from './components/DetailsView';
-import { FichaMorar } from './components/FichaMorar';
-import { PoliciesView } from './components/PoliciesView';
-import { ImportTableView } from './components/ImportTableView';
-import { NewProductModal } from './components/NewProductModal';
 import { imoveisService } from './services/imoveisService';
+
+// Telas carregadas sob demanda: evitam colocar recharts, jsPDF, html2canvas-pro
+// e xlsx no bundle inicial quando o usuário só precisa do Simulador.
+const DetailsView = lazy(() => import('./components/DetailsView').then(m => ({ default: m.DetailsView })));
+const FichaMorar = lazy(() => import('./components/FichaMorar').then(m => ({ default: m.FichaMorar })));
+const PoliciesView = lazy(() => import('./components/PoliciesView').then(m => ({ default: m.PoliciesView })));
+const ImportTableView = lazy(() => import('./components/ImportTableView').then(m => ({ default: m.ImportTableView })));
+const NewProductModal = lazy(() => import('./components/NewProductModal').then(m => ({ default: m.NewProductModal })));
+
+const ViewLoadingFallback = () => (
+  <div className="flex items-center justify-center py-24 text-sm text-slate-400">
+    Carregando...
+  </div>
+);
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('simulator');
@@ -394,6 +403,7 @@ export default function App() {
             />
           )}
 
+          <Suspense fallback={<ViewLoadingFallback />}>
           {activeTab === 'details' && (
             <DetailsView
               product={activeAnalysisProduct}
@@ -470,15 +480,20 @@ export default function App() {
               onShowToast={showToast}
             />
           )}
+          </Suspense>
         </main>
       </div>
 
       {/* MODAL: NEW PRODUCT */}
-      <NewProductModal
-        isOpen={isNewProductModalOpen}
-        onClose={() => setIsNewProductModalOpen(false)}
-        onSaveNewProduct={handleSaveNewProduct}
-      />
+      {isNewProductModalOpen && (
+        <Suspense fallback={null}>
+          <NewProductModal
+            isOpen={isNewProductModalOpen}
+            onClose={() => setIsNewProductModalOpen(false)}
+            onSaveNewProduct={handleSaveNewProduct}
+          />
+        </Suspense>
+      )}
 
       {/* TOAST NOTIFICATION */}
       <Toast message={toastMessage} />
