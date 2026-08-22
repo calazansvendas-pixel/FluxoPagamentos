@@ -4,6 +4,8 @@ import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../t
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
 import { PdfExportModal } from './PdfExportModal';
+import { EmptySimulationNotice } from './EmptySimulationNotice';
+import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
 import { imoveisService } from '../services/imoveisService';
 
 interface DetailsViewProps {
@@ -109,43 +111,31 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   }, [currentProd?.id, selectedUnits]);
 
   // 2. FUNÇÃO E EFFECT DISPARADOS AO TROCAR DE EMPREENDIMENTO OU ATUALIZAR A POLÍTICA DE CRÉDITO:
-  // Garante a limpeza do estado residual na memória e a sincronização dinâmica da Qtd. Mensais para o valor configurado na condição comercial.
+  // Garante a limpeza do estado residual na memória, reset da seleção ativa de unidade e sincronização da Qtd. Mensais
   useEffect(() => {
-    if (currentProd && currentCond) {
-      setValAtoManual(null);
-      setAtoInputText('');
-      setIsEditingAto(false);
-      setValAtoITBI(0);
-      setItbiInputText('');
-      setIsEditingITBI(false);
-      setValParc2(0);
-      setParc2InputText('');
-      setIsEditingParc2(false);
-      setValParc3(0);
-      setParc3InputText('');
-      setIsEditingParc3(false);
-      setQtdMensais(condNumParcelas);
-      setIsAtoPremiadoEnabled(true);
+    setSelectedTorre('');
+    setSelectedUnidade('');
+    setValAtoManual(null);
+    setAtoInputText('');
+    setIsEditingAto(false);
+    setValAtoITBI(0);
+    setItbiInputText('');
+    setIsEditingITBI(false);
+    setValParc2(0);
+    setParc2InputText('');
+    setIsEditingParc2(false);
+    setValParc3(0);
+    setParc3InputText('');
+    setIsEditingParc3(false);
+    setQtdMensais(condNumParcelas);
+    setIsAtoPremiadoEnabled(true);
+    if (currentProd) {
+      onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
     }
   }, [currentProd?.id, currentCond?.id, currentCond?.numParcelas, condNumParcelas]);
 
-  if (!currentProd || !currentCond) {
-    return (
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-4">
-        <p className="text-slate-600 font-medium text-sm">Nenhum empreendimento selecionado para análise.</p>
-        <button
-          type="button"
-          onClick={onBackToSimulator}
-          className="px-4 py-2 bg-sky-600 text-white rounded-xl text-xs font-semibold hover:bg-sky-700 cursor-pointer"
-        >
-          Ir para o Simulador
-        </button>
-      </div>
-    );
-  }
-
   // Get table rows for current product
-  const tableRows = currentProd.tableInfo?.rows || [];
+  const tableRows = currentProd?.tableInfo?.rows || [];
   const uniqueTorres = React.useMemo(() => {
     return Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== '')));
   }, [tableRows]);
@@ -157,29 +147,20 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     return uniqueTorres.filter(t => allowed.includes(String(t || '').trim().toLowerCase()));
   }, [uniqueTorres, currentCond?.torresHabilitadas]);
 
-  // Regra de Fallback e Troca: Ao alternar de produto ou modalidade, validar torre e unidade
+  // Validação estrita: se a torre ou unidade selecionada não estiver disponível, reseta a seleção
   useEffect(() => {
     if (!currentProd) return;
 
-    if (availableTorres.length > 0) {
-      if (!selectedTorre || !availableTorres.some(t => t.toLowerCase() === selectedTorre.toLowerCase())) {
-        const fallbackTorre = availableTorres[0];
-        setSelectedTorre(fallbackTorre);
+    if (selectedTorre) {
+      const isTorreValid = availableTorres.some(t => t.toLowerCase() === selectedTorre.toLowerCase());
+      if (!isTorreValid) {
+        setSelectedTorre('');
+        setSelectedUnidade('');
+        onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
+        return;
+      }
 
-        const unitsOfFallback = Array.from(new Set(
-          tableRows
-            .filter(r => String(r[1] || '').trim().toLowerCase() === fallbackTorre.toLowerCase())
-            .map(r => String(r[2] || '').trim())
-            .filter(u => u !== '')
-        ));
-
-        const newUnidade = (selectedUnidade && unitsOfFallback.some(u => String(u).toLowerCase() === selectedUnidade.toLowerCase()))
-          ? selectedUnidade
-          : (unitsOfFallback[0] || '');
-
-        setSelectedUnidade(newUnidade);
-        onUnitSelectChange(currentProd.id, { torre: fallbackTorre, unidade: newUnidade });
-      } else {
+      if (selectedUnidade) {
         const unitsOfCurrent = Array.from(new Set(
           tableRows
             .filter(r => String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase())
@@ -187,20 +168,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             .filter(u => u !== '')
         ));
 
-        if (selectedUnidade && !unitsOfCurrent.some(u => String(u).toLowerCase() === selectedUnidade.toLowerCase())) {
-          const newUnidade = unitsOfCurrent[0] || '';
-          setSelectedUnidade(newUnidade);
-          onUnitSelectChange(currentProd.id, { torre: selectedTorre, unidade: newUnidade });
+        const isUnidadeValid = unitsOfCurrent.some(u => String(u).toLowerCase() === selectedUnidade.toLowerCase());
+        if (!isUnidadeValid) {
+          setSelectedUnidade('');
+          onUnitSelectChange(currentProd.id, { torre: selectedTorre, unidade: '' });
         }
       }
-    } else {
-      if (selectedTorre || selectedUnidade) {
-        setSelectedTorre('');
-        setSelectedUnidade('');
-        onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
-      }
     }
-  }, [availableTorres, currentProd?.id, currentCond?.id]);
+  }, [availableTorres, currentProd?.id, currentCond?.id, tableRows]);
 
   // Filter units by selected torre
   const filteredUnits = selectedTorre 
@@ -302,10 +277,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   };
 
   // FINANCIAL CALCULATIONS
-  const income = simulationData.income;
-  const rawSubsidy = hasUnitSelected ? simulationData.subsidy : 0;
-  const rawFGTS = hasUnitSelected ? simulationData.fgts : 0;
-  const inputFinancing = simulationData.financing;
+  const income = simulationData.income || 0;
+  const rawSubsidy = hasUnitSelected ? (simulationData.subsidy || 0) : 0;
+  const rawFGTS = hasUnitSelected ? (simulationData.fgts || 0) : 0;
+  const inputFinancing = simulationData.financing || 0;
 
   const percent = simulationData.finPercent;
   const maxAllowed = (hasUnitSelected && evaluation > 0) ? (evaluation * percent) : 0;
@@ -1034,6 +1009,31 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   };
 
+  const isFieldDefined = (val: number | null | undefined): boolean => {
+    return val !== null && val !== undefined && !isNaN(val) && val >= 0;
+  };
+
+  const isIncomeValid = isFieldDefined(simulationData.income);
+  const isFinancingValid = isFieldDefined(simulationData.financing);
+  const isSubsidyValid = isFieldDefined(simulationData.subsidy);
+  const isFgtsValid = isFieldDefined(simulationData.fgts);
+
+  const isSimulationComplete = isIncomeValid && isFinancingValid && isSubsidyValid && isFgtsValid;
+
+  if (!isSimulationComplete) {
+    return (
+      <EmptySimulationNotice
+        onNavigateToSimulator={onBackToSimulator}
+        missingItems={{
+          income: !isIncomeValid,
+          financing: !isFinancingValid,
+          subsidy: !isSubsidyValid,
+          fgts: !isFgtsValid
+        }}
+      />
+    );
+  }
+
   return (
     <div className="w-full space-y-4 animate-fade-in">
       
@@ -1457,248 +1457,133 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         {/* ================= COLUNA DA DIREITA ================= */}
         <div className="space-y-4">
           
-          {/* BLOCO 2: FLUXO DE ENTRADA C/ CONSTRUTORA */}
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
-                  <Building className="w-4 h-4" />
+          {/* BLOCO 2: FLUXO DE ENTRADA C/ CONSTRUTORA (COMPONENTE PADRONIZADO) */}
+          <FluxoEntradaConstrutora
+            title="2. FLUXO DE ENTRADA C/ CONSTRUTORA"
+            onLimpar={limparFluxoPagamento}
+            valorAto={atoAposMensais}
+            valorAtoMinimo={atoMinimoCalculado}
+            valorAtoMaximo={price > 0 ? Math.max(0, price - subsidy - atoPremiadoAtual) : 0}
+            onAtoChange={(novoVal) => {
+              setValAtoManual(novoVal);
+            }}
+            onShowToast={onShowToast}
+            valAtoITBI={valAtoITBI}
+            valorTotalITBI={despCartorias}
+            isFirstHome={isFirstHomeLocal}
+            onToggleFirstHome={() => setIsFirstHomeLocal(prev => !prev)}
+            onITBIChange={(novoVal) => setValAtoITBI(novoVal)}
+            descontoAto={descontoAto}
+            isAtoPremiadoActive={isAtoPremiadoEnabled}
+            onToggleAtoPremiado={(ativo) => {
+              setIsAtoPremiadoEnabled(ativo);
+            }}
+          >
+            {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {/* 1ª MENSAL (30 DIAS) */}
+              <div className={`p-2.5 rounded-lg border transition-all ${
+                isExceededParc2 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
+                    isExceededParc2 ? 'text-red-900' : 'text-slate-500'
+                  }`}>
+                    1ª Mensal (30 Dias)
+                  </label>
                 </div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  2. FLUXO DE ENTRADA C/ CONSTRUTORA
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={limparFluxoPagamento}
-                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Limpar Fluxo de Entrada"
-                >
-                  <RotateCcw className="w-3 h-3 text-sky-600" />
-                  <span>Limpar</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2.5 text-xs">
-              {/* 1ª LINHA: 3 COLUNAS IGUAIS (ATO IMÓVEL, ITBI NO ATO, ATO PREMIADO) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* CAMPO 1: ATO (IMÓVEL) */}
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">
-                      Ato (Imóvel)
-                    </label>
+                <input
+                  id="input-primeira-mensal-30d"
+                  type="text"
+                  value={isEditingParc2 ? parc2InputText : (valParc2 > 0 ? formatCurrency(valParc2) : '')}
+                  onFocus={(e) => {
+                    setIsEditingParc2(true);
+                    setParc2InputText(valParc2 > 0 ? String(valParc2) : '');
+                    e.target.select();
+                  }}
+                  onChange={(e) => {
+                    setParc2InputText(e.target.value);
+                    const parsed = parseFlexibleCurrency(e.target.value);
+                    if (parsed >= 0) {
+                      setValParc2(parsed);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleFinishParc2Edit(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleFinishParc2Edit(parc2InputText);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  placeholder="R$ 0,00"
+                  className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
+                    isExceededParc2
+                      ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
+                      : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
+                  }`}
+                />
+                {isExceededParc2 && (
+                  <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
+                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                    <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
                   </div>
-                  <input
-                    type="text"
-                    value={isEditingAto ? atoInputText : (atoAposMensais > 0 ? formatCurrency(atoAposMensais) : '')}
-                    onFocus={() => {
-                      setIsEditingAto(true);
-                      setAtoInputText(atoAposMensais > 0 ? formatCurrency(atoAposMensais) : '');
-                    }}
-                    onChange={(e) => {
-                      setAtoInputText(e.target.value);
-                    }}
-                    onBlur={(e) => {
-                      handleFinishAtoEdit(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleFinishAtoEdit(atoInputText);
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
-                  />
-                </div>
-
-                {/* CAMPO 2: ITBI NO ATO */}
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-sky-800 uppercase whitespace-nowrap">
-                      ITBI no Ato
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsFirstHomeLocal(prev => !prev)}
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
-                        isFirstHomeLocal
-                          ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
-                          : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                      }`}
-                      title="Alternar entre Com Desconto e Sem Desconto no ITBI"
-                    >
-                      {isFirstHomeLocal ? 'Com Desc.' : 'Sem Desc.'}
-                    </button>
-                  </div>
-                  <input
-                    id="input-pagamento-itbi-ato"
-                    type="text"
-                    value={isEditingITBI ? itbiInputText : (valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '')}
-                    onFocus={() => {
-                      setIsEditingITBI(true);
-                      setItbiInputText(valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '');
-                    }}
-                    onChange={(e) => {
-                      setItbiInputText(e.target.value);
-                      const parsed = parseFlexibleCurrency(e.target.value);
-                      if (parsed >= 0) {
-                        if (hasUnitSelected && despCartorias > 0 && parsed > despCartorias) {
-                          setValAtoITBI(despCartorias);
-                        } else {
-                          setValAtoITBI(parsed);
-                        }
-                      }
-                    }}
-                    onBlur={(e) => {
-                      handleFinishITBIEdit(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleFinishITBIEdit(itbiInputText);
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
-                  />
-                </div>
-
-                {/* ATO PREMIADO */}
-                <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/80 flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-amber-800 uppercase whitespace-nowrap">
-                      Ato Premiado
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAtoPremiadoEnabled(prev => !prev);
-                      }}
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
-                        isAtoPremiadoEnabled 
-                          ? 'bg-amber-200 text-amber-900 hover:bg-amber-300' 
-                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                      }`}
-                    >
-                      {isAtoPremiadoEnabled ? 'Zerar' : 'Aplicar'}
-                    </button>
-                  </div>
-                  <div className="mt-auto pt-1 text-center">
-                    <span className="font-extrabold text-amber-800 text-xs whitespace-nowrap">
-                      {isAtoPremiadoEnabled && descontoAto > 0 ? formatCurrency(descontoAto) : 'R$ 0,00'}
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {/* 1ª MENSAL (30 DIAS) */}
-                <div className={`p-2.5 rounded-lg border transition-all ${
-                  isExceededParc2 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
-                }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
-                      isExceededParc2 ? 'text-red-900' : 'text-slate-500'
-                    }`}>
-                      1ª Mensal (30 Dias)
-                    </label>
-                  </div>
-                  <input
-                    id="input-primeira-mensal-30d"
-                    type="text"
-                    value={isEditingParc2 ? parc2InputText : (valParc2 > 0 ? formatCurrency(valParc2) : '')}
-                    onFocus={() => {
-                      setIsEditingParc2(true);
-                      setParc2InputText(valParc2 > 0 ? formatCurrency(valParc2) : '');
-                    }}
-                    onChange={(e) => {
-                      setParc2InputText(e.target.value);
-                      const parsed = parseFlexibleCurrency(e.target.value);
-                      if (parsed >= 0) {
-                        setValParc2(parsed);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      handleFinishParc2Edit(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleFinishParc2Edit(parc2InputText);
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
-                      isExceededParc2
-                        ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
-                        : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
-                    }`}
-                  />
-                  {isExceededParc2 && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
-                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                      <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
-                    </div>
-                  )}
+              {/* 2ª MENSAL (60 DIAS) */}
+              <div className={`p-2.5 rounded-lg border transition-all ${
+                isExceededParc3 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
+                    isExceededParc3 ? 'text-red-900' : 'text-slate-500'
+                  }`}>
+                    2ª Mensal (60 Dias)
+                  </label>
                 </div>
-
-                {/* 2ª MENSAL (60 DIAS) */}
-                <div className={`p-2.5 rounded-lg border transition-all ${
-                  isExceededParc3 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
-                }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
-                      isExceededParc3 ? 'text-red-900' : 'text-slate-500'
-                    }`}>
-                      2ª Mensal (60 Dias)
-                    </label>
+                <input
+                  id="input-segunda-mensal-60d"
+                  type="text"
+                  value={isEditingParc3 ? parc3InputText : (valParc3 > 0 ? formatCurrency(valParc3) : '')}
+                  onFocus={(e) => {
+                    setIsEditingParc3(true);
+                    setParc3InputText(valParc3 > 0 ? String(valParc3) : '');
+                    e.target.select();
+                  }}
+                  onChange={(e) => {
+                    setParc3InputText(e.target.value);
+                    const parsed = parseFlexibleCurrency(e.target.value);
+                    if (parsed >= 0) {
+                      setValParc3(parsed);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleFinishParc3Edit(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleFinishParc3Edit(parc3InputText);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  placeholder="R$ 0,00"
+                  className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
+                    isExceededParc3
+                      ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
+                      : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
+                  }`}
+                />
+                {isExceededParc3 && (
+                  <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
+                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                    <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
                   </div>
-                  <input
-                    id="input-segunda-mensal-60d"
-                    type="text"
-                    value={isEditingParc3 ? parc3InputText : (valParc3 > 0 ? formatCurrency(valParc3) : '')}
-                    onFocus={() => {
-                      setIsEditingParc3(true);
-                      setParc3InputText(valParc3 > 0 ? formatCurrency(valParc3) : '');
-                    }}
-                    onChange={(e) => {
-                      setParc3InputText(e.target.value);
-                      const parsed = parseFlexibleCurrency(e.target.value);
-                      if (parsed >= 0) {
-                        setValParc3(parsed);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      handleFinishParc3Edit(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleFinishParc3Edit(parc3InputText);
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
-                      isExceededParc3
-                        ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
-                        : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
-                    }`}
-                  />
-                  {isExceededParc3 && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
-                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                      <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
-          </div>
+          </FluxoEntradaConstrutora>
 
           {/* BLOCO 3: PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO */}
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">

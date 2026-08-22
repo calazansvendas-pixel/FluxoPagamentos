@@ -21,6 +21,8 @@ import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../t
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado } from '../utils/calculations';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
+import { EmptySimulationNotice } from './EmptySimulationNotice';
+import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 
 import { imoveisService } from '../services/imoveisService';
@@ -85,7 +87,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const [itbiAtoInputText, setItbiAtoInputText] = useState<string>('');
   const [isEditingAtoITBI, setIsEditingAtoITBI] = useState<boolean>(false);
   const [isAtoPremiadoEnabled, setIsAtoPremiadoEnabled] = useState<boolean>(true);
-  const [isAtoZerado, setIsAtoZerado] = useState<boolean>(false);
 
   // Faixas de Obra (INCC) - Padrão Morar: 12x, 12x, 9x, 0x (Total 33 meses)
   const [dataObra, setDataObra] = useState<string>('setembro, 2026');
@@ -150,7 +151,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
   // Atualização e Reset Automático ao Trocar Torre / Unidade
   useEffect(() => {
-    setIsAtoZerado(false);
     setValAtoManual(null);
     setAtoInputText('');
     setIsEditingAto(false);
@@ -162,11 +162,26 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiTotalManual(null);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
+    if (!selectedTorre || !selectedUnidade) {
+      setFaixasObra([
+        { qtd: 12, valor: 0 },
+        { qtd: 12, valor: 0 },
+        { qtd: 9, valor: 0 },
+        { qtd: 0, valor: 0 }
+      ]);
+      setFaixasPos([
+        { qtd: 3, valor: 0 },
+        { qtd: 12, valor: 0 },
+        { qtd: 12, valor: 0 },
+        { qtd: 0, valor: 0 }
+      ]);
+    }
   }, [selectedTorre, selectedUnidade]);
 
-  // Limpeza ao trocar de produto ou condição
+  // Limpeza completa ao trocar de produto ou condição comercial
   useEffect(() => {
-    setIsAtoZerado(false);
+    setSelectedTorre('');
+    setSelectedUnidade('');
     setValAtoManual(null);
     setAtoInputText('');
     setIsEditingAto(false);
@@ -179,22 +194,22 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiTotalManual(null);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
+    setFaixasObra([
+      { qtd: 12, valor: 0 },
+      { qtd: 12, valor: 0 },
+      { qtd: 9, valor: 0 },
+      { qtd: 0, valor: 0 }
+    ]);
+    setFaixasPos([
+      { qtd: 3, valor: 0 },
+      { qtd: 12, valor: 0 },
+      { qtd: 12, valor: 0 },
+      { qtd: 0, valor: 0 }
+    ]);
+    if (currentProd) {
+      onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
+    }
   }, [currentProd?.id, currentCond?.id]);
-
-  if (!currentProd || !currentCond) {
-    return (
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-4">
-        <p className="text-slate-600 font-medium text-sm">Nenhum empreendimento selecionado para análise.</p>
-        <button
-          type="button"
-          onClick={onBackToSimulator}
-          className="px-4 py-2 bg-sky-600 text-white rounded-xl text-xs font-semibold hover:bg-sky-700 cursor-pointer"
-        >
-          Ir para o Simulador
-        </button>
-      </div>
-    );
-  }
 
   const [dbUnits, setDbUnits] = useState<any[]>([]);
 
@@ -226,29 +241,20 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     return uniqueTorres.filter(t => allowed.includes(String(t || '').trim().toLowerCase()));
   }, [uniqueTorres, currentCond?.torresHabilitadas]);
 
-  // Regra de Fallback e Troca: Ao alternar de produto ou modalidade, validar torre e unidade
+  // Validação estrita: se a torre ou unidade selecionada não estiver disponível, reseta a seleção
   useEffect(() => {
     if (!currentProd) return;
 
-    if (availableTorres.length > 0) {
-      if (!selectedTorre || !availableTorres.some(t => t.toLowerCase() === selectedTorre.toLowerCase())) {
-        const fallbackTorre = availableTorres[0];
-        setSelectedTorre(fallbackTorre);
+    if (selectedTorre) {
+      const isTorreValid = availableTorres.some(t => t.toLowerCase() === selectedTorre.toLowerCase());
+      if (!isTorreValid) {
+        setSelectedTorre('');
+        setSelectedUnidade('');
+        onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
+        return;
+      }
 
-        const unitsOfFallback = Array.from(new Set(
-          dbUnits
-            .filter(u => String(u.torre || '').trim().toLowerCase() === fallbackTorre.toLowerCase())
-            .map(u => String(u.unidade || '').trim())
-            .filter(u => u !== '')
-        ));
-
-        const newUnidade = (selectedUnidade && unitsOfFallback.some(u => String(u).toLowerCase() === selectedUnidade.toLowerCase()))
-          ? selectedUnidade
-          : (unitsOfFallback[0] || '');
-
-        setSelectedUnidade(newUnidade);
-        onUnitSelectChange(currentProd.id, { torre: fallbackTorre, unidade: newUnidade });
-      } else {
+      if (selectedUnidade) {
         const unitsOfCurrent = Array.from(new Set(
           dbUnits
             .filter(u => String(u.torre || '').trim().toLowerCase() === selectedTorre.toLowerCase())
@@ -256,17 +262,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             .filter(u => u !== '')
         ));
 
-        if (selectedUnidade && !unitsOfCurrent.some(u => String(u).toLowerCase() === selectedUnidade.toLowerCase())) {
-          const newUnidade = unitsOfCurrent[0] || '';
-          setSelectedUnidade(newUnidade);
-          onUnitSelectChange(currentProd.id, { torre: selectedTorre, unidade: newUnidade });
+        const isUnidadeValid = unitsOfCurrent.some(u => String(u).toLowerCase() === selectedUnidade.toLowerCase());
+        if (!isUnidadeValid) {
+          setSelectedUnidade('');
+          onUnitSelectChange(currentProd.id, { torre: selectedTorre, unidade: '' });
         }
-      }
-    } else {
-      if (selectedTorre || selectedUnidade) {
-        setSelectedTorre('');
-        setSelectedUnidade('');
-        onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
       }
     }
   }, [availableTorres, currentProd?.id, currentCond?.id, dbUnits]);
@@ -360,10 +360,22 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiTotalManual(null);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
+    setFaixasObra([
+      { qtd: 12, valor: 0 },
+      { qtd: 12, valor: 0 },
+      { qtd: 9, valor: 0 },
+      { qtd: 0, valor: 0 }
+    ]);
+    setFaixasPos([
+      { qtd: 3, valor: 0 },
+      { qtd: 12, valor: 0 },
+      { qtd: 12, valor: 0 },
+      { qtd: 0, valor: 0 }
+    ]);
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
     }
-    onShowToast('Ficha Morar limpa com sucesso. Os dados da simulação foram mantidos.');
+    onShowToast('Ficha Morar limpa com sucesso. Selecione a Torre e Unidade para calcular.');
   };
 
   const limparFluxoPagamento = () => {
@@ -376,16 +388,62 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setIsAtoPremiadoEnabled(true);
     setIsManualObra(false);
     setIsManualPos(false);
+    setItbiTotalManual(null);
+    setItbiObraValorManual(null);
+    setItbiPosValorManual(null);
+    
+    // Restaura as faixas padrão da curva Morar
+    if (hasUnitSelected && price > 0) {
+      const mesesObraPadrao = currentCond?.mesesObra ?? 33;
+      const mesesPosPadrao = currentCond?.mesesPos ?? 27;
+      const globalPct: [number, number, number, number, number, number] = [
+        currentCond?.globalSerie1Pct ?? 30.0,
+        currentCond?.globalSerie2Pct ?? 25.0,
+        currentCond?.globalSerie3Pct ?? 20.0,
+        currentCond?.globalSerie4Pct ?? 15.0,
+        currentCond?.globalSerie5Pct ?? 10.0,
+        currentCond?.globalSerie6Pct ?? 5.0
+      ];
+      const engineResult = calculateMorarFlowEngine({
+        precoTabela: price,
+        avaliacaoBanco: evaluation,
+        itbiRegistro: despCartoriasCalculadas,
+        renda: income,
+        financiamento: maxFinanc,
+        subsidio: subsidy,
+        fgts: fgts,
+        percentualRiscoGeral: currentCond?.percMaxProSolutoGlobal ?? currentCond?.riscoImovelPct ?? 17.0,
+        percentualRiscoPos: currentCond?.percMaxPosObra ?? currentCond?.riscoPosPct ?? 8.0,
+        mesesObra: mesesObraPadrao,
+        mesesPos: mesesPosPadrao,
+        globalSeriesPct: globalPct,
+        sinalMinimo: sinalMinimoVal,
+        atoITBI: 0,
+        isAtoPremiadoEnabled: true,
+        isAtoZerado: false
+      });
+      const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
+      const mPosArr = engineResult.posSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
+      setFaixasObra(mObraArr);
+      setFaixasPos(mPosArr);
+      setValAtoManual(engineResult.atoResidual);
+      setAtoInputText(formatCurrency(engineResult.atoResidual));
+      setItbiObraValorManual(engineResult.parcelaMensalITBI);
+      setItbiPosValorManual(engineResult.parcelaMensalITBI);
+      setItbiObraQtd(mObraArr.reduce((a, b) => a + b.qtd, 0));
+      setItbiPosQtd(mPosArr.reduce((a, b) => a + b.qtd, 0));
+    }
+
     if (onShowToast) {
-      onShowToast('Fluxo de pagamento redefinido para as condições padrão.');
+      onShowToast('Fluxo de pagamento redefinido: Ato (Imóvel), ITBI no Ato e Ato Premiado restaurados.');
     }
   };
 
   // CÁLCULOS FINANCEIROS E RECURSOS
-  const income = simulationData.income;
-  const rawSubsidy = hasUnitSelected ? simulationData.subsidy : 0;
-  const rawFGTS = hasUnitSelected ? simulationData.fgts : 0;
-  const inputFinancing = simulationData.financing;
+  const income = simulationData.income || 0;
+  const rawSubsidy = hasUnitSelected ? (simulationData.subsidy || 0) : 0;
+  const rawFGTS = hasUnitSelected ? (simulationData.fgts || 0) : 0;
+  const inputFinancing = simulationData.financing || 0;
   const percent = simulationData.finPercent;
   const maxAllowed = (hasUnitSelected && evaluation > 0) ? (evaluation * percent) : 0;
 
@@ -490,10 +548,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       globalSeriesPct: globalPct,
       sinalMinimo: sinalMinimoVal,
       isAtoPremiadoEnabled,
-      isAtoZerado,
       atoITBI: atoITBIValidado
     });
-  }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, isAtoZerado, atoITBIValidado, totalParcObra, totalParcPos]);
+  }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, atoITBIValidado, totalParcObra, totalParcPos]);
 
   // Piso do Ato Sugerido Inicial e Saldo de Pró-Soluto padrão
   const atoSugeridoResidual = hasUnitSelected ? (morarEngineBase?.atoResidual ?? 0) : 0;
@@ -501,7 +558,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
   // Desconto do Ato Premiado baseado no Ato Efetivo
   const descontoAtoPremiadoCalculado = calcularDescontoAtoPremiado(valorAtoEfetivo);
-  const descontoAto = (!isAtoZerado && isAtoPremiadoEnabled) 
+  const descontoAto = isAtoPremiadoEnabled 
     ? (valAtoManual !== null ? descontoAtoPremiadoCalculado : (morarEngineBase?.atoPremiado ?? 0))
     : 0;
 
@@ -747,8 +804,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       globalSeriesPct: globalPct,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
-      isAtoPremiadoEnabled,
-      isAtoZerado
+      isAtoPremiadoEnabled
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -766,10 +822,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiPosQtd(mesesPosParam === 0 ? 0 : mPosArr.reduce((a, b) => a + b.qtd, 0));
     setIsManualObra(false);
     setIsManualPos(false);
-
-    if (onShowToast) {
-      onShowToast('Distribuição oficial da Morar calculada e aplicada com sucesso!');
-    }
   };
 
   // Inicialização inteligente e automática quando a unidade é selecionada ou o sinal líquido é atualizado
@@ -805,8 +857,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         globalSeriesPct: globalPct,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
-        isAtoPremiadoEnabled,
-        isAtoZerado
+        isAtoPremiadoEnabled
       });
 
       const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -821,7 +872,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       setItbiObraQtd(mObraArr.reduce((a, b) => a + b.qtd, 0));
       setItbiPosQtd(mPosArr.reduce((a, b) => a + b.qtd, 0));
     }
-  }, [sinalLiquidoTotalEfetivo, hasUnitSelected, isManualObra, isManualPos, valAtoManual, sinalMinimoVal, currentCond, income, despCartoriasEfetivas, atoITBIValidado, price, evaluation, maxFinanc, subsidy, fgts, isAtoZerado, isAtoPremiadoEnabled]);
+  }, [sinalLiquidoTotalEfetivo, hasUnitSelected, isManualObra, isManualPos, valAtoManual, sinalMinimoVal, currentCond, income, despCartoriasEfetivas, atoITBIValidado, price, evaluation, maxFinanc, subsidy, fgts, isAtoPremiadoEnabled]);
 
   // AÇÃO DE AJUSTAR FLUXO (REBALANCEAMENTO INSTANTÂNEO DO ATO OU DA CURVA)
   const handleAjustarFluxo = () => {
@@ -882,8 +933,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         globalSeriesPct: globalPct,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
-        isAtoPremiadoEnabled,
-        isAtoZerado
+        isAtoPremiadoEnabled
       });
 
       const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -929,8 +979,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         globalSeriesPct: globalPct,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
-        isAtoPremiadoEnabled,
-        isAtoZerado
+        isAtoPremiadoEnabled
       });
 
       const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -989,8 +1038,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       globalSeriesPct: globalPct,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
-      isAtoPremiadoEnabled,
-      isAtoZerado
+      isAtoPremiadoEnabled
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1045,26 +1093,80 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     });
   };
 
+  // Ação explícita de zerar o Ato (Imóvel) e redistribuir todo o sinal nas séries mensais
+  const zerarAtoImovel = () => {
+    setValAtoManual(0);
+    setAtoInputText('R$ 0,00');
+    setIsManualObra(false);
+    setIsManualPos(false);
+
+    const mesesObraParam = totalParcObra < mesesObraPadraoPolitica ? totalParcObra : mesesObraPadraoPolitica;
+    const mesesPosParam = totalParcObra < mesesObraPadraoPolitica ? 0 : mesesPosPadraoPolitica;
+    const globalPct: [number, number, number, number, number, number] = [
+      currentCond?.globalSerie1Pct ?? 30.0,
+      currentCond?.globalSerie2Pct ?? 25.0,
+      currentCond?.globalSerie3Pct ?? 20.0,
+      currentCond?.globalSerie4Pct ?? 15.0,
+      currentCond?.globalSerie5Pct ?? 10.0,
+      currentCond?.globalSerie6Pct ?? 5.0
+    ];
+
+    const engineResult = calculateMorarFlowEngine({
+      precoTabela: price,
+      avaliacaoBanco: evaluation,
+      itbiRegistro: despCartoriasEfetivas,
+      renda: income,
+      financiamento: maxFinanc,
+      subsidio: subsidy,
+      fgts: fgts,
+      percentualRiscoGeral: currentCond?.percMaxProSolutoGlobal ?? currentCond?.riscoImovelPct ?? 17.0,
+      percentualRiscoPos: currentCond?.percMaxPosObra ?? currentCond?.riscoPosPct ?? 8.0,
+      mesesObra: mesesObraParam,
+      mesesPos: mesesPosParam,
+      globalSeriesPct: globalPct,
+      sinalMinimo: sinalMinimoVal,
+      atoITBI: atoITBIValidado,
+      isAtoPremiadoEnabled: isAtoPremiadoEnabled,
+      atoManual: 0
+    });
+
+    const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
+    const mPosArr = mesesPosParam === 0 
+      ? [{ qtd: 0, valor: 0, serieIndex: 0 }, { qtd: 0, valor: 0, serieIndex: 1 }, { qtd: 0, valor: 0, serieIndex: 2 }, { qtd: 0, valor: 0, serieIndex: 3 }]
+      : engineResult.posSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
+
+    setFaixasObra(mObraArr);
+    setFaixasPos(mPosArr);
+    setItbiObraValorManual(engineResult.parcelaMensalITBI);
+    setItbiPosValorManual(mesesPosParam === 0 ? 0 : engineResult.parcelaMensalITBI);
+
+    if (onShowToast) {
+      onShowToast('Ato (Imóvel) zerado. Todo o saldo do sinal foi redistribuído entre as séries mensais de Obra e Pós-Obra.');
+    }
+  };
+
   const handleFinishAtoEdit = (rawText: string) => {
     setIsEditingAto(false);
     const parsed = parseCurrency(rawText);
-    const pisoMinimo = atoSugeridoResidual || 0;
 
-    if (rawText.trim() === '' || isNaN(parsed) || parsed < pisoMinimo) {
-      if (!isNaN(parsed) && parsed > 0 && parsed < pisoMinimo && onShowToast) {
-        onShowToast(`O valor informado no Ato (${formatCurrency(parsed)}) é inferior ao Ato Sugerido de ${formatCurrency(pisoMinimo)}. Valor redefinido para o piso.`);
-      }
+    // Se o usuário digitou explicitamente 0 ou limpou o campo para 0
+    if (rawText.trim() === '0' || rawText.trim() === 'R$ 0' || rawText.trim() === 'R$ 0,00' || parsed === 0) {
+      zerarAtoImovel();
+      return;
+    }
+
+    if (rawText.trim() === '' || isNaN(parsed)) {
       setValAtoManual(null);
-      setAtoInputText(formatCurrency(pisoMinimo));
+      setAtoInputText(formatCurrency(atoSugeridoResidual));
       aplicarDistribuicaoOficialMorar();
       return;
     }
 
-    // Aporte maior ou igual ao piso mínimo
+    // Aporte maior que 0
     setValAtoManual(parsed);
     setAtoInputText(formatCurrency(parsed));
 
-    const descAtoCalculado = (!isAtoZerado && isAtoPremiadoEnabled) ? calcularDescontoAtoPremiado(parsed) : 0;
+    const descAtoCalculado = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(parsed) : 0;
     const sinalImovelBase = Math.max(0, price - maxFinanc - subsidy - fgts);
     const sinalLiqImovel = Math.max(0, Math.round((sinalImovelBase - descAtoCalculado) * 100) / 100);
 
@@ -1115,8 +1217,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       globalSeriesPct: globalPct,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
-      isAtoPremiadoEnabled,
-      isAtoZerado,
+      isAtoPremiadoEnabled: isAtoPremiadoEnabled,
       atoManual: parsed
     });
 
@@ -1193,7 +1294,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       sinalMinimo: sinalMinimoVal,
       atoITBI: finalVal,
       isAtoPremiadoEnabled,
-      isAtoZerado,
       atoManual: valAtoManual !== null ? valAtoManual : undefined
     });
 
@@ -1247,13 +1347,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const pieData1 = [
     { name: 'Total Pró-Soluto', value: pctProSoluto, fill: '#059669', label: `${pctProSoluto.toFixed(2)}%` },
     { name: 'Total Obra', value: pctObra, fill: '#0284C7', label: `${pctObra.toFixed(2)}%` },
-    { name: 'Total Pós-Obra', value: pctPos, fill: '#6366F1', label: `${pctPos.toFixed(2)}%` }
+    { name: 'Total Pós-Obra', value: pctPos, fill: '#7C3AED', label: `${pctPos.toFixed(2)}%` }
   ].filter(d => d.value > 0);
 
   const pieData2 = [
     { name: 'Total Pró-Soluto', value: totalFaseObraComITBI + totalFasePosComITBI, fill: '#059669', label: formatCurrency(totalFaseObraComITBI + totalFasePosComITBI) },
     { name: 'Total Obra', value: totalFaseObraComITBI, fill: '#0284C7', label: formatCurrency(totalFaseObraComITBI) },
-    { name: 'Total Pós-Obra', value: totalFasePosComITBI, fill: '#6366F1', label: formatCurrency(totalFasePosComITBI) }
+    { name: 'Total Pós-Obra', value: totalFasePosComITBI, fill: '#7C3AED', label: formatCurrency(totalFasePosComITBI) }
   ].filter(d => d.value > 0);
 
   const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, index, payload }: any) => {
@@ -1358,6 +1458,31 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       setIsSavingSimulation(false);
     }
   };
+
+  const isFieldDefined = (val: number | null | undefined): boolean => {
+    return val !== null && val !== undefined && !isNaN(val) && val >= 0;
+  };
+
+  const isIncomeValid = isFieldDefined(simulationData.income);
+  const isFinancingValid = isFieldDefined(simulationData.financing);
+  const isSubsidyValid = isFieldDefined(simulationData.subsidy);
+  const isFgtsValid = isFieldDefined(simulationData.fgts);
+
+  const isSimulationComplete = isIncomeValid && isFinancingValid && isSubsidyValid && isFgtsValid;
+
+  if (!isSimulationComplete) {
+    return (
+      <EmptySimulationNotice
+        onNavigateToSimulator={onBackToSimulator}
+        missingItems={{
+          income: !isIncomeValid,
+          financing: !isFinancingValid,
+          subsidy: !isSubsidyValid,
+          fgts: !isFgtsValid
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
@@ -1728,16 +1853,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             </div>
           </div>
 
-          {/* BANNER AVISO COMERCIAL MORAR */}
-          <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 text-xs text-amber-900 font-medium flex items-start gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <p>
-              <strong>Obs:</strong> As parcelas que compõem o sinal e ITBI tem vencimento juntas, ou seja, na mesma data.
-            </p>
-          </div>
-
           {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO */}
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
             {/* Cabeçalho de Bases Compartilhadas */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
               <div className="flex items-center gap-2">
@@ -1763,67 +1880,96 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </div>
             </div>
 
-            {/* GRÁFICOS DE PIZZA LADO A LADO */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* SUB-CARD 1: RISCO PARCELA / COMPROMETIMENTO */}
-              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between space-y-1">
-                <div className="border-b border-slate-200/60 pb-1 text-center">
-                  <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'bg-red-500' : 'bg-sky-600'}`} />
-                    Risco Parcela / Renda
-                  </h4>
-                  <p className="text-[9.5px] text-slate-500 mt-0.5">
-                    1ª Parcela sobre a Base da Renda
-                  </p>
-                </div>
+            {/* GRÁFICO CONSOLIDADO: PERCENTUAL DE RISCO POR FASE + INDICADORES LATERAIS/RODAPÉ */}
+            <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-4">
+              <div className="text-center">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Percentual de Risco por Fase
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Distribuição percentual do Pró-Soluto sobre a Base Líquida com ITBI
+                </p>
+              </div>
 
-                <div className="py-1 flex items-center justify-center overflow-visible">
-                  {renderSolidPie(pctRiscoParcelaRenda, pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? '#ef4444' : '#0284c7', '#cbd5e1')}
-                </div>
+              {/* GRÁFICO DE PIZZA / DONUT CONSOLIDADO */}
+              <div className="w-full h-56 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPieChart>
+                    <Pie
+                      data={pieData1}
+                      dataKey="value"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={0}
+                      outerRadius={88}
+                      stroke="#ffffff"
+                      strokeWidth={2}
+                      startAngle={270}
+                      endAngle={-90}
+                      labelLine={false}
+                      label={renderCustomizedLabel}
+                    >
+                      {pieData1.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]} />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </div>
 
-                <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
-                  <div className="flex items-center justify-between px-1 text-[10px]">
-                    <span className="text-slate-500 font-medium">Comprometimento:</span>
+              {/* LEGENDA DAS FATIAS COM AS CORES OFICIAIS */}
+              <div className="flex items-center justify-center gap-3 sm:gap-4 text-[11px] font-semibold text-slate-600 flex-wrap pt-1 border-t border-slate-200/60">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7] shrink-0" />
+                  <span>Total Obra ({pctObra.toFixed(2)}%)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#7c3aed] shrink-0" />
+                  <span>Total Pós-Obra ({pctPos.toFixed(2)}%)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#059669] shrink-0" />
+                  <span>Total Pró-Soluto ({pctProSoluto.toFixed(2)}%)</span>
+                </span>
+              </div>
+
+              {/* INDICADORES CALCULADOS: 1ª PARCELA / RENDA & PRÓ-SOLUTO TOTAL EM R$ E % */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/70 text-xs">
+                {/* INDICADOR 1: 1ª PARCELA E COMPROMETIMENTO DA RENDA */}
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'bg-red-500' : 'bg-sky-600'}`} />
+                      1ª Parcela:
+                    </span>
+                    <strong className="text-slate-900 font-bold">
+                      {formatCurrency(valorRiscoParcela)}
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium">Comprometimento da Renda:</span>
                     <strong className={`font-bold ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'text-red-600' : 'text-sky-700'}`}>
                       {pctRiscoParcelaRenda < 10 && pctRiscoParcelaRenda > 0 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%
                     </strong>
                   </div>
-                  <div className="flex items-center justify-between px-1 text-[10px]">
-                    <span className="text-slate-500 font-medium">1ª Parcela:</span>
-                    <strong className="text-slate-800 font-semibold">
-                      {formatCurrency(valorRiscoParcela)}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* SUB-CARD 2: RISCO PRÓ-SOLUTO TOTAL */}
-              <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between space-y-1">
-                <div className="border-b border-slate-200/60 pb-1 text-center">
-                  <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${pctRiscoProSoluto > limiteMaximoProSoluto ? 'bg-red-500' : 'bg-indigo-600'}`} />
-                    Risco Pró-Soluto Total
-                  </h4>
-                  <p className="text-[9.5px] text-slate-500 mt-0.5">
-                    Pró-Soluto Total c/ ITBI s/ Base Líquida
-                  </p>
                 </div>
 
-                <div className="py-1 flex items-center justify-center overflow-visible">
-                  {renderSolidPie(pctRiscoProSoluto, pctRiscoProSoluto > limiteMaximoProSoluto ? '#ef4444' : '#4f46e5', '#cbd5e1')}
-                </div>
-
-                <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
-                  <div className="flex items-center justify-between px-1 text-[10px]">
-                    <span className="text-slate-500 font-medium">Comprometimento:</span>
-                    <strong className={`font-bold ${pctRiscoProSoluto > limiteMaximoProSoluto ? 'text-red-600' : 'text-indigo-700'}`}>
-                      {pctRiscoProSoluto < 10 && pctRiscoProSoluto > 0 ? pctRiscoProSoluto.toFixed(2) : pctRiscoProSoluto.toFixed(1)}%
-                    </strong>
-                  </div>
-                  <div className="flex items-center justify-between px-1 text-[10px]">
-                    <span className="text-slate-500 font-medium">Pró-Soluto Total:</span>
-                    <strong className="text-slate-800 font-semibold">
+                {/* INDICADOR 2: PRÓ-SOLUTO TOTAL EM R$ E % */}
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full ${pctRiscoProSoluto > limiteMaximoProSoluto ? 'bg-red-500' : 'bg-emerald-600'}`} />
+                      Pró-Soluto Total (R$):
+                    </span>
+                    <strong className="text-slate-900 font-bold">
                       {formatCurrency(valorRiscoProSoluto)}
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium">Pró-Soluto Total (%):</span>
+                    <strong className={`font-bold ${pctRiscoProSoluto > limiteMaximoProSoluto ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {pctRiscoProSoluto < 10 && pctRiscoProSoluto > 0 ? pctRiscoProSoluto.toFixed(2) : pctRiscoProSoluto.toFixed(2)}%
                     </strong>
                   </div>
                 </div>
@@ -1835,157 +1981,47 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         {/* ================= COLUNA DA DIREITA: FLUXO DE ENTRADA C/ CONSTRUTORA & FAIXAS MORAR ================= */}
         <div className="space-y-4">
           
-          {/* BLOCO 2: FLUXO DE ENTRADA C/ CONSTRUTORA */}
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
-                  <Building className="w-4 h-4" />
-                </div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  2. FLUXO DE ENTRADA C/ CONSTRUTORA
-                </h3>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={aplicarDistribuicaoOficialMorar}
-                  className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Distribuir automaticamente segundo a regra oficial da Morar"
-                >
-                  <Layers className="w-3 h-3 text-sky-600" />
-                  <span>Distribuir Morar</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={limparFluxoPagamento}
-                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Redefinir Fluxo de Entrada"
-                >
-                  <RotateCcw className="w-3 h-3 text-sky-600" />
-                  <span>Limpar</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2.5 text-xs">
-              {/* LINHA DE ENTRADA: 3 COLUNAS (ATO IMÓVEL, ITBI NO ATO, ATO PREMIADO) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* CAMPO 1: ATO (IMÓVEL) */}
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">
-                      Ato (Imóvel)
-                    </label>
-                  </div>
-                  <input
-                    type="text"
-                    value={isEditingAto ? atoInputText : (valorAtoEfetivo > 0 ? formatCurrency(valorAtoEfetivo) : '')}
-                    onFocus={() => {
-                      setIsEditingAto(true);
-                      setAtoInputText(valorAtoEfetivo > 0 ? formatCurrency(valorAtoEfetivo) : '');
-                    }}
-                    onChange={(e) => {
-                      setAtoInputText(e.target.value);
-                    }}
-                    onBlur={(e) => {
-                      handleFinishAtoEdit(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleFinishAtoEdit(atoInputText);
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
-                  />
-                </div>
-
-                {/* CAMPO 2: ITBI NO ATO */}
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-sky-800 uppercase whitespace-nowrap">
-                      ITBI no Ato
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsFirstHomeLocal(prev => !prev)}
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
-                        isFirstHomeLocal
-                          ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
-                          : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                      }`}
-                      title="Alternar entre Com Desconto e Sem Desconto no ITBI"
-                    >
-                      {isFirstHomeLocal ? 'Com Desc.' : 'Sem Desc.'}
-                    </button>
-                  </div>
-                  <input
-                    id="input-pagamento-itbi-ato-morar"
-                    type="text"
-                    value={isEditingAtoITBI ? itbiAtoInputText : (valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '')}
-                    onFocus={() => {
-                      setIsEditingAtoITBI(true);
-                      setItbiAtoInputText(valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '');
-                    }}
-                    onChange={(e) => {
-                      setItbiAtoInputText(e.target.value);
-                      const parsed = parseCurrency(e.target.value);
-                      if (!isNaN(parsed) && parsed >= 0) {
-                        if (hasUnitSelected && valorTotalITBI > 0 && parsed > valorTotalITBI) {
-                          setValAtoITBI(valorTotalITBI);
-                        } else {
-                          setValAtoITBI(parsed);
-                        }
-                      }
-                    }}
-                    onBlur={(e) => {
-                      handleFinishITBIEdit(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleFinishITBIEdit(itbiAtoInputText);
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
-                  />
-                </div>
-
-                {/* ATO PREMIADO */}
-                <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/80 flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-amber-800 uppercase whitespace-nowrap">
-                      Ato Premiado
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAtoZerado(prev => !prev);
-                        setValAtoManual(null);
-                        setIsManualObra(false);
-                        setIsManualPos(false);
-                      }}
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
-                        !isAtoZerado && isAtoPremiadoEnabled 
-                          ? 'bg-amber-200 text-amber-900 hover:bg-amber-300' 
-                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                      }`}
-                    >
-                      {!isAtoZerado && isAtoPremiadoEnabled ? 'Zerar' : 'Aplicar'}
-                    </button>
-                  </div>
-                  <div className="mt-auto pt-1 text-center">
-                    <span className="font-extrabold text-amber-800 text-xs whitespace-nowrap">
-                      {!isAtoZerado && isAtoPremiadoEnabled && descontoAto > 0 ? formatCurrency(descontoAto) : 'R$ 0,00'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* BLOCO 2: FLUXO DE ENTRADA C/ CONSTRUTORA (COMPONENTE PADRONIZADO) */}
+          <FluxoEntradaConstrutora
+            title="2. FLUXO DE ENTRADA C/ CONSTRUTORA"
+            onLimpar={limparFluxoPagamento}
+            valorAto={valorAtoEfetivo}
+            valorAtoMinimo={Math.max(sinalMinimoVal, atoSugeridoResidual)}
+            valorAtoMaximo={price > 0 ? Math.max(0, price - descontoAto) : 0}
+            onAtoChange={(novoVal) => {
+              if (novoVal === null) {
+                setValAtoManual(null);
+                setAtoInputText(formatCurrency(atoSugeridoResidual));
+                aplicarDistribuicaoOficialMorar();
+              } else {
+                setValAtoManual(novoVal);
+                setAtoInputText(formatCurrency(novoVal));
+                const descAtoCalculado = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(novoVal) : 0;
+                const sinalImovelBase = Math.max(0, price - maxFinanc - subsidy - fgts);
+                const sinalLiqImovel = Math.max(0, Math.round((sinalImovelBase - descAtoCalculado) * 100) / 100);
+                if (novoVal >= sinalLiqImovel) {
+                  setFaixasObra(prev => prev.map(f => ({ ...f, valor: 0 })));
+                  setFaixasPos(prev => prev.map(f => ({ ...f, valor: 0 })));
+                  setIsManualObra(false);
+                  setIsManualPos(false);
+                }
+              }
+            }}
+            onShowToast={onShowToast}
+            valAtoITBI={valAtoITBI}
+            valorTotalITBI={valorTotalITBI}
+            isFirstHome={isFirstHomeLocal}
+            onToggleFirstHome={() => setIsFirstHomeLocal(prev => !prev)}
+            onITBIChange={(novoVal) => setValAtoITBI(novoVal)}
+            descontoAto={descontoAto}
+            isAtoPremiadoActive={isAtoPremiadoEnabled}
+            onToggleAtoPremiado={(ativo) => {
+              setIsAtoPremiadoEnabled(ativo);
+              setValAtoManual(null);
+              setIsManualObra(false);
+              setIsManualPos(false);
+            }}
+          />
 
           {/* CARD 2: CORREÇÃO INCC - OBRA (INTERATIVO) */}
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
@@ -2080,6 +2116,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                           <input
                             type="text"
                             value={valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : '')}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const parsed = parseCurrency(e.target.value);
                               handleUpdateFaixaObra(originalIndex, 'valor', isNaN(parsed) ? 0 : parsed);
@@ -2214,6 +2251,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                           <input
                             type="text"
                             value={valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : '')}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const parsed = parseCurrency(e.target.value);
                               handleUpdateFaixaPos(originalIndex, 'valor', isNaN(parsed) ? 0 : parsed);
@@ -2296,9 +2334,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   <input
                     type="text"
                     value={isEditingITBITotal ? itbiInputText : (despCartoriasEfetivas > 0 ? formatCurrency(despCartoriasEfetivas) : '')}
-                    onFocus={() => {
+                    onFocus={(e) => {
                       setIsEditingITBITotal(true);
                       setItbiInputText(despCartoriasEfetivas > 0 ? String(despCartoriasEfetivas) : '');
+                      e.target.select();
                     }}
                     onChange={(e) => setItbiInputText(e.target.value)}
                     onBlur={(e) => {
@@ -2357,9 +2396,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     <input
                       type="text"
                       value={isEditingItbiObraVal ? itbiObraValText : (itbiParcelaObraValor > 0 ? formatCurrency(itbiParcelaObraValor) : 'R$ 0,00')}
-                      onFocus={() => {
+                      onFocus={(e) => {
                         setIsEditingItbiObraVal(true);
                         setItbiObraValText(itbiParcelaObraValor > 0 ? String(itbiParcelaObraValor) : '');
+                        e.target.select();
                       }}
                       onChange={(e) => setItbiObraValText(e.target.value)}
                       onBlur={(e) => {
@@ -2399,9 +2439,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     <input
                       type="text"
                       value={isEditingItbiPosVal ? itbiPosValText : (itbiParcelaPosValor > 0 ? formatCurrency(itbiParcelaPosValor) : 'R$ 0,00')}
-                      onFocus={() => {
+                      onFocus={(e) => {
                         setIsEditingItbiPosVal(true);
                         setItbiPosValText(itbiParcelaPosValor > 0 ? String(itbiParcelaPosValor) : '');
+                        e.target.select();
                       }}
                       onChange={(e) => setItbiPosValText(e.target.value)}
                       onBlur={(e) => {
@@ -2457,7 +2498,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </div>
               <div className="mt-4 flex items-center justify-center gap-4 text-xs font-medium text-slate-500 flex-wrap">
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0284C7]"></span>Total Obra</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#6366F1]"></span>Total Pós-Obra</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#7C3AED]"></span>Total Pós-Obra</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#059669]"></span>Total Pró-Soluto</span>
               </div>
             </div>
@@ -2477,7 +2518,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </div>
               <div className="mt-4 flex items-center justify-center gap-4 text-xs font-medium text-slate-500 flex-wrap">
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0284C7]"></span>Total Obra</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#6366F1]"></span>Total Pós-Obra</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#7C3AED]"></span>Total Pós-Obra</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#059669]"></span>Total Pró-Soluto</span>
               </div>
             </div>

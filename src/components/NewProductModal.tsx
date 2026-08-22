@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { Product } from '../types';
+import { formatCurrency, parseCurrency } from '../utils/formatters';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -150,7 +151,12 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               <input
                 type="text"
                 value={sinalMinimo}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => setSinalMinimo(e.target.value)}
+                onBlur={() => {
+                  const parsed = parseCurrency(sinalMinimo);
+                  setSinalMinimo(formatCurrency(parsed > 0 ? parsed : 2000));
+                }}
                 placeholder="Ex: R$ 2.000,00"
                 className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-sky-600"
               />

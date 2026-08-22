@@ -280,11 +280,11 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     descontoAto = (!isAtoZerado && isAtoPremiadoEnabled) ? calcularDescontoAtoPremiado(atoResidual) : 0;
     baseCalculoComITBI = Math.max(0, Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100);
     totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
-  } else if (isAtoZerado) {
+  } else if (params.atoManual === 0 || isAtoZerado) {
     atoResidual = 0;
     descontoAto = 0;
     baseCalculoComITBI = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
-    totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
+    totalProSolutoMaximo = sinalComITBI;
   } else if (!isAtoPremiadoEnabled) {
     descontoAto = 0;
     baseCalculoComITBI = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
@@ -299,22 +299,22 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     //
     // Hipótese 1: Ato >= 50.000 -> Desconto Fixo de R$ 5.000,00
     const baseCom5k = (precoTabela - 5000) + itbiRegistro;
-    const proSoluto5k = baseCom5k * pctMaxProSoluto;
+    const proSoluto5k = Math.round(baseCom5k * pctMaxProSoluto * 100) / 100;
     const atoCom5k = (sinalSemITBI + itbiRegistro) - proSoluto5k - 5000;
 
     if (atoCom5k >= 50000) {
       descontoAto = 5000;
       atoResidual = Math.round(atoCom5k * 100) / 100;
       baseCalculoComITBI = Math.round(baseCom5k * 100) / 100;
-      totalProSolutoMaximo = Math.round(proSoluto5k * 100) / 100;
+      totalProSolutoMaximo = proSoluto5k;
     } else {
-      // Hipótese 2: Ato < 50.000 -> Desconto de 10% sobre o Ato
+      // Hipótese 2: Ato >= 5.000 e < 50.000 -> Desconto de 10% sobre o Ato
       // Fórmula analítica: ato = [(Sinal + ITBI) - (Preço Tabela + ITBI) * pctMaxProSoluto] / (1 + 0.10 - (0.10 * pctMaxProSoluto))
       const denom = 1 + 0.10 - (0.10 * pctMaxProSoluto);
       const num = (sinalSemITBI + itbiRegistro) - ((precoTabela + itbiRegistro) * pctMaxProSoluto);
       const atoAnalitico = denom > 0 ? num / denom : 0;
 
-      if (atoAnalitico > 0) {
+      if (atoAnalitico >= 5000 && atoAnalitico < 50000) {
         atoResidual = Math.round(atoAnalitico * 100) / 100;
         descontoAto = Math.round(atoResidual * 0.10 * 100) / 100;
         baseCalculoComITBI = Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100;
@@ -327,10 +327,16 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
         atoResidual = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - totalProSolutoMaximo - descontoAto) * 100) / 100);
       } else {
-        atoResidual = 0;
+        // Hipótese 3: Ato < 5.000 -> Desconto de R$ 0,00 (Ex: Unidade B-603)
+        // Base Líquida com ITBI = (Preço Tabela - 0) + ITBI Total
+        // Total Pró-Soluto (17,00%) = Base Líquida * 0.17
+        // Ato Imóvel = (Sinal Total + ITBI Total) - Total Pró-Soluto - Desconto Ato
         descontoAto = 0;
         baseCalculoComITBI = Math.round((precoTabela + itbiRegistro) * 100) / 100;
-        totalProSolutoMaximo = Math.min(sinalComITBI, Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100);
+        totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
+        const atoCalc = (sinalSemITBI + itbiRegistro) - totalProSolutoMaximo;
+        const sinalMinimoFloor = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
+        atoResidual = Math.max(sinalMinimoFloor, Math.round(atoCalc * 100) / 100);
       }
     }
   }
@@ -342,15 +348,18 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const maxRiscoObra = Math.round(baseCalculoComITBI * pctMaxObra * 100) / 100;
   const maxRiscoPos = Math.round(baseCalculoComITBI * pctMaxPos * 100) / 100;
 
-  // Fluxo Pró-Soluto Efetivo com ITBI
-  let fluxoProSolutoComITBI = totalProSolutoMaximo;
-  if (params.atoManual !== undefined && params.atoManual > 0) {
-    fluxoProSolutoComITBI = Math.max(0, Math.round((sinalComITBI - atoResidual - descontoAto) * 100) / 100);
-  } else if (isAtoZerado) {
-    fluxoProSolutoComITBI = sinalComITBI;
-  }
+  // Fluxo Pró-Soluto Efetivo com ITBI:
+  // O Ato (Imóvel), o Ato Premiado (desconto comercial) e o ITBI no Ato são rigorosamente descontados do Pró-Soluto
+  const saldoAtoEfetivo = isAtoZerado ? 0 : atoResidual;
+  const saldoDescontoAto = isAtoZerado ? 0 : descontoAto;
+  const saldoAtoITBI = params.atoITBI || 0;
 
-  const sinalLiquidoTotal = Math.max(0, Math.round((sinalSemITBI - descontoAto) * 100) / 100);
+  const fluxoProSolutoComITBI = Math.max(
+    0,
+    Math.round((sinalComITBI - saldoAtoEfetivo - saldoDescontoAto - saldoAtoITBI) * 100) / 100
+  );
+
+  const sinalLiquidoTotal = Math.max(0, Math.round((sinalSemITBI - saldoDescontoAto) * 100) / 100);
   const baseCalculo = precoBase;
   const maxFluxoGeral = fluxoProSolutoComITBI;
   const tetoPosGlobal = maxRiscoPos;
@@ -712,9 +721,9 @@ export function calculatePolicyRiskValues(
       
       atoPremiado: morarEngine.atoPremiado,
       maiorBase: Math.max(propertyPrice || 0, propertyEvaluation || 0),
-      baseAjustada: morarEngine.baseCalculo,
-      baseComITBI: morarEngine.baseCalculo,
-      baseBruta: morarEngine.baseCalculo,
+      baseAjustada: morarEngine.baseCalculoComITBI,
+      baseComITBI: morarEngine.baseCalculoComITBI,
+      baseBruta: morarEngine.baseCalculoComITBI,
       
       proSolutoTotalComITBI: morarEngine.distribuidoTotal,
       proSolutoTotal: morarEngine.totalProSolutoGerado,
@@ -729,7 +738,7 @@ export function calculatePolicyRiskValues(
       baseCalculoParcela: morarEngine.totalProSolutoGerado,
       parcelaPrice: morarEngine.obraSeries[0]?.parcelaLiquida || 0,
 
-      totalBaseImovel: morarEngine.baseCalculo,
+      totalBaseImovel: morarEngine.baseCalculoComITBI,
       riscoImovelVal: morarEngine.maxFluxoGeral,
       minRiskVal: morarEngine.maxFluxoGeral,
 

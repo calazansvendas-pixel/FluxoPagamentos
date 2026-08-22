@@ -910,6 +910,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     <input
                       type="text"
                       value={sinalMinimo}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setSinalMinimo(e.target.value)}
                       onBlur={() => {
                         const parsed = parseCurrency(sinalMinimo);
@@ -1198,6 +1199,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     <input
                       type="text"
                       value={sinalMinimo}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setSinalMinimo(e.target.value)}
                       onBlur={() => {
                         const parsed = parseCurrency(sinalMinimo);

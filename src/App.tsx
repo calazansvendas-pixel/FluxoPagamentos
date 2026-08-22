@@ -121,10 +121,10 @@ export default function App() {
   const [simulationData, setSimulationData] = useState<SimulationData>({
     agency: '',
     clientName: '',
-    income: 0,
-    subsidy: 0,
-    fgts: 0,
-    financing: 0,
+    income: null,
+    subsidy: null,
+    fgts: null,
+    financing: null,
     finPercent: 0.8,
     isFirstHome: true
   });
@@ -155,33 +155,20 @@ export default function App() {
   };
 
   const handleResetAll = () => {
-    if (activeTab === 'details') {
-      // Limpeza exclusiva da Ficha de Análise: reseta seleções de unidade mantendo o Simulador intacto
-      setSelectedUnits(prev => {
-        if (activeAnalysisProduct) {
-          const updated = { ...prev };
-          delete updated[activeAnalysisProduct.id];
-          return updated;
-        }
-        return {};
-      });
-      showToast('Ficha de Análise limpa com sucesso. Os dados da simulação foram mantidos.');
-    } else {
-      // Limpeza do Simulador de Crédito
-      setSimulationData({
-        agency: '',
-        clientName: '',
-        income: 0,
-        subsidy: 0,
-        fgts: 0,
-        financing: 0,
-        finPercent: 0.8,
-        isFirstHome: true
-      });
-      setSelectedConditions({});
-      setSelectedUnits({});
-      showToast('Formulário e simulações redefinidos com sucesso.');
-    }
+    // Redefinição completa do Formulário de Simulação, condições e seletores de Torre e Unidade
+    setSimulationData({
+      agency: '',
+      clientName: '',
+      income: null,
+      subsidy: null,
+      fgts: null,
+      financing: null,
+      finPercent: 0.8,
+      isFirstHome: true
+    });
+    setSelectedConditions({});
+    setSelectedUnits({});
+    showToast('Nova simulação iniciada. Todos os campos, cálculos e seleções foram redefinidos.');
   };
 
   // Helper function to check if condition is of "Morar" type or "Banco Direto" type
@@ -201,6 +188,12 @@ export default function App() {
     setActiveAnalysisProduct(prodWithConds);
     setActiveAnalysisCondition(cond);
 
+    // Reseta a seleção ativa da unidade ao avançar da tela 1 para a ficha
+    setSelectedUnits(prev => ({
+      ...prev,
+      [prodWithConds.id]: { torre: '', unidade: '' }
+    }));
+
     // Roteamento inteligente baseado na condição selecionada
     if (cond && isMorarCondition(cond.name)) {
       setActiveTab('ficha-morar');
@@ -213,6 +206,13 @@ export default function App() {
   // Handler para troca de condição comercial com redirecionamento/roteamento inteligente
   const handleSelectConditionWithRouting = (cond: CommercialCondition) => {
     setActiveAnalysisCondition(cond);
+    // Reset da unidade ativa ao trocar política comercial
+    if (activeAnalysisProduct) {
+      setSelectedUnits(prev => ({
+        ...prev,
+        [activeAnalysisProduct.id]: { torre: '', unidade: '' }
+      }));
+    }
     if (isMorarCondition(cond.name)) {
       if (activeTab !== 'ficha-morar') {
         setActiveTab('ficha-morar');
@@ -226,7 +226,7 @@ export default function App() {
     }
   };
 
-  // Ao alternar abas pelo menu lateral, sincroniza a condição ativa para corresponder ao tipo da ficha (se houver incompatibilidade)
+  // Ao alternar abas pelo menu lateral, sincroniza a condição ativa
   const handleSidebarTabSelect = (tab: ActiveTab) => {
     if (tab === 'details') {
       // Se não temos produto ativo, inicializa com o primeiro
@@ -391,6 +391,7 @@ export default function App() {
               onSelectCondition={handleSelectCondition}
               onAdvanceToDetails={handleAdvanceToDetails}
               onNavigateToPolicies={() => setActiveTab('policies')}
+              onResetAll={handleResetAll}
             />
           )}
 

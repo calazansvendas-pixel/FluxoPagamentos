@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Calendar, Menu } from 'lucide-react';
+import { Building2, Calendar, Menu, RotateCcw } from 'lucide-react';
 
 interface HeaderProps {
   currentDate: string;
@@ -50,6 +50,16 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* CONTROLES DO CABEÇALHO */}
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onResetAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+            title="Limpar formulário e iniciar nova simulação"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Nova Simulação</span>
+          </button>
+
           <div className="hidden md:flex items-center gap-2 bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600">
             <Calendar className="w-3.5 h-3.5 text-sky-600" />
             <span className="font-medium">Hoje é:</span>

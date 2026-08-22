@@ -69,12 +69,13 @@ export interface Product {
 export interface SimulationData {
   agency: string;
   clientName: string;
-  income: number;
-  subsidy: number;
-  fgts: number;
-  financing: number;
+  income?: number | null;
+  subsidy?: number | null;
+  fgts?: number | null;
+  financing?: number | null;
   finPercent: number; // e.g., 0.9 or 0.8
   isFirstHome: boolean;
+  ownResource?: number;
 }
 
 export interface SelectedUnit {

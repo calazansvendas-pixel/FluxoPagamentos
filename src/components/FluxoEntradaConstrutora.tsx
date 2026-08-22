@@ -1,0 +1,299 @@
+import React, { useState, useEffect } from 'react';
+import { Building, RotateCcw, Sliders } from 'lucide-react';
+import { formatCurrency, parseCurrency } from '../utils/formatters';
+
+export interface FluxoEntradaConstrutoraProps {
+  title?: string;
+  onLimpar: () => void;
+  policyAction?: {
+    label: string;
+    onClick: () => void;
+    icon?: React.ReactNode;
+  };
+
+  // Card 1: Ato (Imóvel)
+  valorAto: number;
+  valorAtoMinimo: number;
+  valorAtoMaximo?: number;
+  onAtoChange: (novoValor: number | null) => void;
+  onShowToast?: (msg: string) => void;
+
+  // Card 2: ITBI no Ato
+  valAtoITBI: number;
+  valorTotalITBI: number;
+  isFirstHome: boolean;
+  onToggleFirstHome: () => void;
+  onITBIChange: (novoValor: number) => void;
+
+  // Card 3: Ato Premiado (Desconto Comercial)
+  descontoAto: number;
+  isAtoPremiadoActive: boolean;
+  onToggleAtoPremiado: (ativo: boolean) => void;
+
+  // Conteúdo adicional (ex: linhas de mensais específicas)
+  children?: React.ReactNode;
+}
+
+export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = ({
+  title = '2. FLUXO DE ENTRADA C/ CONSTRUTORA',
+  onLimpar,
+  policyAction,
+  valorAto,
+  valorAtoMinimo,
+  valorAtoMaximo = 0,
+  onAtoChange,
+  onShowToast,
+  valAtoITBI,
+  valorTotalITBI,
+  isFirstHome,
+  onToggleFirstHome,
+  onITBIChange,
+  descontoAto,
+  isAtoPremiadoActive,
+  onToggleAtoPremiado,
+  children
+}) => {
+  // Estado de edição do Ato (Imóvel)
+  const [isEditingAto, setIsEditingAto] = useState<boolean>(false);
+  const [atoInputText, setAtoInputText] = useState<string>('');
+
+  // Estado de edição do ITBI no Ato
+  const [isEditingITBI, setIsEditingITBI] = useState<boolean>(false);
+  const [itbiInputText, setItbiInputText] = useState<string>('');
+
+  // Sincroniza o texto do input quando valorAto mudar externamente (e não estiver editando)
+  useEffect(() => {
+    if (!isEditingAto) {
+      setAtoInputText(valorAto > 0 ? formatCurrency(valorAto) : '');
+    }
+  }, [valorAto, isEditingAto]);
+
+  // Sincroniza o texto do input quando valAtoITBI mudar externamente
+  useEffect(() => {
+    if (!isEditingITBI) {
+      setItbiInputText(valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '');
+    }
+  }, [valAtoITBI, isEditingITBI]);
+
+  // Função auxiliar para parsing tolerante
+  const parseFlexible = (raw: string): number => {
+    if (!raw || raw.trim() === '') return 0;
+    const parsed = parseCurrency(raw);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Finalização da edição do Ato (Imóvel) com validação de piso e teto
+  const handleFinishAtoEdit = (rawText: string) => {
+    setIsEditingAto(false);
+    const parsed = parseFlexible(rawText);
+
+    // Se o usuário apagou tudo ou deixou 0
+    if (rawText.trim() === '' || parsed === 0) {
+      // Se há um piso obrigatório sugerido, restabelece o piso
+      if (valorAtoMinimo > 0) {
+        onAtoChange(null);
+        setAtoInputText(formatCurrency(valorAtoMinimo));
+        if (onShowToast) {
+          onShowToast(`Ato (Imóvel) ajustado para o piso sugerido de ${formatCurrency(valorAtoMinimo)}.`);
+        }
+      } else {
+        onAtoChange(null);
+        setAtoInputText('');
+      }
+      return;
+    }
+
+    // Validação obrigatória: não permite valor inferior ao mínimo estipulado na política
+    if (valorAtoMinimo > 0 && parsed < valorAtoMinimo - 0.01) {
+      onAtoChange(valorAtoMinimo);
+      setAtoInputText(formatCurrency(valorAtoMinimo));
+      if (onShowToast) {
+        onShowToast(`O valor informado (${formatCurrency(parsed)}) é inferior ao piso mínimo (${formatCurrency(valorAtoMinimo)}). Valor ajustado.`);
+      }
+      return;
+    }
+
+    // Validação de teto máximo permitido (se aplicável)
+    if (valorAtoMaximo > 0 && parsed > valorAtoMaximo + 0.01) {
+      onAtoChange(valorAtoMaximo);
+      setAtoInputText(formatCurrency(valorAtoMaximo));
+      if (onShowToast) {
+        onShowToast(`O valor informado excede o saldo total. O Ato foi ajustado para ${formatCurrency(valorAtoMaximo)}.`);
+      }
+      return;
+    }
+
+    // Valor válido aceito
+    onAtoChange(parsed);
+    setAtoInputText(formatCurrency(parsed));
+  };
+
+  // Finalização da edição do ITBI no Ato
+  const handleFinishITBIEdit = (rawText: string) => {
+    setIsEditingITBI(false);
+    const parsed = parseFlexible(rawText);
+
+    if (rawText.trim() === '' || parsed <= 0) {
+      onITBIChange(0);
+      setItbiInputText('');
+      return;
+    }
+
+    if (valorTotalITBI > 0 && parsed > valorTotalITBI + 0.01) {
+      onITBIChange(valorTotalITBI);
+      setItbiInputText(formatCurrency(valorTotalITBI));
+      if (onShowToast) {
+        onShowToast(`O pagamento de ITBI no Ato não pode exceder o total de ${formatCurrency(valorTotalITBI)}.`);
+      }
+      return;
+    }
+
+    onITBIChange(parsed);
+    setItbiInputText(formatCurrency(parsed));
+  };
+
+  return (
+    <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+      {/* CABEÇALHO PADRONIZADO */}
+      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+            <Building className="w-4 h-4" />
+          </div>
+          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            {title}
+          </h3>
+        </div>
+
+        {/* BOTÕES DE AÇÃO: POLÍTICA + LIMPAR */}
+        <div className="flex items-center gap-1.5">
+          {policyAction && (
+            <button
+              type="button"
+              onClick={policyAction.onClick}
+              className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer border border-sky-200/80"
+              title={policyAction.label}
+            >
+              {policyAction.icon || <Sliders className="w-3 h-3 text-sky-600" />}
+              <span>{policyAction.label}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onLimpar}
+            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer border border-slate-200/80"
+            title="Redefinir Fluxo de Entrada"
+          >
+            <RotateCcw className="w-3 h-3 text-slate-500" />
+            <span>Limpar</span>
+          </button>
+        </div>
+      </div>
+
+      {/* GRADE DOS 3 CARDS PADRONIZADOS */}
+      <div className="space-y-2.5 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* CARD 1: ATO (IMÓVEL) - SEM O BOTÃO 'ZERAR ATO' */}
+          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[10px] font-bold text-slate-600 uppercase whitespace-nowrap">
+                Ato (Imóvel)
+              </label>
+            </div>
+            <input
+              id="input-fluxo-ato-imovel"
+              type="text"
+              value={isEditingAto ? atoInputText : (valorAto > 0 ? formatCurrency(valorAto) : '')}
+              onFocus={(e) => {
+                setIsEditingAto(true);
+                setAtoInputText(valorAto > 0 ? String(valorAto) : '');
+                e.target.select();
+              }}
+              onChange={(e) => setAtoInputText(e.target.value)}
+              onBlur={(e) => handleFinishAtoEdit(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleFinishAtoEdit(atoInputText);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              placeholder={valorAtoMinimo > 0 ? formatCurrency(valorAtoMinimo) : 'R$ 0,00'}
+              className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
+            />
+          </div>
+
+          {/* CARD 2: ITBI NO ATO */}
+          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[10px] font-bold text-sky-800 uppercase whitespace-nowrap">
+                ITBI no Ato
+              </label>
+              <button
+                type="button"
+                onClick={onToggleFirstHome}
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                  isFirstHome
+                    ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                }`}
+                title="Alternar entre Com Desconto e Sem Desconto no ITBI"
+              >
+                {isFirstHome ? 'Com Desc.' : 'Sem Desc.'}
+              </button>
+            </div>
+            <input
+              id="input-fluxo-itbi-ato"
+              type="text"
+              value={isEditingITBI ? itbiInputText : (valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '')}
+              onFocus={(e) => {
+                setIsEditingITBI(true);
+                setItbiInputText(valAtoITBI > 0 ? String(valAtoITBI) : '');
+                e.target.select();
+              }}
+              onChange={(e) => setItbiInputText(e.target.value)}
+              onBlur={(e) => handleFinishITBIEdit(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleFinishITBIEdit(itbiInputText);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              placeholder="R$ 0,00"
+              className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
+            />
+          </div>
+
+          {/* CARD 3: ATO PREMIADO (DESTAQUE EM AMARELO SUAVE) */}
+          <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/80 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[10px] font-bold text-amber-800 uppercase whitespace-nowrap">
+                Ato Premiado
+              </label>
+              <button
+                type="button"
+                onClick={() => onToggleAtoPremiado(!isAtoPremiadoActive)}
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                  isAtoPremiadoActive
+                    ? 'bg-amber-200 text-amber-900 hover:bg-amber-300'
+                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                }`}
+                title={isAtoPremiadoActive ? 'Zerar o Desconto do Ato Premiado' : 'Aplicar o Desconto do Ato Premiado'}
+              >
+                {isAtoPremiadoActive ? 'Zerar' : 'Aplicar'}
+              </button>
+            </div>
+            <div className="mt-auto pt-1 text-center">
+              <span className="font-extrabold text-amber-800 text-xs whitespace-nowrap">
+                {isAtoPremiadoActive && descontoAto > 0 ? formatCurrency(descontoAto) : 'R$ 0,00'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* LINHAS COMPLEMENTARES OPCIONAIS (EX: MENSAIS 30D / 60D) */}
+        {children}
+      </div>
+    </div>
+  );
+};

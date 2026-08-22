@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   UserCheck, 
   Wallet, 
@@ -7,10 +7,11 @@ import {
   ChevronRight, 
   KeyRound,
   Coins,
-  Sparkles
+  Sparkles,
+  RotateCcw
 } from 'lucide-react';
 import { Product, SimulationData } from '../types';
-import { formatCurrency, formatDeliveryText } from '../utils/formatters';
+import { formatCurrency, formatDeliveryText, parseCurrency } from '../utils/formatters';
 import { ensureProductConditions, calculatePolicyRiskValues } from '../utils/calculations';
 
 interface SimulatorViewProps {
@@ -21,6 +22,7 @@ interface SimulatorViewProps {
   onSelectCondition: (productId: string, conditionId: string) => void;
   onAdvanceToDetails: (product: Product, conditionId: string) => void;
   onNavigateToPolicies: () => void;
+  onResetAll?: () => void;
 }
 
 export const SimulatorView: React.FC<SimulatorViewProps> = ({
@@ -30,27 +32,78 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
   selectedConditions = {},
   onSelectCondition,
   onAdvanceToDetails,
-  onNavigateToPolicies
+  onNavigateToPolicies,
+  onResetAll
 }) => {
   // Fallback seguro caso simulationData venha undefined
-  const safeSimulationData = simulationData || {
+  const safeSimulationData: SimulationData = simulationData || {
     clientName: '',
     agency: '',
-    income: 0,
-    subsidy: 0,
-    fgts: 0,
-    financing: 0,
+    income: null,
+    subsidy: null,
+    fgts: null,
+    financing: null,
     finPercent: 0.8,
     isFirstHome: true
   };
 
-  const handleCurrencyInputChange = (field: keyof SimulationData, rawValue: string) => {
-    const digits = (rawValue || '').replace(/\D/g, '');
-    const numericVal = digits ? parseInt(digits, 10) / 100 : 0;
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [fieldTexts, setFieldTexts] = useState<Record<string, string>>({});
+
+  const handleFieldFocus = (field: keyof SimulationData, e: React.FocusEvent<HTMLInputElement>) => {
+    setEditingField(field);
+    const currentVal = safeSimulationData[field];
+    const initialText = (currentVal !== null && currentVal !== undefined && !isNaN(Number(currentVal)))
+      ? String(currentVal)
+      : '';
+    setFieldTexts(prev => ({ ...prev, [field]: initialText }));
+    e.target.select();
+  };
+
+  const handleFieldChange = (field: keyof SimulationData, text: string) => {
+    setFieldTexts(prev => ({ ...prev, [field]: text }));
+    if (!text || text.trim() === '') {
+      onSimulationDataChange({
+        ...safeSimulationData,
+        [field]: null
+      });
+      return;
+    }
+    const parsed = parseCurrency(text);
     onSimulationDataChange({
       ...safeSimulationData,
-      [field]: numericVal
+      [field]: parsed >= 0 ? parsed : null
     });
+  };
+
+  const handleFieldBlur = (field: keyof SimulationData) => {
+    setEditingField(null);
+    const text = fieldTexts[field];
+    if (text !== undefined) {
+      if (!text || text.trim() === '') {
+        onSimulationDataChange({
+          ...safeSimulationData,
+          [field]: null
+        });
+      } else {
+        const parsed = parseCurrency(text);
+        onSimulationDataChange({
+          ...safeSimulationData,
+          [field]: parsed >= 0 ? parsed : null
+        });
+      }
+    }
+  };
+
+  const getFieldDisplayValue = (field: 'income' | 'subsidy' | 'fgts' | 'financing'): string => {
+    if (editingField === field) {
+      return fieldTexts[field] ?? '';
+    }
+    const val = safeSimulationData[field];
+    if (val === null || val === undefined || isNaN(Number(val)) || Number(val) <= 0) {
+      return '';
+    }
+    return formatCurrency(Number(val));
   };
 
   const totalRecursosAprovados = (safeSimulationData.financing || 0) + 
@@ -67,13 +120,26 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
             
             {/* 1. IDENTIFICAÇÃO GERAL */}
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
-                  <UserCheck className="w-4 h-4" />
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                    1. Identificação Geral
+                  </h2>
                 </div>
-                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                  1. Identificação Geral
-                </h2>
+                {onResetAll && (
+                  <button
+                    type="button"
+                    onClick={onResetAll}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    title="Limpar formulário"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Limpar</span>
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -135,8 +201,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={(safeSimulationData.income || 0) > 0 ? formatCurrency(safeSimulationData.income || 0) : ''}
-                    onChange={(e) => handleCurrencyInputChange('income', e.target.value)}
+                    value={getFieldDisplayValue('income')}
+                    onFocus={(e) => handleFieldFocus('income', e)}
+                    onChange={(e) => handleFieldChange('income', e.target.value)}
+                    onBlur={() => handleFieldBlur('income')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
                     placeholder="R$ 0,00"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
                   />
@@ -147,8 +220,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={(safeSimulationData.subsidy || 0) > 0 ? formatCurrency(safeSimulationData.subsidy || 0) : ''}
-                    onChange={(e) => handleCurrencyInputChange('subsidy', e.target.value)}
+                    value={getFieldDisplayValue('subsidy')}
+                    onFocus={(e) => handleFieldFocus('subsidy', e)}
+                    onChange={(e) => handleFieldChange('subsidy', e.target.value)}
+                    onBlur={() => handleFieldBlur('subsidy')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
                     placeholder="R$ 0,00"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-emerald-600 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
                   />
@@ -159,8 +239,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={(safeSimulationData.fgts || 0) > 0 ? formatCurrency(safeSimulationData.fgts || 0) : ''}
-                    onChange={(e) => handleCurrencyInputChange('fgts', e.target.value)}
+                    value={getFieldDisplayValue('fgts')}
+                    onFocus={(e) => handleFieldFocus('fgts', e)}
+                    onChange={(e) => handleFieldChange('fgts', e.target.value)}
+                    onBlur={() => handleFieldBlur('fgts')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
                     placeholder="R$ 0,00"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-sky-600 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
                   />
@@ -171,8 +258,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={(safeSimulationData.financing || 0) > 0 ? formatCurrency(safeSimulationData.financing || 0) : ''}
-                    onChange={(e) => handleCurrencyInputChange('financing', e.target.value)}
+                    value={getFieldDisplayValue('financing')}
+                    onFocus={(e) => handleFieldFocus('financing', e)}
+                    onChange={(e) => handleFieldChange('financing', e.target.value)}
+                    onBlur={() => handleFieldBlur('financing')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
                     placeholder="R$ 0,00"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
                   />
