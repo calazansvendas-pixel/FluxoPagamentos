@@ -143,9 +143,11 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
       }
       const isTax = norm.includes("ITBI") || norm.includes("REGISTRO") || norm.includes("CARTOR") || norm.includes("DESP CARTORIAS") || norm.includes("DESPESAS CARTOR") || norm.includes("EMOLUMENT") || norm.includes("CUSTAS");
       const is2nd = norm.includes("2") || norm.includes("SEGUNDO") || norm.includes("2O") || norm.includes("2A") || norm.includes("SEGUNDA");
-      const is1st = norm.includes("1") || norm.includes("PRIMEIRO") || norm.includes("1O") || norm.includes("1A") || norm.includes("PRIMEIRA");
-      return (isTax && is2nd) || (norm.startsWith("2") && norm.includes("IMOVEL") && isTax) || (isTax && !is1st);
-    } 
+      // Não usar um "coringa" tipo (isTax && !is1st): colunas auxiliares sem relação com ITBI
+      // (ex: "Referência para peso/registro") também contêm "registro" e não contêm "1",
+      // e acabavam sendo confundidas com esta coluna antes de o algoritmo chegar na real.
+      return (isTax && is2nd) || (norm.startsWith("2") && norm.includes("IMOVEL") && isTax);
+    }
   }
 ];
 
