@@ -242,7 +242,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   }, [currentProd?.id]);
 
   const uniqueTorres = React.useMemo(() => {
-    return Array.from(new Set(dbUnits.map(u => String(u.torre || '').trim()).filter(t => t !== '')));
+    return (Array.from(new Set(dbUnits.map(u => String(u.torre || '').trim()).filter(t => t !== ''))) as string[])
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   }, [dbUnits]);
 
   // Torres habilitadas para simulação nesta política comercial
@@ -282,13 +283,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     }
   }, [availableTorres, currentProd?.id, currentCond?.id, dbUnits]);
 
-  const filteredUnits = selectedTorre 
-    ? Array.from(new Set(
+  const filteredUnits = selectedTorre
+    ? (Array.from(new Set(
         dbUnits
           .filter(u => String(u.torre || '').trim().toLowerCase() === selectedTorre.toLowerCase())
           .map(u => String(u.unidade || '').trim())
           .filter(u => u !== '')
-      ))
+      )) as string[]).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
     : [];
 
   const matchingRow = (selectedTorre && selectedUnidade)
