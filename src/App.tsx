@@ -83,12 +83,22 @@ export default function App() {
               console.warn(`Aviso ao buscar unidades para ${dbEmp.nome}:`, e);
             }
 
+            // A política de crédito (conditions) e o destaque (is_featured) vêm do
+            // Supabase quando já foram sincronizados por algum usuário — assim todo
+            // mundo que abre o link vê a mesma política, em vez de cada navegador
+            // ficar com a sua própria cópia local desatualizada.
+            const dbConditions = Array.isArray(dbEmp.conditions) && dbEmp.conditions.length > 0
+              ? dbEmp.conditions
+              : undefined;
+
             return {
               ...existing,
               id: dbEmp.id,
               name: dbEmp.nome,
               deliveryDatePhase1: dbEmp.delivery_date_phase1 || existing.deliveryDatePhase1,
               deliveryDatePhase2: dbEmp.delivery_date_phase2 || existing.deliveryDatePhase2,
+              isFeatured: dbEmp.is_featured !== undefined && dbEmp.is_featured !== null ? dbEmp.is_featured : existing.isFeatured,
+              conditions: dbConditions || existing.conditions,
               tableInfo: currentTableInfo
             };
           }));
@@ -316,6 +326,17 @@ export default function App() {
         }
       }
     }
+
+    // Sincroniza a política de crédito com o Supabase, para que fique valendo para
+    // todos os usuários que abrirem o app (e não só no navegador de quem editou).
+    imoveisService.sincronizarEmpreendimento({
+      id: updatedProduct.id,
+      nome: updatedProduct.name,
+      delivery_date_phase1: updatedProduct.deliveryDatePhase1 || updatedProduct.deliveryDate,
+      delivery_date_phase2: updatedProduct.deliveryDatePhase2,
+      conditions: updatedProduct.conditions,
+      is_featured: updatedProduct.isFeatured || false
+    }).catch(e => console.warn('Aviso ao sincronizar política de crédito no Supabase:', e));
   };
 
   const handleDeleteProduct = (productId: string) => {
@@ -385,7 +406,9 @@ export default function App() {
       id: newProd.id,
       nome: newProd.name,
       delivery_date_phase1: newProd.deliveryDatePhase1 || newProd.deliveryDate,
-      delivery_date_phase2: newProd.deliveryDatePhase2
+      delivery_date_phase2: newProd.deliveryDatePhase2,
+      conditions: newProd.conditions,
+      is_featured: newProd.isFeatured || false
     }).catch(e => console.warn('Aviso ao sincronizar novo empreendimento no Supabase:', e));
   };
 

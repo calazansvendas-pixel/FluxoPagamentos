@@ -6,7 +6,7 @@ import { parseM2Number, parseCurrency, formatArea } from '../utils/formatters';
  * SQL DE CRIAÇÃO DO BANCO DE DADOS SUPABASE
  * =========================================
  * Execute este script no SQL Editor do seu projeto Supabase para criar as tabelas
- * 
+ *
  * -- Tabela de Empreendimentos
  * CREATE TABLE empreendimentos (
  *   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -14,7 +14,7 @@ import { parseM2Number, parseCurrency, formatArea } from '../utils/formatters';
  *   delivery_date_phase1 TEXT,
  *   delivery_date_phase2 TEXT
  * );
- * 
+ *
  * -- Tabela de Unidades
  * CREATE TABLE unidades (
  *   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -31,10 +31,17 @@ import { parseM2Number, parseCurrency, formatArea } from '../utils/formatters';
  *   itbi_segundo_imovel NUMERIC,
  *   status TEXT
  * );
- * 
+ *
  * -- Se sua tabela unidades já existir, execute para adicionar as colunas opcionais:
  * -- ALTER TABLE unidades ADD COLUMN IF NOT EXISTS itbi_primeiro_imovel NUMERIC;
  * -- ALTER TABLE unidades ADD COLUMN IF NOT EXISTS itbi_segundo_imovel NUMERIC;
+ *
+ * -- Se sua tabela empreendimentos já existir, execute para adicionar as colunas de
+ * -- política de crédito (necessário para que a política configurada em "Políticas &
+ * -- Empreendimentos" fique compartilhada entre todos os usuários, em vez de ficar
+ * -- salva apenas no navegador de quem editou):
+ * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS conditions JSONB;
+ * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
  */
 
 export const imoveisService = {
@@ -71,18 +78,40 @@ export const imoveisService = {
     }
   },
 
-  // Garante que o empreendimento exista no Supabase antes de gravar unidades
-  async sincronizarEmpreendimento(emp: { id: string; nome: string; delivery_date_phase1?: string; delivery_date_phase2?: string }) {
+  // Garante que o empreendimento exista no Supabase (nome, datas de entrega) e, quando
+  // fornecida, grava também a política de crédito (conditions) e o destaque (is_featured) —
+  // para que a política configurada por um usuário fique visível para todos os demais.
+  async sincronizarEmpreendimento(emp: {
+    id: string;
+    nome: string;
+    delivery_date_phase1?: string;
+    delivery_date_phase2?: string;
+    conditions?: unknown;
+    is_featured?: boolean;
+  }) {
     try {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(emp.id);
       if (!isUUID) return;
 
-      await supabase.from('empreendimentos').upsert([{
+      const basePayload: Record<string, unknown> = {
         id: emp.id,
         nome: emp.nome,
         delivery_date_phase1: emp.delivery_date_phase1 || null,
         delivery_date_phase2: emp.delivery_date_phase2 || null
-      }], { onConflict: 'id' });
+      };
+      const fullPayload = { ...basePayload };
+      if (emp.conditions !== undefined) fullPayload.conditions = emp.conditions;
+      if (emp.is_featured !== undefined) fullPayload.is_featured = emp.is_featured;
+
+      const { error } = await supabase.from('empreendimentos').upsert([fullPayload], { onConflict: 'id' });
+
+      // Se as colunas conditions/is_featured ainda não existirem no schema do Supabase
+      // (usuário ainda não rodou o ALTER TABLE), grava ao menos os campos básicos, para
+      // não perder a sincronização de nome/datas de entrega enquanto isso.
+      if (error && (error.code === 'PGRST204' || /conditions|is_featured/i.test(String(error.message || '')))) {
+        console.warn('Aviso: colunas conditions/is_featured não encontradas no Supabase. Rode o ALTER TABLE indicado em imoveisService.ts para sincronizar a política de crédito entre usuários. Gravando apenas nome/datas por enquanto.');
+        await supabase.from('empreendimentos').upsert([basePayload], { onConflict: 'id' });
+      }
     } catch (e) {
       console.warn('Aviso ao sincronizar empreendimento no Supabase:', e);
     }
