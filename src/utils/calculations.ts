@@ -159,16 +159,7 @@ export interface MorarMonthsDecomposition {
 }
 
 /**
- * Decompõe os meses de Obra e Pós-Obra nos baldes de até 12 meses da planilha oficial
- * Morar. Obra e Pós-Obra usam DUAS escadas de peso independentes, não uma única
- * escada contínua de 6 baldes: Obra sempre ocupa os baldes 1/2/3 (pesos 30%/25%/20%,
- * índices 0/1/2) e Pós-Obra sempre ocupa os baldes 3/4/5/6 (pesos 20%/15%/10%/5%,
- * índices 2/3/4/5) — o balde de 20% (índice 2) é compartilhado: Obra e Pós-Obra podem
- * ter, cada um, seus próprios meses ali, como duas linhas independentes da planilha.
- * O 1º balde de Pós-Obra "completa" o balde que a Obra deixou em aberto (ex: Obra
- * termina com 9 dos 12 meses do balde de 25% preenchidos — Pós-Obra não continua
- * esse balde de 25%; em vez disso, seu 1º balde (peso 20%) nasce com apenas
- * 12-9=3 meses de capacidade antes de passar para o balde seguinte).
+ * Decompõe os meses de Obra e Pós-Obra em blocos de até 12 meses, com transbordo (spillover)
  */
 export function decomposeMorarMonths(mesesObra: number, mesesPos: number): MorarMonthsDecomposition {
   const mObra = Math.max(0, mesesObra || 0);
@@ -177,23 +168,30 @@ export function decomposeMorarMonths(mesesObra: number, mesesPos: number): Morar
   const obra = [0, 0, 0, 0, 0, 0];
   const pos = [0, 0, 0, 0, 0, 0];
 
-  // Obra: até 3 baldes de 12 meses (pesos 30%/25%/20%, índices 0/1/2)
-  obra[0] = Math.min(12, mObra);
-  obra[1] = Math.min(12, Math.max(0, mObra - 12));
-  obra[2] = Math.min(12, Math.max(0, mObra - 24));
+  let remainingObra = mObra;
+  let currentBucket = 0;
 
-  // Pós-Obra: até 4 baldes (pesos 20%/15%/10%/5%, índices 2/3/4/5). O 1º balde
-  // (índice 2) só tem a capacidade que sobrou do balde da Obra em aberto.
-  const capacidadePrimeiroBaldePos = 12 - (mObra % 12);
-  let restantePos = mPos;
+  // Fill Obra buckets
+  while (remainingObra > 0 && currentBucket < 6) {
+    const toFill = Math.min(12, remainingObra);
+    obra[currentBucket] = toFill;
+    remainingObra -= toFill;
+    if (obra[currentBucket] === 12) {
+      currentBucket++;
+    }
+  }
 
-  pos[2] = Math.min(restantePos, capacidadePrimeiroBaldePos);
-  restantePos -= pos[2];
-  pos[3] = Math.min(12, restantePos);
-  restantePos -= pos[3];
-  pos[4] = Math.min(12, restantePos);
-  restantePos -= pos[4];
-  pos[5] = Math.min(12, restantePos);
+  // Fill Pos buckets, starting at the current bucket (which might be partially filled by Obra)
+  let remainingPos = mPos;
+  while (remainingPos > 0 && currentBucket < 6) {
+    const spaceInBucket = 12 - obra[currentBucket];
+    const toFill = Math.min(spaceInBucket, remainingPos);
+    pos[currentBucket] = toFill;
+    remainingPos -= toFill;
+    if (pos[currentBucket] + obra[currentBucket] === 12) {
+      currentBucket++;
+    }
+  }
 
   return { obra, pos };
 }
@@ -279,15 +277,6 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   // 1. Fatiamento do Tempo (Cascata Contínua de 12 Meses):
   const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos);
   const mesesTotaisGeral = mObra.reduce((a, b) => a + b, 0) + mPos.reduce((a, b) => a + b, 0);
-
-  // Pesos das séries (usados tanto no teto de renda da Pós-Obra abaixo quanto na
-  // distribuição das séries na seção 4). Obra usa os pesos dos baldes 1/2/3, Pós-Obra
-  // usa os pesos dos baldes 3/4/5/6 (ver decomposeMorarMonths e seção 4 mais abaixo).
-  const seriesWeights = (params.globalSeriesPct && params.globalSeriesPct.length === 6)
-    ? params.globalSeriesPct.map(p => (p || 0) / 100)
-    : [0.30, 0.25, 0.20, 0.15, 0.10, 0.05];
-  const obraWeightedTotal = seriesWeights.reduce((sum, w, idx) => sum + w * (mObra[idx] || 0), 0);
-  const posWeightedTotal = seriesWeights.reduce((sum, w, idx) => sum + w * (mPos[idx] || 0), 0);
 
   // ITBI Mensal = ITBI Restante a parcelar / (meses Obra + meses Pós)
   const itbiRestante = Math.max(0, itbiRegistro - (params.atoITBI || 0));
@@ -387,14 +376,9 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
 
   // 3. Tetos e Travas de Pró-Soluto (fórmula exata da planilha de referência):
   // Total Pró-Soluto (17,00% c/ ITBI) = Base c/ ITBI * 0.17
-  // Risco Max Pós = MENOR valor entre: (a) (Base c/ ITBI - Desconto Ato) * pctMaxPos
-  // (teto percentual sobre o preço) e (b) Renda × Σ(peso × meses) da Pós-Obra (teto
-  // pela capacidade de renda nos baldes que a Pós-Obra realmente ocupa) — a planilha
-  // sempre pega o MENOR dos dois, não só o percentual sobre o preço.
+  // Risco Max Pós = (Base c/ ITBI - Desconto Ato) * pctMaxPos
   // Risco Max Obra = Total Pró-Soluto - Risco Max Pós (resíduo, não é um percentual independente)
-  const maxRiscoPosPercentual = Math.round((baseCalculoComITBI - saldoDescontoAto) * pctMaxPos * 100) / 100;
-  const maxRiscoPosRenda = Math.round(renda * posWeightedTotal * 100) / 100;
-  const maxRiscoPos = Math.min(maxRiscoPosPercentual, maxRiscoPosRenda);
+  const maxRiscoPos = Math.round((baseCalculoComITBI - saldoDescontoAto) * pctMaxPos * 100) / 100;
   const maxRiscoObra = Math.round((totalProSolutoMaximo - maxRiscoPos) * 100) / 100;
 
   const fluxoProSolutoComITBI = Math.max(
@@ -407,36 +391,29 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const maxFluxoGeral = fluxoProSolutoComITBI;
   const tetoPosGlobal = maxRiscoPos;
 
-  // 4. Distribuição das Séries Morar (fórmula exata da planilha de referência):
-  // Obra e Pós-Obra usam DUAS escadas de peso INDEPENDENTES (não uma única escada
-  // contínua): Obra sempre usa os pesos dos baldes 1/2/3 (30%/25%/20%), Pós-Obra
-  // sempre usa os pesos dos baldes 3/4/5/6 (20%/15%/10%/5%) — o balde de 20%
-  // (índice 2) é compartilhado, cada fase com seus próprios meses ali (ver
-  // decomposeMorarMonths). Primeiro reparte fluxoProSolutoComITBI entre as duas
-  // fases, proporcional ao peso × meses de CADA fase isoladamente; depois, dentro
-  // de cada fase, reparte o total da fase entre seus baldes, também proporcional
-  // a peso × meses:
-  //   totalFase = (Σ peso[fase] × meses[fase]) / (Σ peso[obra]×meses[obra] + Σ peso[pós]×meses[pós]) × fluxoProSolutoComITBI
-  //   parcela_bruta[i] = (peso[i] / Σ peso[fase]×meses[fase]) × totalFase
-  // (seriesWeights, obraWeightedTotal e posWeightedTotal já calculados na seção 1,
-  // reaproveitados aqui e no teto de renda da Pós-Obra na seção 3.)
-  const combinedWeightedTotal = obraWeightedTotal + posWeightedTotal;
+  // 4. Distribuição das Séries Morar em cascata (fórmula exata da planilha de referência):
+  // Cada balde de 12 meses tem um peso (30%/25%/20%/15%/10%/5%). A série que atravessa a
+  // fronteira Obra/Pós-Obra (ex: balde 3 com 9 meses em Obra + 3 meses em Pós) mantém o MESMO
+  // peso e a MESMA parcela nas duas fases — não reinicia a numeração. A parcela bruta mensal de
+  // cada balde é proporcional ao seu peso sobre a soma (peso × meses) de todos os baldes ativos:
+  //   parcela_bruta[i] = peso[i] × fluxoProSolutoComITBI / Σ(peso[j] × meses[j])
+  const seriesWeights = (params.globalSeriesPct && params.globalSeriesPct.length === 6)
+    ? params.globalSeriesPct.map(p => (p || 0) / 100)
+    : [0.30, 0.25, 0.20, 0.15, 0.10, 0.05];
 
-  const totalPosMoney = combinedWeightedTotal > 0
-    ? (posWeightedTotal / combinedWeightedTotal) * fluxoProSolutoComITBI
-    : 0;
-  const totalObraMoney = fluxoProSolutoComITBI - totalPosMoney;
+  const weightedMonthsTotal = seriesWeights.reduce(
+    (sum, w, idx) => sum + w * ((mObra[idx] || 0) + (mPos[idx] || 0)),
+    0
+  );
+  const pricePerWeightPoint = weightedMonthsTotal > 0 ? fluxoProSolutoComITBI / weightedMonthsTotal : 0;
 
-  const obraRatesBrutas = seriesWeights.map(w => obraWeightedTotal > 0 ? (w / obraWeightedTotal) * totalObraMoney : 0);
-  const posRatesBrutas = seriesWeights.map(w => posWeightedTotal > 0 ? (w / posWeightedTotal) * totalPosMoney : 0);
+  const seriesMonthlyRatesBrutas = seriesWeights.map(w => pricePerWeightPoint * w);
 
-  const toLiquida = (brutaExata: number) => {
+  const seriesMonthlyRatesLiquidas = seriesMonthlyRatesBrutas.map((brutaExata) => {
     if (brutaExata <= 0) return 0;
     const liquidaExata = brutaExata - parcelaMensalITBIExato;
     return Math.max(0, Math.round(liquidaExata * 100) / 100);
-  };
-  const obraRatesLiquidas = obraRatesBrutas.map(toLiquida);
-  const posRatesLiquidas = posRatesBrutas.map(toLiquida);
+  });
 
   // Obra:
   const obraSeries: MorarSerieResult[] = mObra.map((qtd, idx) => {
@@ -454,8 +431,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         subtotalLiquido: 0
       };
     }
-    const parcelaLiquida = obraRatesLiquidas[idx] || 0;
-    const parcelaBrutaFinal = Math.round(obraRatesBrutas[idx] * 100) / 100;
+    const parcelaLiquida = seriesMonthlyRatesLiquidas[idx] || 0;
+    const parcelaBrutaFinal = Math.round(seriesMonthlyRatesBrutas[idx] * 100) / 100;
     const subtotalLiquido = Math.round(parcelaLiquida * qtd * 100) / 100;
 
     return {
@@ -486,8 +463,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         subtotalLiquido: 0
       };
     }
-    const parcelaLiquida = posRatesLiquidas[idx] || 0;
-    const parcelaBrutaFinal = Math.round(posRatesBrutas[idx] * 100) / 100;
+    const parcelaLiquida = seriesMonthlyRatesLiquidas[idx] || 0;
+    const parcelaBrutaFinal = Math.round(seriesMonthlyRatesBrutas[idx] * 100) / 100;
     const subtotalLiquido = Math.round(parcelaLiquida * qtd * 100) / 100;
 
     return {
@@ -509,12 +486,13 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const itbiObraTotal = Math.round(obraSeries.reduce((acc, s) => acc + s.qtd, 0) * parcelaMensalITBI * 100) / 100;
   const itbiPosTotal = Math.round(posSeries.reduce((acc, s) => acc + s.qtd, 0) * parcelaMensalITBI * 100) / 100;
 
-  // "Total obra"/"Total pós obra" da planilha é a divisão PROPORCIONAL de
-  // fluxoProSolutoComITBI entre as fases (totalObraMoney/totalPosMoney, seção 4)
-  // — não o teto de renda (maxRiscoObra/maxRiscoPos), que é um limite independente
-  // e normalmente maior. subtotalXLiquido + itbiXTotal já reconstrói esse valor.
-  const totalObraComITBI = Math.round((subtotalObraLiquido + itbiObraTotal) * 100) / 100;
-  const totalPosComITBI = Math.round((subtotalPosLiquido + itbiPosTotal) * 100) / 100;
+  const totalObraComITBI = (fluxoProSolutoComITBI === totalProSolutoMaximo)
+    ? maxRiscoObra
+    : Math.round((subtotalObraLiquido + itbiObraTotal) * 100) / 100;
+
+  const totalPosComITBI = (fluxoProSolutoComITBI === totalProSolutoMaximo)
+    ? maxRiscoPos
+    : Math.round((subtotalPosLiquido + itbiPosTotal) * 100) / 100;
 
   const itbiParceladoTotal = Math.round(mesesTotaisGeral * parcelaMensalITBI * 100) / 100;
   const atoPremiado = descontoAto;
