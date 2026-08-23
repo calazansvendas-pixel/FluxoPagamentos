@@ -128,6 +128,31 @@ export function calcularDescontoAtoPremiado(valorAto: number): number {
   return 0;
 }
 
+/**
+ * Resolve o ponto fixo ato* = base - calcularDescontoAtoPremiado(ato*), onde
+ * "base" é o valor disponível para o Ato antes do desconto (ex: preço - subsídio).
+ * Necessário porque o desconto do Ato Premiado é escalonado pelo próprio valor do
+ * Ato, então não dá para simplesmente subtrair um desconto fixo de "base".
+ */
+export function resolverTetoAtoComDesconto(base: number, isAtoPremiadoEnabled: boolean): number {
+  const baseValida = Math.max(0, base || 0);
+  if (!isAtoPremiadoEnabled) {
+    return Math.round(baseValida * 100) / 100;
+  }
+  // Hipótese: ato* >= 50.000 (desconto fixo de R$ 5.000,00)
+  const tentativaFlat = baseValida - 5000;
+  if (tentativaFlat >= 50000) {
+    return Math.round(tentativaFlat * 100) / 100;
+  }
+  // Hipótese: 5.000 <= ato* < 50.000 (desconto de 10% sobre o próprio Ato)
+  const tentativaPct = baseValida / 1.10;
+  if (tentativaPct >= 5000 && tentativaPct < 50000) {
+    return Math.round(tentativaPct * 100) / 100;
+  }
+  // Hipótese: ato* < 5.000 (sem desconto)
+  return Math.max(0, Math.round(baseValida * 100) / 100);
+}
+
 export interface MorarMonthsDecomposition {
   obra: number[];
   pos: number[];
@@ -291,7 +316,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     baseCalculoComITBI = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
     totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
     const atoCalc = (sinalSemITBI + itbiRegistro) - totalProSolutoMaximo;
-    atoResidual = Math.max(0, Math.round(atoCalc * 100) / 100);
+    const sinalMinimoFloorSemPremio = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
+    atoResidual = Math.max(sinalMinimoFloorSemPremio, Math.round(atoCalc * 100) / 100);
   } else {
     // Resolução Circular / Iterativa Exata do Excel da Morar:
     // Base Líquida com ITBI = (Preço Tabela - Desconto Ato) + ITBI Total
@@ -302,10 +328,11 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     const baseCom5k = (precoTabela - 5000) + itbiRegistro;
     const proSoluto5k = Math.round(baseCom5k * pctMaxProSoluto * 100) / 100;
     const atoCom5k = (sinalSemITBI + itbiRegistro) - proSoluto5k - 5000;
+    const sinalMinimoFloor = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
 
     if (atoCom5k >= 50000) {
       descontoAto = 5000;
-      atoResidual = Math.round(atoCom5k * 100) / 100;
+      atoResidual = Math.max(sinalMinimoFloor, Math.round(atoCom5k * 100) / 100);
       baseCalculoComITBI = Math.round(baseCom5k * 100) / 100;
       totalProSolutoMaximo = proSoluto5k;
     } else {
@@ -320,13 +347,13 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         descontoAto = Math.round(atoResidual * 0.10 * 100) / 100;
         baseCalculoComITBI = Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100;
         totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
-        
+
         // Ajuste de centavos fino para convergência perfeita
         atoResidual = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - totalProSolutoMaximo - descontoAto) * 100) / 100);
         descontoAto = Math.round(atoResidual * 0.10 * 100) / 100;
         baseCalculoComITBI = Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100;
         totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
-        atoResidual = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - totalProSolutoMaximo - descontoAto) * 100) / 100);
+        atoResidual = Math.max(sinalMinimoFloor, Math.round(((sinalSemITBI + itbiRegistro) - totalProSolutoMaximo - descontoAto) * 100) / 100);
       } else {
         // Hipótese 3: Ato < 5.000 -> Desconto de R$ 0,00 (Ex: Unidade B-603)
         // Base Líquida com ITBI = (Preço Tabela - 0) + ITBI Total
@@ -336,7 +363,6 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         baseCalculoComITBI = Math.round((precoTabela + itbiRegistro) * 100) / 100;
         totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
         const atoCalc = (sinalSemITBI + itbiRegistro) - totalProSolutoMaximo;
-        const sinalMinimoFloor = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
         atoResidual = Math.max(sinalMinimoFloor, Math.round(atoCalc * 100) / 100);
       }
     }

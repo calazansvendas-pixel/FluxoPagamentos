@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto } from '../utils/calculations';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -558,8 +558,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
   // Desconto do Ato Premiado baseado no Ato Efetivo
   const descontoAtoPremiadoCalculado = calcularDescontoAtoPremiado(valorAtoEfetivo);
-  const descontoAto = isAtoPremiadoEnabled 
+  const descontoAto = isAtoPremiadoEnabled
     ? (valAtoManual !== null ? descontoAtoPremiadoCalculado : (morarEngineBase?.atoPremiado ?? 0))
+    : 0;
+
+  // Teto do Ato (Imóvel): ponto fixo ato* = price - subsidy - desconto(ato*).
+  // Não pode usar "descontoAto" acima diretamente pois ele reflete o desconto do
+  // Ato ATUAL (sugerido ou já digitado), não o desconto que valeria no próprio teto.
+  const valorAtoMaximoCalculado = hasUnitSelected
+    ? resolverTetoAtoComDesconto(price - subsidy, isAtoPremiadoEnabled)
     : 0;
 
   // =========================================================================
@@ -568,7 +575,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // Etapa 1 (Pró-Soluto): Zera as parcelas das séries da construtora (R$ 0,00 líquido).
   // Etapa 2 (Amortização do Financiamento): O excedente abate o Financiamento bancário (Total Negoc.).
   // Etapa 3 (Amortização do FGTS): Se o financiamento zerar, o restante abate o FGTS.
-  // Etapa 4 (Amortização do Subsídio): Se o FGTS zerar, o restante abate o subsídio.
+  // O Subsídio NUNCA é abatido: o teto do Ato (valorAtoMaximo) é limitado a
+  // price - subsidy - descontoAto, então o excedente nunca ultrapassa a 3ª Etapa.
   // =========================================================================
   const sinalImovelInicial = hasUnitSelected ? Math.max(0, Math.round((price - (maxFinanc + subsidy + fgts)) * 100) / 100) : 0;
   const sinalLiquidoImovelNecessario = hasUnitSelected ? Math.max(0, Math.round((sinalImovelInicial - descontoAto) * 100) / 100) : 0;
@@ -590,11 +598,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // 3ª Etapa: Abatimento do FGTS
   const fgtsAbatido = Math.min(fgts, excedenteAposFinanc);
   const fgtsEfetivo = Math.max(0, Math.round((fgts - fgtsAbatido) * 100) / 100);
-  const excedenteAposFGTS = Math.max(0, Math.round((excedenteAposFinanc - fgtsAbatido) * 100) / 100);
 
-  // 4ª Etapa: Abatimento do Subsídio (se aplicável)
-  const subsidyAbatido = Math.min(subsidy, excedenteAposFGTS);
-  const subsidyEfetivo = Math.max(0, Math.round((subsidy - subsidyAbatido) * 100) / 100);
+  // O Subsídio nunca é abatido pelo Ato (Imóvel): o teto do Ato (valorAtoMaximo,
+  // repassado ao FluxoEntradaConstrutora) já é limitado a price - subsidy - descontoAto,
+  // então o excedente nunca ultrapassa a 3ª Etapa (FGTS).
+  const subsidyEfetivo = subsidy;
 
   // RATEIO DO ITBI/REGISTRO
   const itbiObraTotalMeses = itbiObraQtd > 0 ? itbiObraQtd : (totalParcObra > 0 ? totalParcObra : 33);
@@ -1091,153 +1099,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       copy[index] = { ...copy[index], [field]: value };
       return copy;
     });
-  };
-
-  // Ação explícita de zerar o Ato (Imóvel) e redistribuir todo o sinal nas séries mensais
-  const zerarAtoImovel = () => {
-    setValAtoManual(0);
-    setAtoInputText('R$ 0,00');
-    setIsManualObra(false);
-    setIsManualPos(false);
-
-    const mesesObraParam = totalParcObra < mesesObraPadraoPolitica ? totalParcObra : mesesObraPadraoPolitica;
-    const mesesPosParam = totalParcObra < mesesObraPadraoPolitica ? 0 : mesesPosPadraoPolitica;
-    const globalPct: [number, number, number, number, number, number] = [
-      currentCond?.globalSerie1Pct ?? 30.0,
-      currentCond?.globalSerie2Pct ?? 25.0,
-      currentCond?.globalSerie3Pct ?? 20.0,
-      currentCond?.globalSerie4Pct ?? 15.0,
-      currentCond?.globalSerie5Pct ?? 10.0,
-      currentCond?.globalSerie6Pct ?? 5.0
-    ];
-
-    const engineResult = calculateMorarFlowEngine({
-      precoTabela: price,
-      avaliacaoBanco: evaluation,
-      itbiRegistro: despCartoriasEfetivas,
-      renda: income,
-      financiamento: maxFinanc,
-      subsidio: subsidy,
-      fgts: fgts,
-      percentualRiscoGeral: currentCond?.percMaxProSolutoGlobal ?? currentCond?.riscoImovelPct ?? 17.0,
-      percentualRiscoPos: currentCond?.percMaxPosObra ?? currentCond?.riscoPosPct ?? 8.0,
-      mesesObra: mesesObraParam,
-      mesesPos: mesesPosParam,
-      globalSeriesPct: globalPct,
-      sinalMinimo: sinalMinimoVal,
-      atoITBI: atoITBIValidado,
-      isAtoPremiadoEnabled: isAtoPremiadoEnabled,
-      atoManual: 0
-    });
-
-    const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
-    const mPosArr = mesesPosParam === 0 
-      ? [{ qtd: 0, valor: 0, serieIndex: 0 }, { qtd: 0, valor: 0, serieIndex: 1 }, { qtd: 0, valor: 0, serieIndex: 2 }, { qtd: 0, valor: 0, serieIndex: 3 }]
-      : engineResult.posSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
-
-    setFaixasObra(mObraArr);
-    setFaixasPos(mPosArr);
-    setItbiObraValorManual(engineResult.parcelaMensalITBI);
-    setItbiPosValorManual(mesesPosParam === 0 ? 0 : engineResult.parcelaMensalITBI);
-
-    if (onShowToast) {
-      onShowToast('Ato (Imóvel) zerado. Todo o saldo do sinal foi redistribuído entre as séries mensais de Obra e Pós-Obra.');
-    }
-  };
-
-  const handleFinishAtoEdit = (rawText: string) => {
-    setIsEditingAto(false);
-    const parsed = parseCurrency(rawText);
-
-    // Se o usuário digitou explicitamente 0 ou limpou o campo para 0
-    if (rawText.trim() === '0' || rawText.trim() === 'R$ 0' || rawText.trim() === 'R$ 0,00' || parsed === 0) {
-      zerarAtoImovel();
-      return;
-    }
-
-    if (rawText.trim() === '' || isNaN(parsed)) {
-      setValAtoManual(null);
-      setAtoInputText(formatCurrency(atoSugeridoResidual));
-      aplicarDistribuicaoOficialMorar();
-      return;
-    }
-
-    // Aporte maior que 0
-    setValAtoManual(parsed);
-    setAtoInputText(formatCurrency(parsed));
-
-    const descAtoCalculado = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(parsed) : 0;
-    const sinalImovelBase = Math.max(0, price - maxFinanc - subsidy - fgts);
-    const sinalLiqImovel = Math.max(0, Math.round((sinalImovelBase - descAtoCalculado) * 100) / 100);
-
-    // Se o aporte for suficiente para cobrir ou exceder o Sinal Líquido do Imóvel:
-    if (parsed >= sinalLiqImovel) {
-      setFaixasObra(prev => prev.map(f => ({ ...f, valor: 0 })));
-      setFaixasPos(prev => prev.map(f => ({ ...f, valor: 0 })));
-      setIsManualObra(false);
-      setIsManualPos(false);
-
-      if (onShowToast) {
-        const excedenteFinanc = Math.max(0, Math.round((parsed - sinalLiqImovel) * 100) / 100);
-        if (excedenteFinanc > 0) {
-          onShowToast(`Ato definido em ${formatCurrency(parsed)}. Pró-soluto 100% quitado e excedente de ${formatCurrency(excedenteFinanc)} amortizado no Financiamento/FGTS.`);
-        } else if (descAtoCalculado > 0) {
-          onShowToast(`Ato definido em ${formatCurrency(parsed)}. Pró-soluto zerado. Desconto do Ato Premiado de ${formatCurrency(descAtoCalculado)} aplicado.`);
-        } else {
-          onShowToast(`Ato definido em ${formatCurrency(parsed)}. Pró-soluto 100% coberto pelo Ato.`);
-        }
-      }
-      return;
-    }
-
-    // Aporte intermediário (abate parte do Pró-Soluto e redistribui o saldo restante)
-    const mesesObraParam = totalParcObra < mesesObraPadraoPolitica ? totalParcObra : mesesObraPadraoPolitica;
-    const mesesPosParam = totalParcObra < mesesObraPadraoPolitica ? 0 : mesesPosPadraoPolitica;
-    const globalPct: [number, number, number, number, number, number] = [
-      currentCond?.globalSerie1Pct ?? 30.0,
-      currentCond?.globalSerie2Pct ?? 25.0,
-      currentCond?.globalSerie3Pct ?? 20.0,
-      currentCond?.globalSerie4Pct ?? 15.0,
-      currentCond?.globalSerie5Pct ?? 10.0,
-      currentCond?.globalSerie6Pct ?? 5.0
-    ];
-
-    const engineResult = calculateMorarFlowEngine({
-      precoTabela: price,
-      avaliacaoBanco: evaluation,
-      itbiRegistro: despCartoriasEfetivas,
-      renda: income,
-      financiamento: maxFinanc,
-      subsidio: subsidy,
-      fgts: fgts,
-      percentualRiscoGeral: currentCond?.percMaxProSolutoGlobal ?? currentCond?.riscoImovelPct ?? 17.0,
-      percentualRiscoPos: currentCond?.percMaxPosObra ?? currentCond?.riscoPosPct ?? 8.0,
-      mesesObra: mesesObraParam,
-      mesesPos: mesesPosParam,
-      globalSeriesPct: globalPct,
-      sinalMinimo: sinalMinimoVal,
-      atoITBI: atoITBIValidado,
-      isAtoPremiadoEnabled: isAtoPremiadoEnabled,
-      atoManual: parsed
-    });
-
-    const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
-    const mPosArr = mesesPosParam === 0 
-      ? [{ qtd: 0, valor: 0, serieIndex: 0 }, { qtd: 0, valor: 0, serieIndex: 1 }, { qtd: 0, valor: 0, serieIndex: 2 }, { qtd: 0, valor: 0, serieIndex: 3 }]
-      : engineResult.posSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
-
-    setFaixasObra(mObraArr);
-    setFaixasPos(mPosArr);
-    setIsManualObra(false);
-    setIsManualPos(false);
-
-    if (onShowToast) {
-      if (engineResult.atoPremiado > 0) {
-        onShowToast(`Ato definido em ${formatCurrency(parsed)}. Desconto do Ato Premiado calculado em ${formatCurrency(engineResult.atoPremiado)}.`);
-      } else {
-        onShowToast(`Ato definido em ${formatCurrency(parsed)}. Séries redistribuídas proporcionalmente sobre o novo saldo.`);
-      }
-    }
   };
 
   const handleFinishITBIEdit = (rawText: string) => {
@@ -1987,7 +1848,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             onLimpar={limparFluxoPagamento}
             valorAto={valorAtoEfetivo}
             valorAtoMinimo={Math.max(sinalMinimoVal, atoSugeridoResidual)}
-            valorAtoMaximo={price > 0 ? Math.max(0, price - descontoAto) : 0}
+            // Teto do Ato: zera Pró-Soluto + Financiamento + FGTS, mas nunca avança sobre o
+            // Subsídio. Resolvido como ponto fixo (ato* = price - subsidy - desconto(ato*))
+            // pois o desconto do Ato Premiado é escalonado pelo próprio valor do Ato.
+            valorAtoMaximo={valorAtoMaximoCalculado}
             onAtoChange={(novoVal) => {
               if (novoVal === null) {
                 setValAtoManual(null);
