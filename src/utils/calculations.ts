@@ -215,6 +215,51 @@ export function decomposeMorarMonths(
   return { obra, pos };
 }
 
+/**
+ * Reparte `totalDisponivel` entre N itens, proporcional a `pesos[i]`, mas sem
+ * nenhum item passar do seu teto em `tetos[i]` (dinheiro, não percentual — ex:
+ * teto de renda de um balde já multiplicado pelos seus meses). Usa o algoritmo
+ * clássico de "water-filling": a cada rodada, calcula a fatia proporcional de
+ * cada item ainda livre; quem passaria do próprio teto é travado nesse teto e
+ * sai da rodada seguinte, e o que sobra é redistribuído proporcionalmente entre
+ * os itens que ainda estão livres — mantendo a proporção original entre eles.
+ */
+function distribuirComTetos(pesos: number[], tetos: number[], totalDisponivel: number): number[] {
+  const n = pesos.length;
+  const resultado = new Array(n).fill(0);
+  const livre = new Array(n).fill(true);
+  let restante = Math.max(0, totalDisponivel);
+
+  for (let rodada = 0; rodada < n; rodada++) {
+    const pesoLivreTotal = pesos.reduce((s, w, i) => (livre[i] ? s + (w || 0) : s), 0);
+    if (pesoLivreTotal <= 0 || restante <= 0.005) break;
+
+    let travouAlgum = false;
+    for (let i = 0; i < n; i++) {
+      if (!livre[i]) continue;
+      const fatia = ((pesos[i] || 0) / pesoLivreTotal) * restante;
+      if (fatia > tetos[i] + 0.005) {
+        resultado[i] = Math.max(0, tetos[i]);
+        livre[i] = false;
+        restante -= resultado[i];
+        travouAlgum = true;
+      }
+    }
+
+    if (!travouAlgum) {
+      const pesoFinal = pesos.reduce((s, w, i) => (livre[i] ? s + (w || 0) : s), 0);
+      if (pesoFinal > 0) {
+        for (let i = 0; i < n; i++) {
+          if (livre[i]) resultado[i] = ((pesos[i] || 0) / pesoFinal) * restante;
+        }
+      }
+      break;
+    }
+  }
+
+  return resultado;
+}
+
 export interface MorarEngineParams {
   precoTabela: number;
   avaliacaoBanco?: number;
@@ -427,6 +472,14 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     ? params.globalSeriesPct.map(p => (p || 0) / 100)
     : [0.30, 0.25, 0.20, 0.15, 0.10, 0.05];
 
+  // Teto de renda de cada balde: a política de crédito trava a parcela + ITBI de um
+  // balde em pctAno% da renda — nunca um percentual independente de "peso de
+  // distribuição", é um teto de dinheiro por mês para aquele balde específico.
+  const capRendaMesPorBalde = seriesWeights.map((_, idx) => {
+    const pctAno = (params.globalSeriesPct && params.globalSeriesPct[idx]) || [30, 25, 20, 15, 10, 5][idx] || 0;
+    return renda > 0 ? Math.round((renda * (pctAno / 100)) * 100) / 100 : Infinity;
+  });
+
   const obraWeightedTotal = seriesWeights.reduce((sum, w, idx) => sum + w * (mObra[idx] || 0), 0);
   const posWeightedTotal = seriesWeights.reduce((sum, w, idx) => sum + w * (mPos[idx] || 0), 0);
   const combinedWeightedTotal = obraWeightedTotal + posWeightedTotal;
@@ -437,8 +490,20 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const totalPosMoney = Math.max(0, Math.min(naturalPosMoney, maxRiscoPos));
   const totalObraMoney = Math.max(0, fluxoProSolutoComITBI - totalPosMoney);
 
-  const obraRatesBrutas = seriesWeights.map(w => obraWeightedTotal > 0 ? (w / obraWeightedTotal) * totalObraMoney : 0);
-  const posRatesBrutas = seriesWeights.map(w => posWeightedTotal > 0 ? (w / posWeightedTotal) * totalPosMoney : 0);
+  // Dentro de cada fase, reparte o total entre os baldes proporcional a peso×meses,
+  // mas travando cada balde no seu próprio teto de renda (parcela + ITBI ≤ pctAno% da
+  // renda) — o excedente de um balde que bateu no teto é redistribuído entre os
+  // demais baldes da mesma fase, mantendo a proporção original entre eles.
+  const obraPesos = seriesWeights.map((w, idx) => w * (mObra[idx] || 0));
+  const posPesos = seriesWeights.map((w, idx) => w * (mPos[idx] || 0));
+  const obraTetosMoney = capRendaMesPorBalde.map((cap, idx) => cap * (mObra[idx] || 0));
+  const posTetosMoney = capRendaMesPorBalde.map((cap, idx) => cap * (mPos[idx] || 0));
+
+  const obraMoneyPorBalde = distribuirComTetos(obraPesos, obraTetosMoney, totalObraMoney);
+  const posMoneyPorBalde = distribuirComTetos(posPesos, posTetosMoney, totalPosMoney);
+
+  const obraRatesBrutas = obraMoneyPorBalde.map((money, idx) => (mObra[idx] || 0) > 0 ? money / mObra[idx] : 0);
+  const posRatesBrutas = posMoneyPorBalde.map((money, idx) => (mPos[idx] || 0) > 0 ? money / mPos[idx] : 0);
 
   const toLiquida = (brutaExata: number) => {
     if (brutaExata <= 0) return 0;
