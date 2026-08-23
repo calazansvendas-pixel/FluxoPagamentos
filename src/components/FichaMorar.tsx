@@ -1946,7 +1946,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             valorTotalITBI={valorTotalITBI}
             isFirstHome={isFirstHomeLocal}
             onToggleFirstHome={() => setIsFirstHomeLocal(prev => !prev)}
-            onITBIChange={(novoVal) => setValAtoITBI(novoVal)}
+            onITBIChange={(novoVal) => {
+              setValAtoITBI(novoVal);
+              // Zera os valores "travados" da parcela de ITBI (obra/pós) para que
+              // recalculem a partir do saldoITBI atualizado (saldoITBI já reage ao
+              // novo "ITBI no Ato" sozinho, mas itbiObraValorManual/itbiPosValorManual
+              // ficam presos no valor da última vez que a série foi recalculada).
+              setItbiObraValorManual(null);
+              setItbiPosValorManual(null);
+            }}
             descontoAto={descontoAto}
             isAtoPremiadoActive={isAtoPremiadoEnabled}
             onToggleAtoPremiado={(ativo) => {
