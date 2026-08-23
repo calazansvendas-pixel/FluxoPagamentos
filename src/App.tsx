@@ -23,12 +23,30 @@ const ViewLoadingFallback = () => (
   </div>
 );
 
+// O "Colina das Amoras" foi cadastrado originalmente com o id 'amoras', que não é um
+// UUID válido — a tabela `empreendimentos` do Supabase exige UUID como chave primária,
+// então esse empreendimento nunca conseguiu sincronizar (nem a tabela de unidades, nem
+// a política de crédito). AMORAS_ID é o novo id compatível; qualquer produto carregado
+// com o id legado é migrado automaticamente para AMORAS_ID, preservando toda a política
+// e a tabela já configuradas (ver migração logo abaixo, no useEffect de sincronização).
+const AMORAS_LEGACY_ID = 'amoras';
+const AMORAS_ID = '22222222-2222-2222-2222-222222222222';
+const AMORAS_MIGRATION_FLAG = 'simulador_amoras_migrado_v1';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('simulator');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [currentDate, setCurrentDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+
+  // Sinaliza se ESTE carregamento remapeou um produto do id legado 'amoras' para
+  // AMORAS_ID — só nesse caso existe uma migração real a empurrar para o Supabase.
+  // Um navegador novo (sem dado legado, já usando AMORAS_ID vindo de INITIAL_PRODUCTS)
+  // não deve disparar esse push: a política dele ainda é só o padrão de fábrica, e
+  // empurrá-la incondicionalmente correria o risco de sobrescrever no Supabase a
+  // política real que outro navegador (o do admin) já tenha migrado.
+  const migratedAmorasRef = React.useRef(false);
 
   // Products state with localStorage persistence
   const [products, setProducts] = useState<Product[]>(() => {
@@ -37,7 +55,13 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((p: Product) => {
+            if (p.id === AMORAS_LEGACY_ID) {
+              migratedAmorasRef.current = true;
+              return { ...p, id: AMORAS_ID };
+            }
+            return p;
+          });
         }
       }
     } catch (e) {
@@ -122,6 +146,59 @@ export default function App() {
     };
   }, []);
 
+  // Migração única do "Colina das Amoras" (id legado 'amoras', incompatível com UUID) para
+  // o novo AMORAS_ID: o id já foi trocado no estado local (ver useState de `products` acima);
+  // aqui só falta empurrar a política de crédito e a tabela de unidades — que nunca tinham
+  // chegado ao Supabase por causa do id antigo — para que o empreendimento fique visível
+  // para todos os usuários, com tudo que já estava configurado preservado.
+  React.useEffect(() => {
+    if (!migratedAmorasRef.current) return;
+    if (localStorage.getItem(AMORAS_MIGRATION_FLAG)) return;
+
+    const amoras = productsRef.current.find(p => p.id === AMORAS_ID);
+    if (!amoras) {
+      localStorage.setItem(AMORAS_MIGRATION_FLAG, '1');
+      return;
+    }
+
+    const migrarAmorasParaSupabase = async () => {
+      try {
+        const empResult = await imoveisService.sincronizarEmpreendimento({
+          id: amoras.id,
+          nome: amoras.name,
+          delivery_date_phase1: amoras.deliveryDatePhase1 || amoras.deliveryDate,
+          delivery_date_phase2: amoras.deliveryDatePhase2,
+          conditions: amoras.conditions,
+          is_featured: amoras.isFeatured || false
+        });
+        if (!empResult.success) {
+          throw new Error(empResult.error || 'Falha ao sincronizar empreendimento');
+        }
+
+        const rows = amoras.tableInfo?.rows || [];
+        if (rows.length > 0) {
+          const unidades = imoveisService.converterLinhasParaUnidades(amoras.id, rows);
+          if (unidades.length > 0) {
+            const unitsResult = await imoveisService.salvarUnidadesLote(amoras.id, unidades);
+            if (!unitsResult.success) {
+              throw new Error(unitsResult.error || 'Falha ao sincronizar unidades');
+            }
+          }
+        }
+
+        // Só marca como concluída depois que ambos os envios foram confirmados — uma
+        // falha real (rede indisponível etc.) deixa a flag em aberto para tentar de
+        // novo no próximo carregamento, em vez de desistir silenciosamente.
+        localStorage.setItem(AMORAS_MIGRATION_FLAG, '1');
+        console.log('Migração do Colina das Amoras para o Supabase concluída com sucesso.');
+      } catch (e) {
+        console.warn('Aviso: falha ao migrar Colina das Amoras para o Supabase. Será tentado novamente no próximo carregamento do app.', e);
+      }
+    };
+
+    migrarAmorasParaSupabase();
+  }, []);
+
   // Persist products on change
   React.useEffect(() => {
     try {
@@ -170,8 +247,8 @@ export default function App() {
   const [selectedUnits, setSelectedUnits] = useState<Record<string, SelectedUnit>>({});
 
   // Active product ID for Screen 3 (Policies) and Screen 4 (Import Table)
-  const [activePolicyProductId, setActivePolicyProductId] = useState<string>('amoras');
-  const [activeImportProductId, setActiveImportProductId] = useState<string>('amoras');
+  const [activePolicyProductId, setActivePolicyProductId] = useState<string>(AMORAS_ID);
+  const [activeImportProductId, setActiveImportProductId] = useState<string>(AMORAS_ID);
 
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);

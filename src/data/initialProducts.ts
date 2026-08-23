@@ -62,7 +62,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     }
   },
   {
-    id: 'amoras',
+    id: '22222222-2222-2222-2222-222222222222',
     name: 'Colina das Amoras',
     isFeatured: true,
     deliveryDate: '2027-06-30',

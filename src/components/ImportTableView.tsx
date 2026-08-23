@@ -379,37 +379,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
     setIsSaving(true);
     
     // Mapeamento dos dados processados para o formato esperado pelo Supabase
-    const unidadesProcessadas = currentRows.map(row => {
-      const areaPriv = parseM2Number(row[3]);
-      const areaQuintal = parseM2Number(row[4]);
-      const avaliacao = parseCurrency(row[6]);
-      const preco = parseCurrency(row[7]);
-      let itbi1 = parseCurrency(row[8]);
-      let itbi2 = parseCurrency(row[9]) || itbi1;
-
-      // Garantia de isolamento das taxas de ITBI / Registro (nunca embutir preço de apartamento)
-      if (preco > 50000 && itbi1 > preco) {
-        itbi1 = Math.max(0, Math.round((itbi1 - preco) * 100) / 100);
-      }
-      if (preco > 50000 && itbi2 > preco) {
-        itbi2 = Math.max(0, Math.round((itbi2 - preco) * 100) / 100);
-      }
-
-      return {
-        empreendimento_id: activeProd.id,
-        status: String(row[0] || '1ª Fase').trim(),
-        torre: String(row[1] || '').trim(),
-        unidade: String(row[2] || '').trim(),
-        area_privativa: areaPriv,
-        quintal: areaQuintal,
-        tipologia: String(row[5] || '').trim() || '2 Quartos',
-        avaliacao_bancaria: avaliacao,
-        preco_tabela: preco,
-        itbi_primeiro_imovel: itbi1,
-        itbi_segundo_imovel: itbi2,
-        itbi_total: itbi2,
-      };
-    }).filter(u => u.torre !== '' && u.unidade !== '');
+    const unidadesProcessadas = imoveisService.converterLinhasParaUnidades(activeProd.id, currentRows);
 
     try {
       // 1. Garante que o empreendimento exista no Supabase

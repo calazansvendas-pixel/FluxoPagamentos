@@ -62,6 +62,44 @@ export const imoveisService = {
     ]);
   },
 
+  // Converte linhas de tabela (tableInfo.rows) para o formato de unidades esperado
+  // pelo Supabase (inverso de converterUnidadesParaLinhas). Compartilhado entre a
+  // importação de planilha (ImportTableView) e a migração automática de
+  // empreendimentos com id legado incompatível com o tipo UUID do banco.
+  converterLinhasParaUnidades(empId: string, rows: (string | number)[][]): any[] {
+    return rows.map(row => {
+      const areaPriv = parseM2Number(row[3]);
+      const areaQuintal = parseM2Number(row[4]);
+      const avaliacao = parseCurrency(row[6]);
+      const preco = parseCurrency(row[7]);
+      let itbi1 = parseCurrency(row[8]);
+      let itbi2 = parseCurrency(row[9]) || itbi1;
+
+      // Garantia de isolamento das taxas de ITBI / Registro (nunca embutir preço de apartamento)
+      if (preco > 50000 && itbi1 > preco) {
+        itbi1 = Math.max(0, Math.round((itbi1 - preco) * 100) / 100);
+      }
+      if (preco > 50000 && itbi2 > preco) {
+        itbi2 = Math.max(0, Math.round((itbi2 - preco) * 100) / 100);
+      }
+
+      return {
+        empreendimento_id: empId,
+        status: String(row[0] || '1ª Fase').trim(),
+        torre: String(row[1] || '').trim(),
+        unidade: String(row[2] || '').trim(),
+        area_privativa: areaPriv,
+        quintal: areaQuintal,
+        tipologia: String(row[5] || '').trim() || '2 Quartos',
+        avaliacao_bancaria: avaliacao,
+        preco_tabela: preco,
+        itbi_primeiro_imovel: itbi1,
+        itbi_segundo_imovel: itbi2,
+        itbi_total: itbi2
+      };
+    }).filter(u => u.torre !== '' && u.unidade !== '');
+  },
+
   // Lista todos os empreendimentos (Tenta Supabase, cai para Mock Local)
   async listarEmpreendimentos() {
     try {
@@ -88,10 +126,10 @@ export const imoveisService = {
     delivery_date_phase2?: string;
     conditions?: unknown;
     is_featured?: boolean;
-  }) {
+  }): Promise<{ success: boolean; error?: string }> {
     try {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(emp.id);
-      if (!isUUID) return;
+      if (!isUUID) return { success: false, error: 'id não é um UUID válido' };
 
       const basePayload: Record<string, unknown> = {
         id: emp.id,
@@ -107,13 +145,25 @@ export const imoveisService = {
 
       // Se as colunas conditions/is_featured ainda não existirem no schema do Supabase
       // (usuário ainda não rodou o ALTER TABLE), grava ao menos os campos básicos, para
-      // não perder a sincronização de nome/datas de entrega enquanto isso.
+      // não perder a sincronização de nome/datas de entrega enquanto isso. Esse fallback
+      // conta como sucesso (é o melhor possível até o SQL ser rodado) — só uma falha real
+      // de rede/conexão deve ser reportada como erro para quem chamou.
       if (error && (error.code === 'PGRST204' || /conditions|is_featured/i.test(String(error.message || '')))) {
         console.warn('Aviso: colunas conditions/is_featured não encontradas no Supabase. Rode o ALTER TABLE indicado em imoveisService.ts para sincronizar a política de crédito entre usuários. Gravando apenas nome/datas por enquanto.');
-        await supabase.from('empreendimentos').upsert([basePayload], { onConflict: 'id' });
+        const { error: baseError } = await supabase.from('empreendimentos').upsert([basePayload], { onConflict: 'id' });
+        if (baseError) {
+          return { success: false, error: baseError.message };
+        }
+        return { success: true };
       }
-    } catch (e) {
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
       console.warn('Aviso ao sincronizar empreendimento no Supabase:', e);
+      return { success: false, error: e?.message || 'Erro ao sincronizar com o banco' };
     }
   },
 
