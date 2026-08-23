@@ -71,6 +71,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     return prodWithConds.conditions[0] || null;
   }, [currentProd, condition]);
 
+  // Quantidade de meses de cada balde (1 a 6), configurável na política de crédito.
+  // Padrão 12 meses cada quando não definido (compatibilidade retroativa).
+  const serieMesesCapacidades = useMemo<[number, number, number, number, number, number]>(() => [
+    currentCond?.serie1Meses ?? 12,
+    currentCond?.serie2Meses ?? 12,
+    currentCond?.serie3Meses ?? 12,
+    currentCond?.serie4Meses ?? 12,
+    currentCond?.serie5Meses ?? 12,
+    currentCond?.serie6Meses ?? 12
+  ], [currentCond]);
+
   const [selectedTorre, setSelectedTorre] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
@@ -417,6 +428,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         mesesObra: mesesObraPadrao,
         mesesPos: mesesPosPadrao,
         globalSeriesPct: globalPct,
+        serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: 0,
         isAtoPremiadoEnabled: true,
@@ -546,11 +558,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraParam,
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       isAtoPremiadoEnabled,
       atoITBI: atoITBIValidado
     });
-  }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, atoITBIValidado, totalParcObra, totalParcPos]);
+  }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, atoITBIValidado, totalParcObra, totalParcPos, serieMesesCapacidades]);
 
   // Piso do Ato Sugerido Inicial e Saldo de Pró-Soluto padrão
   const atoSugeridoResidual = hasUnitSelected ? (morarEngineBase?.atoResidual ?? 0) : 0;
@@ -810,6 +823,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraParam,
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
       isAtoPremiadoEnabled
@@ -869,6 +883,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraParam,
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
       isAtoPremiadoEnabled,
@@ -921,6 +936,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         mesesObra: mesesObraParam,
         mesesPos: mesesPosParam,
         globalSeriesPct: globalPct,
+        serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
         isAtoPremiadoEnabled
@@ -997,6 +1013,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         mesesObra: novoTotalObra,
         mesesPos: 0,
         globalSeriesPct: globalPct,
+        serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
         isAtoPremiadoEnabled
@@ -1043,6 +1060,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         mesesObra: novoTotalObra,
         mesesPos: novoPos,
         globalSeriesPct: globalPct,
+        serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
         isAtoPremiadoEnabled
@@ -1102,6 +1120,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraAtual,
       mesesPos: novoTotalPos,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
       isAtoPremiadoEnabled
@@ -1210,6 +1229,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraParam,
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: finalVal,
       isAtoPremiadoEnabled,

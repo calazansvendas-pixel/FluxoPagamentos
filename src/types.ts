@@ -17,13 +17,23 @@ export interface CommercialCondition {
   percMaxProSolutoGlobal?: number; // % Max Pró-Soluto Global (ex: 17.0%)
   percMaxPosObra?: number; // % Max Pós-Obra (ex: 8.0%)
   riscoPosPct?: number; // Compatibilidade retroativa
-  // Séries Contínuas Globais (Blocos de 12 meses)
+  // Séries Contínuas Globais (Blocos de meses). Cada balde tem seu próprio
+  // percentual (globalSerieXPct) E sua própria quantidade de meses (serieXMeses,
+  // padrão 12 cada). O balde é preenchido contínuo entre Obra e Pós-Obra: se um
+  // balde é dividido pela fronteira Obra/Pós-Obra, as duas partes usam o MESMO
+  // percentual (é o mesmo balde), só a quantidade de meses de cada parte muda.
   globalSerie1Pct?: number; // Ano 1
   globalSerie2Pct?: number; // Ano 2
   globalSerie3Pct?: number; // Ano 3
   globalSerie4Pct?: number; // Ano 4
   globalSerie5Pct?: number; // Ano 5
   globalSerie6Pct?: number; // Ano 6
+  serie1Meses?: number; // Qtd de meses do balde 1 (padrão 12)
+  serie2Meses?: number; // Qtd de meses do balde 2 (padrão 12)
+  serie3Meses?: number; // Qtd de meses do balde 3 (padrão 12)
+  serie4Meses?: number; // Qtd de meses do balde 4 (padrão 12)
+  serie5Meses?: number; // Qtd de meses do balde 5 (padrão 12)
+  serie6Meses?: number; // Qtd de meses do balde 6 (padrão 12)
   torresHabilitadas?: string[]; // Lista de torres liberadas para simulação nesta política
 }
 

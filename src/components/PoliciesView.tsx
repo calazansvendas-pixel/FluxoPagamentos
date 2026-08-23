@@ -98,6 +98,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const [globalSerie4Str, setGlobalSerie4Str] = useState<string>('15,0');
   const [globalSerie5Str, setGlobalSerie5Str] = useState<string>('10,0');
   const [globalSerie6Str, setGlobalSerie6Str] = useState<string>('5,0');
+  // Quantidade de meses de cada balde (independente do percentual). Um balde
+  // dividido entre Obra e Pós-Obra continua sendo o mesmo balde (mesmo percentual).
+  const [serie1MesesStr, setSerie1MesesStr] = useState<string>('12');
+  const [serie2MesesStr, setSerie2MesesStr] = useState<string>('12');
+  const [serie3MesesStr, setSerie3MesesStr] = useState<string>('12');
+  const [serie4MesesStr, setSerie4MesesStr] = useState<string>('12');
+  const [serie5MesesStr, setSerie5MesesStr] = useState<string>('12');
+  const [serie6MesesStr, setSerie6MesesStr] = useState<string>('12');
 
   // Estado das torres habilitadas para simulação nesta política
   const [torresHabilitadas, setTorresHabilitadas] = useState<string[]>([]);
@@ -215,6 +223,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const gs4 = cond.globalSerie4Pct !== undefined ? cond.globalSerie4Pct : 15.0;
     const gs5 = cond.globalSerie5Pct !== undefined ? cond.globalSerie5Pct : 10.0;
     const gs6 = cond.globalSerie6Pct !== undefined ? cond.globalSerie6Pct : 5.0;
+    const sm1 = cond.serie1Meses !== undefined ? cond.serie1Meses : 12;
+    const sm2 = cond.serie2Meses !== undefined ? cond.serie2Meses : 12;
+    const sm3 = cond.serie3Meses !== undefined ? cond.serie3Meses : 12;
+    const sm4 = cond.serie4Meses !== undefined ? cond.serie4Meses : 12;
+    const sm5 = cond.serie5Meses !== undefined ? cond.serie5Meses : 12;
+    const sm6 = cond.serie6Meses !== undefined ? cond.serie6Meses : 12;
 
     const parsedSinal = parseCurrency(cond.sinalMinimo);
     const formattedSinal = formatCurrency(parsedSinal > 0 ? parsedSinal : 2000);
@@ -245,6 +259,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setGlobalSerie4Str(formatDecimalBR(gs4, 1, 2));
     setGlobalSerie5Str(formatDecimalBR(gs5, 1, 2));
     setGlobalSerie6Str(formatDecimalBR(gs6, 1, 2));
+    setSerie1MesesStr(String(sm1));
+    setSerie2MesesStr(String(sm2));
+    setSerie3MesesStr(String(sm3));
+    setSerie4MesesStr(String(sm4));
+    setSerie5MesesStr(String(sm5));
+    setSerie6MesesStr(String(sm6));
 
     setPolicyText(cond.policy || '');
   };
@@ -271,8 +291,17 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const globalSerie5Pct = parseDecimal(globalSerie5Str, 10.0);
   const globalSerie6Pct = parseDecimal(globalSerie6Str, 5.0);
 
+  // Quantidade de meses de cada balde (independente do percentual acima)
+  const serie1Meses = Math.max(1, parseInt(serie1MesesStr, 10) || 12);
+  const serie2Meses = Math.max(1, parseInt(serie2MesesStr, 10) || 12);
+  const serie3Meses = Math.max(1, parseInt(serie3MesesStr, 10) || 12);
+  const serie4Meses = Math.max(1, parseInt(serie4MesesStr, 10) || 12);
+  const serie5Meses = Math.max(1, parseInt(serie5MesesStr, 10) || 12);
+  const serie6Meses = Math.max(1, parseInt(serie6MesesStr, 10) || 12);
+  const serieMesesCapacidades = [serie1Meses, serie2Meses, serie3Meses, serie4Meses, serie5Meses, serie6Meses];
+
   // Divisão dinâmica dos meses por séries usando a regra oficial Morar
-  const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos);
+  const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos, serieMesesCapacidades);
 
   const handleSelectCondition = (condId: string) => {
     if (!prodWithConds) return;
@@ -306,6 +335,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
           globalSerie4Pct,
           globalSerie5Pct,
           globalSerie6Pct,
+          serie1Meses,
+          serie2Meses,
+          serie3Meses,
+          serie4Meses,
+          serie5Meses,
+          serie6Meses,
           torresHabilitadas: torresHabilitadas,
           policy: policyText
         };
@@ -458,6 +493,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedGlobal4 = parseDecimal(globalSerie4Str, 15.0);
     const parsedGlobal5 = parseDecimal(globalSerie5Str, 10.0);
     const parsedGlobal6 = parseDecimal(globalSerie6Str, 5.0);
+    const parsedSerie1Meses = Math.max(1, parseInt(serie1MesesStr, 10) || 12);
+    const parsedSerie2Meses = Math.max(1, parseInt(serie2MesesStr, 10) || 12);
+    const parsedSerie3Meses = Math.max(1, parseInt(serie3MesesStr, 10) || 12);
+    const parsedSerie4Meses = Math.max(1, parseInt(serie4MesesStr, 10) || 12);
+    const parsedSerie5Meses = Math.max(1, parseInt(serie5MesesStr, 10) || 12);
+    const parsedSerie6Meses = Math.max(1, parseInt(serie6MesesStr, 10) || 12);
 
     const isCurrentMorar = activeCondObj ? activeCondObj.name.toLowerCase().includes('morar') : false;
 
@@ -480,6 +521,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setGlobalSerie4Str(formatDecimalBR(parsedGlobal4, 1, 2));
     setGlobalSerie5Str(formatDecimalBR(parsedGlobal5, 1, 2));
     setGlobalSerie6Str(formatDecimalBR(parsedGlobal6, 1, 2));
+    setSerie1MesesStr(String(parsedSerie1Meses));
+    setSerie2MesesStr(String(parsedSerie2Meses));
+    setSerie3MesesStr(String(parsedSerie3Meses));
+    setSerie4MesesStr(String(parsedSerie4Meses));
+    setSerie5MesesStr(String(parsedSerie5Meses));
+    setSerie6MesesStr(String(parsedSerie6Meses));
 
     const updatedConditions = (prodWithConds.conditions || []).map(c => {
       if (c.id === activeConditionId) {
@@ -504,6 +551,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
           globalSerie4Pct: parsedGlobal4,
           globalSerie5Pct: parsedGlobal5,
           globalSerie6Pct: parsedGlobal6,
+          serie1Meses: parsedSerie1Meses,
+          serie2Meses: parsedSerie2Meses,
+          serie3Meses: parsedSerie3Meses,
+          serie4Meses: parsedSerie4Meses,
+          serie5Meses: parsedSerie5Meses,
+          serie6Meses: parsedSerie6Meses,
           torresHabilitadas: torresHabilitadas,
           policy: policyText
         };
@@ -1032,7 +1085,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 </div>
 
                 
-                {/* 2. BLOCO: SÉRIES DE COMPROMETIMENTO DE RENDA (BLOCOS DE 12 MESES) */}
+                {/* 2. BLOCO: SÉRIES DE COMPROMETIMENTO DE RENDA (BALDES DE MESES INDEPENDENTES) */}
                 <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div className="flex items-center gap-2">
@@ -1040,19 +1093,22 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         <HardHat className="w-4 h-4" />
                       </div>
                       <span className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-                        Séries de Comprometimento de Renda (Blocos de 12 Meses)
+                        Séries de Comprometimento de Renda (Percentual e Meses de Cada Balde)
                       </span>
                     </div>
                   </div>
+                  <p className="text-[10px] text-slate-500 -mt-1.5">
+                    Cada balde tem seu próprio percentual e sua própria quantidade de meses. Um balde dividido entre Obra e Pós-Obra continua sendo o mesmo balde (mesmo percentual) nas duas fases.
+                  </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {[
-                      { title: 'Série 1 (Ano 1)', val: globalSerie1Str, set: setGlobalSerie1Str, def: 30.0, parc: parcGlobal1 },
-                      { title: 'Série 2 (Ano 2)', val: globalSerie2Str, set: setGlobalSerie2Str, def: 25.0, parc: parcGlobal2 },
-                      { title: 'Série 3 (Ano 3)', val: globalSerie3Str, set: setGlobalSerie3Str, def: 20.0, parc: parcGlobal3 },
-                      { title: 'Série 4 (Ano 4)', val: globalSerie4Str, set: setGlobalSerie4Str, def: 15.0, parc: parcGlobal4 },
-                      { title: 'Série 5 (Ano 5)', val: globalSerie5Str, set: setGlobalSerie5Str, def: 10.0, parc: parcGlobal5 },
-                      { title: 'Série 6 (Ano 6)', val: globalSerie6Str, set: setGlobalSerie6Str, def: 5.0, parc: parcGlobal6 },
+                      { title: 'Série 1 (Balde 1)', val: globalSerie1Str, set: setGlobalSerie1Str, def: 30.0, parc: parcGlobal1, mesesVal: serie1MesesStr, mesesSet: setSerie1MesesStr },
+                      { title: 'Série 2 (Balde 2)', val: globalSerie2Str, set: setGlobalSerie2Str, def: 25.0, parc: parcGlobal2, mesesVal: serie2MesesStr, mesesSet: setSerie2MesesStr },
+                      { title: 'Série 3 (Balde 3)', val: globalSerie3Str, set: setGlobalSerie3Str, def: 20.0, parc: parcGlobal3, mesesVal: serie3MesesStr, mesesSet: setSerie3MesesStr },
+                      { title: 'Série 4 (Balde 4)', val: globalSerie4Str, set: setGlobalSerie4Str, def: 15.0, parc: parcGlobal4, mesesVal: serie4MesesStr, mesesSet: setSerie4MesesStr },
+                      { title: 'Série 5 (Balde 5)', val: globalSerie5Str, set: setGlobalSerie5Str, def: 10.0, parc: parcGlobal5, mesesVal: serie5MesesStr, mesesSet: setSerie5MesesStr },
+                      { title: 'Série 6 (Balde 6)', val: globalSerie6Str, set: setGlobalSerie6Str, def: 5.0, parc: parcGlobal6, mesesVal: serie6MesesStr, mesesSet: setSerie6MesesStr },
                     ].map((serie, index) => (
                       <div key={index} className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200 space-y-1.5">
                         <div className="flex justify-between items-center text-[11px]">
@@ -1063,19 +1119,37 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="relative flex items-center">
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={serie.val}
-                            onChange={(e) => serie.set(e.target.value)}
-                            onBlur={() => {
-                              const parsed = parseDecimal(serie.val, serie.def);
-                              serie.set(formatDecimalBR(parsed, 1, 2));
-                            }}
-                            className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
-                          />
-                          <span className="absolute right-2.5 font-extrabold text-slate-500 text-xs pointer-events-none">%</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="relative flex items-center flex-1">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={serie.val}
+                              onChange={(e) => serie.set(e.target.value)}
+                              onBlur={() => {
+                                const parsed = parseDecimal(serie.val, serie.def);
+                                serie.set(formatDecimalBR(parsed, 1, 2));
+                              }}
+                              title="Percentual do balde"
+                              className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
+                            />
+                            <span className="absolute right-2.5 font-extrabold text-slate-500 text-xs pointer-events-none">%</span>
+                          </div>
+                          <div className="relative flex items-center flex-1">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={serie.mesesVal}
+                              onChange={(e) => serie.mesesSet(e.target.value)}
+                              onBlur={() => {
+                                const parsed = Math.max(1, parseInt(serie.mesesVal, 10) || 12);
+                                serie.mesesSet(String(parsed));
+                              }}
+                              title="Quantidade de meses do balde"
+                              className="w-full pl-3 pr-9 py-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
+                            />
+                            <span className="absolute right-2.5 font-extrabold text-slate-500 text-[10px] pointer-events-none">mês</span>
+                          </div>
                         </div>
                       </div>
                     ))}

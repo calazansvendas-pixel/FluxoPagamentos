@@ -104,6 +104,12 @@ export function ensureProductConditions(prod: Product): Product {
         globalSerie4Pct: 15.0,
         globalSerie5Pct: 10.0,
         globalSerie6Pct: 5.0,
+        serie1Meses: 12,
+        serie2Meses: 12,
+        serie3Meses: 12,
+        serie4Meses: 12,
+        serie5Meses: 12,
+        serie6Meses: 12,
         policy: prod.policy || `POLÍTICA COMERCIAL SINAL ${optName.toUpperCase()}:\n- Comissão padrão: 4% apartada na proposta.\n- Entrada mínima conforme negociação.\n- Sujeito à análise financeira.`
       };
     });
@@ -159,11 +165,24 @@ export interface MorarMonthsDecomposition {
 }
 
 /**
- * Decompõe os meses de Obra e Pós-Obra em blocos de até 12 meses, com transbordo (spillover)
+ * Decompõe os meses de Obra e Pós-Obra em baldes contínuos, com transbordo
+ * (spillover) de um balde para o próximo. Cada balde tem sua PRÓPRIA capacidade
+ * de meses (baldeCapacidades, padrão 12 cada, configurável por balde na política
+ * de crédito) — não é um tamanho fixo de 12 para todos. Um balde dividido pela
+ * fronteira Obra/Pós-Obra continua sendo o MESMO balde (mesmo percentual) nas
+ * duas fases; só muda quantos desses meses caem em cada fase.
  */
-export function decomposeMorarMonths(mesesObra: number, mesesPos: number): MorarMonthsDecomposition {
+export function decomposeMorarMonths(
+  mesesObra: number,
+  mesesPos: number,
+  baldeCapacidades?: number[]
+): MorarMonthsDecomposition {
   const mObra = Math.max(0, mesesObra || 0);
   const mPos = Math.max(0, mesesPos || 0);
+  const capacidades = [0, 1, 2, 3, 4, 5].map(idx => {
+    const cap = baldeCapacidades?.[idx];
+    return cap && cap > 0 ? cap : 12;
+  });
 
   const obra = [0, 0, 0, 0, 0, 0];
   const pos = [0, 0, 0, 0, 0, 0];
@@ -173,10 +192,10 @@ export function decomposeMorarMonths(mesesObra: number, mesesPos: number): Morar
 
   // Fill Obra buckets
   while (remainingObra > 0 && currentBucket < 6) {
-    const toFill = Math.min(12, remainingObra);
+    const toFill = Math.min(capacidades[currentBucket], remainingObra);
     obra[currentBucket] = toFill;
     remainingObra -= toFill;
-    if (obra[currentBucket] === 12) {
+    if (obra[currentBucket] === capacidades[currentBucket]) {
       currentBucket++;
     }
   }
@@ -184,11 +203,11 @@ export function decomposeMorarMonths(mesesObra: number, mesesPos: number): Morar
   // Fill Pos buckets, starting at the current bucket (which might be partially filled by Obra)
   let remainingPos = mPos;
   while (remainingPos > 0 && currentBucket < 6) {
-    const spaceInBucket = 12 - obra[currentBucket];
+    const spaceInBucket = capacidades[currentBucket] - obra[currentBucket];
     const toFill = Math.min(spaceInBucket, remainingPos);
     pos[currentBucket] = toFill;
     remainingPos -= toFill;
-    if (pos[currentBucket] + obra[currentBucket] === 12) {
+    if (pos[currentBucket] + obra[currentBucket] === capacidades[currentBucket]) {
       currentBucket++;
     }
   }
@@ -210,6 +229,7 @@ export interface MorarEngineParams {
   mesesObra?: number; // Ex: 33
   mesesPos?: number; // Ex: 27
   globalSeriesPct?: [number, number, number, number, number, number];
+  serieMesesCapacidades?: [number, number, number, number, number, number]; // Meses de cada balde (padrão 12 cada)
   sinalLiquidoTotal?: number;
   sinalMinimo?: number;
   atoITBI?: number;
@@ -274,8 +294,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const isAtoPremiadoEnabled = params.isAtoPremiadoEnabled !== undefined ? params.isAtoPremiadoEnabled : true;
   const isAtoZerado = params.isAtoZerado === true;
 
-  // 1. Fatiamento do Tempo (Cascata Contínua de 12 Meses):
-  const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos);
+  // 1. Fatiamento do Tempo (Cascata Contínua de Baldes, cada um com sua própria capacidade de meses):
+  const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos, params.serieMesesCapacidades);
   const mesesTotaisGeral = mObra.reduce((a, b) => a + b, 0) + mPos.reduce((a, b) => a + b, 0);
 
   // ITBI Mensal = ITBI Restante a parcelar / (meses Obra + meses Pós)
