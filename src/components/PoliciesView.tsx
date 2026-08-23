@@ -609,13 +609,17 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   
   const totalObraBucketArr = mObra || [0,0,0,0,0,0];
   const totalPosBucketArr = mPos || [0,0,0,0,0,0];
-  
-  const capacidadeTotalFluxo = ((totalObraBucketArr[0]+totalPosBucketArr[0]) * parcGlobal1) +
-                               ((totalObraBucketArr[1]+totalPosBucketArr[1]) * parcGlobal2) +
-                               ((totalObraBucketArr[2]+totalPosBucketArr[2]) * parcGlobal3) +
-                               ((totalObraBucketArr[3]+totalPosBucketArr[3]) * parcGlobal4) +
-                               ((totalObraBucketArr[4]+totalPosBucketArr[4]) * parcGlobal5) +
-                               ((totalObraBucketArr[5]+totalPosBucketArr[5]) * parcGlobal6);
+
+  // Obra (baldes 1/2/3, índices 0/1/2) e Pós-Obra (baldes 3/4/5/6, índices 2/3/4/5)
+  // usam escadas de peso independentes — não são o mesmo balde dividido em duas
+  // fases, então não podem ser somados pelo mesmo índice antes de multiplicar pelo peso.
+  const capacidadeTotalFluxo = (totalObraBucketArr[0] * parcGlobal1) +
+                               (totalObraBucketArr[1] * parcGlobal2) +
+                               (totalObraBucketArr[2] * parcGlobal3) +
+                               (totalPosBucketArr[2] * parcGlobal3) +
+                               (totalPosBucketArr[3] * parcGlobal4) +
+                               (totalPosBucketArr[4] * parcGlobal5) +
+                               (totalPosBucketArr[5] * parcGlobal6);
 
   const quickConditionSuggestions = [
     'Sinal em 36X c/ Direto',
