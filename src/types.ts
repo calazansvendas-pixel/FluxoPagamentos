@@ -35,6 +35,14 @@ export interface CommercialCondition {
   serie5Meses?: number; // Qtd de meses do balde 5 (padrão 12)
   serie6Meses?: number; // Qtd de meses do balde 6 (padrão 12)
   torresHabilitadas?: string[]; // Lista de torres liberadas para simulação nesta política
+
+  // Política de crédito distinta por fase do empreendimento. Cada torre pode ser
+  // marcada como pertencente à 2ª Fase (torresFase2); torres não listadas são
+  // consideradas 1ª Fase. Quando a torre selecionada está em torresFase2, os
+  // campos presentes em fase2Params sobrescrevem os campos correspondentes desta
+  // condição (qualquer campo não definido em fase2Params mantém o valor da 1ª Fase).
+  torresFase2?: string[]; // Lista de torres desta política que estão na 2ª Fase
+  fase2Params?: Partial<CommercialCondition>; // Overrides de parâmetros para a 2ª Fase
 }
 
 export interface TableRow {

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre } from '../utils/calculations';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -61,7 +61,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     return null;
   }, [product, products]);
 
-  const currentCond = useMemo(() => {
+  const [selectedTorre, setSelectedTorre] = useState<string>('');
+
+  // Condição base (1ª Fase) selecionada para o produto atual.
+  const baseCond = useMemo(() => {
     if (!currentProd) return null;
     const prodWithConds = ensureProductConditions({ ...currentProd });
     if (condition) {
@@ -70,6 +73,14 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     }
     return prodWithConds.conditions[0] || null;
   }, [currentProd, condition]);
+
+  // Condição efetiva já resolvida para a torre selecionada: se a torre estiver
+  // marcada como 2ª Fase na política, os parâmetros de fase2Params sobrescrevem
+  // os da condição base. Todos os pontos de leitura de currentCond?.X abaixo
+  // ficam automaticamente corretos por fase, sem precisar de edição individual.
+  const currentCond = useMemo(() => (
+    resolveConditionForTorre(baseCond, selectedTorre)
+  ), [baseCond, selectedTorre]);
 
   // Quantidade de meses de cada balde (1 a 6), configurável na política de crédito.
   // Padrão 12 meses cada quando não definido (compatibilidade retroativa).
@@ -81,8 +92,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     currentCond?.serie5Meses ?? 12,
     currentCond?.serie6Meses ?? 12
   ], [currentCond]);
-
-  const [selectedTorre, setSelectedTorre] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
@@ -246,12 +255,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   }, [dbUnits]);
 
-  // Torres habilitadas para simulação nesta política comercial
+  // Torres habilitadas para simulação nesta política comercial (sempre a partir
+  // da condição base — não depende de qual torre já está selecionada).
   const availableTorres = React.useMemo(() => {
-    if (currentCond?.torresHabilitadas === undefined) return uniqueTorres;
-    const allowed = (currentCond.torresHabilitadas || []).map(t => String(t || '').trim().toLowerCase());
+    if (baseCond?.torresHabilitadas === undefined) return uniqueTorres;
+    const allowed = (baseCond.torresHabilitadas || []).map(t => String(t || '').trim().toLowerCase());
     return uniqueTorres.filter(t => allowed.includes(String(t || '').trim().toLowerCase()));
-  }, [uniqueTorres, currentCond?.torresHabilitadas]);
+  }, [uniqueTorres, baseCond?.torresHabilitadas]);
 
   // Validação estrita: se a torre ou unidade selecionada não estiver disponível, reseta a seleção
   useEffect(() => {

@@ -110,11 +110,34 @@ export function ensureProductConditions(prod: Product): Product {
         serie4Meses: 12,
         serie5Meses: 12,
         serie6Meses: 12,
+        torresFase2: [],
         policy: prod.policy || `POLÍTICA COMERCIAL SINAL ${optName.toUpperCase()}:\n- Comissão padrão: 4% apartada na proposta.\n- Entrada mínima conforme negociação.\n- Sujeito à análise financeira.`
       };
     });
   }
+  // Garante que condições já existentes (produtos antigos) também tenham o campo,
+  // sem sobrescrever política de 2ª Fase já configurada.
+  prod.conditions = prod.conditions.map(c => (
+    c.torresFase2 === undefined ? { ...c, torresFase2: [] } : c
+  ));
   return prod;
+}
+
+/**
+ * Resolve a condição comercial efetiva para uma torre específica, aplicando os
+ * overrides de fase2Params quando a torre estiver marcada como 2ª Fase
+ * (torresFase2). Torres não listadas em torresFase2 usam a condição base (1ª
+ * Fase) sem alterações. Qualquer campo de fase2Params que não esteja definido
+ * mantém o valor da condição base (merge raso).
+ */
+export function resolveConditionForTorre(
+  cond: CommercialCondition | null | undefined,
+  torre: string | null | undefined
+): CommercialCondition | null {
+  if (!cond) return null;
+  const isFase2 = !!torre && Array.isArray(cond.torresFase2) && cond.torresFase2.includes(torre);
+  if (!isFase2 || !cond.fase2Params) return cond;
+  return { ...cond, ...cond.fase2Params };
 }
 
 /**

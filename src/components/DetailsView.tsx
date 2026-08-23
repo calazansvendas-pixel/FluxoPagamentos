@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre } from '../utils/calculations';
 import { PdfExportModal } from './PdfExportModal';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -41,7 +41,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     return null;
   }, [product, products]);
 
-  const currentCond = useMemo(() => {
+  const [selectedTorre, setSelectedTorre] = useState<string>('');
+  const [selectedUnidade, setSelectedUnidade] = useState<string>('');
+
+  // Condição base (1ª Fase) selecionada para o produto atual.
+  const baseCond = useMemo(() => {
     if (!currentProd) return null;
     const prodWithConds = ensureProductConditions({ ...currentProd });
     if (condition) {
@@ -51,6 +55,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     return condition || prodWithConds.conditions[0];
   }, [currentProd, condition]);
 
+  // Condição efetiva já resolvida para a torre selecionada: se a torre estiver
+  // marcada como 2ª Fase na política, os parâmetros de fase2Params sobrescrevem
+  // os da condição base.
+  const currentCond = useMemo(() => (
+    resolveConditionForTorre(baseCond, selectedTorre) || baseCond
+  ), [baseCond, selectedTorre]);
+
   // LÓGICA DE DEFINIÇÃO DO PRAZO PADRÃO (HERDADO DINAMICAMENTE DA POLÍTICA DE CRÉDITO)
   const condNumParcelas = Number(currentCond?.numParcelas) || Number(currentProd?.numParcelas) || 60;
 
@@ -58,9 +69,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const prazoFaixa1 = Number(currentCond?.mesesTabela1) || 0;
   const prazoFaixa2 = Number(currentCond?.mesesTabela2) || 0;
   const limiteMaximoParcelas = Math.max(prazoFaixa1, prazoFaixa2, condNumParcelas, 1);
-
-  const [selectedTorre, setSelectedTorre] = useState<string>('');
-  const [selectedUnidade, setSelectedUnidade] = useState<string>('');
 
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
@@ -141,12 +149,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   }, [tableRows]);
 
-  // Torres habilitadas para simulação nesta política comercial
+  // Torres habilitadas para simulação nesta política comercial (sempre a partir
+  // da condição base — não depende de qual torre já está selecionada).
   const availableTorres = React.useMemo(() => {
-    if (currentCond?.torresHabilitadas === undefined) return uniqueTorres;
-    const allowed = (currentCond.torresHabilitadas || []).map(t => String(t || '').trim().toLowerCase());
+    if (baseCond?.torresHabilitadas === undefined) return uniqueTorres;
+    const allowed = (baseCond.torresHabilitadas || []).map(t => String(t || '').trim().toLowerCase());
     return uniqueTorres.filter(t => allowed.includes(String(t || '').trim().toLowerCase()));
-  }, [uniqueTorres, currentCond?.torresHabilitadas]);
+  }, [uniqueTorres, baseCond?.torresHabilitadas]);
 
   // Validação estrita: se a torre ou unidade selecionada não estiver disponível, reseta a seleção
   useEffect(() => {

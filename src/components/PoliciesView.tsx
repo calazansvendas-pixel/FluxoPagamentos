@@ -110,6 +110,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // Estado das torres habilitadas para simulação nesta política
   const [torresHabilitadas, setTorresHabilitadas] = useState<string[]>([]);
 
+  // Política de crédito distinta por fase: qual fase está sendo editada no
+  // formulário agora, e quais torres desta condição pertencem à 2ª Fase.
+  const [editingFase, setEditingFase] = useState<'1' | '2'>('1');
+  const [torresFase2, setTorresFase2] = useState<string[]>([]);
+
   // Extração de todas as torres e contagem de unidades do empreendimento ativo
   const allTorres = React.useMemo(() => {
     const rows = prodWithConds?.tableInfo?.rows || [];
@@ -173,12 +178,52 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     syncTorresToProduct(next);
   };
 
+  const syncTorresFase2ToProduct = (newTorresFase2: string[]) => {
+    if (!prodWithConds) return;
+    const updatedConditions = (prodWithConds.conditions || []).map(c => {
+      if (c.id === activeConditionId) {
+        return {
+          ...c,
+          torresFase2: newTorresFase2
+        };
+      }
+      return c;
+    });
+
+    const updatedProd: Product = {
+      ...prodWithConds,
+      name: productName.trim() || prodWithConds.name,
+      deliveryDate: deliveryDatePhase1 || deliveryDatePhase2 || '',
+      deliveryDatePhase1,
+      deliveryDatePhase2,
+      isFeatured,
+      conditions: updatedConditions
+    };
+
+    onSaveProductPolicy(updatedProd);
+  };
+
+  const handleToggleTorreFase2 = (torreName: string) => {
+    const next = torresFase2.includes(torreName)
+      ? torresFase2.filter(t => t !== torreName)
+      : [...torresFase2, torreName];
+    setTorresFase2(next);
+    syncTorresFase2ToProduct(next);
+  };
+
   // Modal State for New Commercial Condition
   const [isNewConditionModalOpen, setIsNewConditionModalOpen] = useState<boolean>(false);
   const [newConditionName, setNewConditionName] = useState<string>('');
   const newCondInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync state when active product changes
+  // Sync state when active product changes. `products` muda a cada salvamento
+  // (inclusive os disparados por este próprio componente, como trocar de fase
+  // ou salvar a política) — por isso o formulário só é recarregado do zero
+  // quando o produto ou a condição ativa realmente mudam (lastSyncedConditionKeyRef),
+  // nunca apenas porque o array de produtos foi atualizado. Sem essa guarda, um
+  // salvamento feito enquanto se edita a 2ª Fase forçaria o formulário de volta
+  // para a 1ª Fase no meio da edição.
+  const lastSyncedConditionKeyRef = useRef<string>('');
   useEffect(() => {
     if (prodWithConds) {
       setProductName(prodWithConds.name);
@@ -188,49 +233,56 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
       // Se a condição ativa atual ainda existir no produto atualizado, mantenha-a
       const currentSelectedCond = prodWithConds.conditions.find(c => c.id === activeConditionId);
-      if (currentSelectedCond) {
-        loadConditionData(currentSelectedCond);
-      } else {
-        const firstCond = prodWithConds.conditions[0];
-        if (firstCond) {
-          setActiveConditionId(firstCond.id);
-          loadConditionData(firstCond);
+      const targetCond = currentSelectedCond || prodWithConds.conditions[0];
+      const syncKey = `${activeProductId}:${targetCond ? targetCond.id : ''}`;
+
+      if (lastSyncedConditionKeyRef.current !== syncKey) {
+        lastSyncedConditionKeyRef.current = syncKey;
+        if (currentSelectedCond) {
+          loadConditionData(currentSelectedCond);
+        } else if (targetCond) {
+          setActiveConditionId(targetCond.id);
+          loadConditionData(targetCond);
         }
       }
     }
   }, [activeProductId, products]);
 
-  const loadConditionData = (cond: CommercialCondition) => {
-    const numP = cond.numParcelas || 72;
-    const rr = cond.riscoRendaPct !== undefined ? cond.riscoRendaPct : 30;
+  const loadConditionData = (cond: CommercialCondition, fase: '1' | '2' = '1') => {
+    // Para a 2ª Fase, os campos de fase2Params sobrescrevem os da condição base;
+    // qualquer campo não definido em fase2Params mantém o valor da 1ª Fase.
+    const source: CommercialCondition = fase === '2' ? { ...cond, ...(cond.fase2Params || {}) } : cond;
+
+    const numP = source.numParcelas || 72;
+    const rr = source.riscoRendaPct !== undefined ? source.riscoRendaPct : 30;
     const isMorar = cond.name.toLowerCase().includes('morar');
-    const ri = cond.percMaxProSolutoGlobal !== undefined 
-      ? cond.percMaxProSolutoGlobal 
-      : (cond.riscoImovelPct !== undefined ? cond.riscoImovelPct : (isMorar ? 17 : 25));
-    const rp = cond.percMaxPosObra !== undefined 
-      ? cond.percMaxPosObra 
-      : (cond.riscoPosPct !== undefined ? cond.riscoPosPct : 8.0);
-    const m1 = cond.mesesTabela1 !== undefined ? cond.mesesTabela1 : 36;
-    const t1 = cond.taxaJuros1 !== undefined ? cond.taxaJuros1 : 0.0;
-    const m2 = cond.mesesTabela2 !== undefined ? cond.mesesTabela2 : 72;
-    const t2 = cond.taxaJuros2 !== undefined ? cond.taxaJuros2 : 1.0;
+    const ri = source.percMaxProSolutoGlobal !== undefined
+      ? source.percMaxProSolutoGlobal
+      : (source.riscoImovelPct !== undefined ? source.riscoImovelPct : (isMorar ? 17 : 25));
+    const rp = source.percMaxPosObra !== undefined
+      ? source.percMaxPosObra
+      : (source.riscoPosPct !== undefined ? source.riscoPosPct : 8.0);
+    const m1 = source.mesesTabela1 !== undefined ? source.mesesTabela1 : 36;
+    const t1 = source.taxaJuros1 !== undefined ? source.taxaJuros1 : 0.0;
+    const m2 = source.mesesTabela2 !== undefined ? source.mesesTabela2 : 72;
+    const t2 = source.taxaJuros2 !== undefined ? source.taxaJuros2 : 1.0;
 
-    const mo = cond.mesesObra !== undefined ? cond.mesesObra : 33;
-    const mp = cond.mesesPos !== undefined ? cond.mesesPos : 27;
-    const gs1 = cond.globalSerie1Pct !== undefined ? cond.globalSerie1Pct : 30.0;
-    const gs2 = cond.globalSerie2Pct !== undefined ? cond.globalSerie2Pct : 25.0;
-    const gs3 = cond.globalSerie3Pct !== undefined ? cond.globalSerie3Pct : 20.0;
-    const gs4 = cond.globalSerie4Pct !== undefined ? cond.globalSerie4Pct : 15.0;
-    const gs5 = cond.globalSerie5Pct !== undefined ? cond.globalSerie5Pct : 10.0;
-    const gs6 = cond.globalSerie6Pct !== undefined ? cond.globalSerie6Pct : 5.0;
-    const sm1 = cond.serie1Meses !== undefined ? cond.serie1Meses : 12;
-    const sm2 = cond.serie2Meses !== undefined ? cond.serie2Meses : 12;
-    const sm3 = cond.serie3Meses !== undefined ? cond.serie3Meses : 12;
-    const sm4 = cond.serie4Meses !== undefined ? cond.serie4Meses : 12;
-    const sm5 = cond.serie5Meses !== undefined ? cond.serie5Meses : 12;
-    const sm6 = cond.serie6Meses !== undefined ? cond.serie6Meses : 12;
+    const mo = source.mesesObra !== undefined ? source.mesesObra : 33;
+    const mp = source.mesesPos !== undefined ? source.mesesPos : 27;
+    const gs1 = source.globalSerie1Pct !== undefined ? source.globalSerie1Pct : 30.0;
+    const gs2 = source.globalSerie2Pct !== undefined ? source.globalSerie2Pct : 25.0;
+    const gs3 = source.globalSerie3Pct !== undefined ? source.globalSerie3Pct : 20.0;
+    const gs4 = source.globalSerie4Pct !== undefined ? source.globalSerie4Pct : 15.0;
+    const gs5 = source.globalSerie5Pct !== undefined ? source.globalSerie5Pct : 10.0;
+    const gs6 = source.globalSerie6Pct !== undefined ? source.globalSerie6Pct : 5.0;
+    const sm1 = source.serie1Meses !== undefined ? source.serie1Meses : 12;
+    const sm2 = source.serie2Meses !== undefined ? source.serie2Meses : 12;
+    const sm3 = source.serie3Meses !== undefined ? source.serie3Meses : 12;
+    const sm4 = source.serie4Meses !== undefined ? source.serie4Meses : 12;
+    const sm5 = source.serie5Meses !== undefined ? source.serie5Meses : 12;
+    const sm6 = source.serie6Meses !== undefined ? source.serie6Meses : 12;
 
-    const parsedSinal = parseCurrency(cond.sinalMinimo);
+    const parsedSinal = parseCurrency(source.sinalMinimo);
     const formattedSinal = formatCurrency(parsedSinal > 0 ? parsedSinal : 2000);
 
     const rows = prodWithConds?.tableInfo?.rows || [];
@@ -240,6 +292,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     } else {
       setTorresHabilitadas(prodsTorres);
     }
+    setTorresFase2(Array.isArray(cond.torresFase2) ? cond.torresFase2 : []);
+    setEditingFase(fase);
 
     setNumParcelasStr(String(numP));
     setSinalMinimo(formattedSinal);
@@ -266,7 +320,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setSerie5MesesStr(String(sm5));
     setSerie6MesesStr(String(sm6));
 
-    setPolicyText(cond.policy || '');
+    setPolicyText(source.policy || '');
   };
 
   // Dynamic parsed numeric values for live calculations
@@ -303,50 +357,78 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // Divisão dinâmica dos meses por séries usando a regra oficial Morar
   const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos, serieMesesCapacidades);
 
+  // Reúne os valores atualmente em edição no formulário como um objeto de
+  // parâmetros de política de crédito — usado para gravar tanto na condição
+  // base (1ª Fase) quanto em fase2Params (2ª Fase), já que o mesmo formulário
+  // é reaproveitado para editar as duas fases.
+  const buildCurrentParamsObject = (): Partial<CommercialCondition> => {
+    const parsedCurrentSinal = parseCurrency(sinalMinimo);
+    const formattedCurrentSinal = formatCurrency(parsedCurrentSinal > 0 ? parsedCurrentSinal : 2000);
+    const isCurrentMorar = activeCondObj ? activeCondObj.name.toLowerCase().includes('morar') : false;
+
+    return {
+      numParcelas: isCurrentMorar ? totalMesesMorar : numParcelas,
+      sinalMinimo: formattedCurrentSinal,
+      riscoRendaPct,
+      riscoImovelPct,
+      percMaxProSolutoGlobal: riscoImovelPct,
+      percMaxPosObra: riscoPosPct,
+      riscoPosPct,
+      mesesTabela1,
+      taxaJuros1,
+      mesesTabela2,
+      taxaJuros2,
+      mesesObra,
+      mesesPos,
+      globalSerie1Pct,
+      globalSerie2Pct,
+      globalSerie3Pct,
+      globalSerie4Pct,
+      globalSerie5Pct,
+      globalSerie6Pct,
+      serie1Meses,
+      serie2Meses,
+      serie3Meses,
+      serie4Meses,
+      serie5Meses,
+      serie6Meses,
+      policy: policyText
+    };
+  };
+
+  // Aplica `params` na fase certa (base ou fase2Params) da condição `condId`,
+  // dependendo de qual fase está sendo editada no momento (editingFase).
+  const applyParamsToCondition = (
+    conditions: CommercialCondition[],
+    condId: string,
+    params: Partial<CommercialCondition>,
+    fase: '1' | '2'
+  ): CommercialCondition[] => {
+    return conditions.map(c => {
+      if (c.id !== condId) return c;
+      if (fase === '2') {
+        return {
+          ...c,
+          torresHabilitadas,
+          torresFase2,
+          fase2Params: { ...(c.fase2Params || {}), ...params }
+        };
+      }
+      return {
+        ...c,
+        ...params,
+        torresHabilitadas,
+        torresFase2
+      };
+    });
+  };
+
   const handleSelectCondition = (condId: string) => {
     if (!prodWithConds) return;
 
-    const parsedCurrentSinal = parseCurrency(sinalMinimo);
-    const formattedCurrentSinal = formatCurrency(parsedCurrentSinal > 0 ? parsedCurrentSinal : 2000);
-
-    const isCurrentMorar = activeCondObj ? activeCondObj.name.toLowerCase().includes('morar') : false;
-
-    // Salva preventivamente o estado atual da condição antes de trocar
-    const updatedConditions = (prodWithConds.conditions || []).map(c => {
-      if (c.id === activeConditionId) {
-        return {
-          ...c,
-          numParcelas: isCurrentMorar ? totalMesesMorar : numParcelas,
-          sinalMinimo: formattedCurrentSinal,
-          riscoRendaPct,
-          riscoImovelPct,
-          percMaxProSolutoGlobal: riscoImovelPct,
-          percMaxPosObra: riscoPosPct,
-          riscoPosPct,
-          mesesTabela1,
-          taxaJuros1,
-          mesesTabela2,
-          taxaJuros2,
-          mesesObra,
-          mesesPos,
-          globalSerie1Pct,
-          globalSerie2Pct,
-          globalSerie3Pct,
-          globalSerie4Pct,
-          globalSerie5Pct,
-          globalSerie6Pct,
-          serie1Meses,
-          serie2Meses,
-          serie3Meses,
-          serie4Meses,
-          serie5Meses,
-          serie6Meses,
-          torresHabilitadas: torresHabilitadas,
-          policy: policyText
-        };
-      }
-      return c;
-    });
+    // Salva preventivamente o estado atual da condição (na fase que estava sendo editada) antes de trocar
+    const params = buildCurrentParamsObject();
+    const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, params, editingFase);
 
     const updatedProd: Product = {
       ...prodWithConds,
@@ -355,7 +437,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       deliveryDatePhase1,
       deliveryDatePhase2,
       isFeatured,
-      numParcelas: isCurrentMorar ? totalMesesMorar : numParcelas,
+      numParcelas: params.numParcelas,
       conditions: updatedConditions
     };
     onSaveProductPolicy(updatedProd);
@@ -363,7 +445,37 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setActiveConditionId(condId);
     const targetCond = updatedConditions.find(c => c.id === condId);
     if (targetCond) {
-      loadConditionData(targetCond);
+      loadConditionData(targetCond, '1');
+    }
+  };
+
+  // Alterna entre editar os parâmetros da 1ª Fase ou da 2ª Fase da condição
+  // comercial ativa, salvando preventivamente o formulário atual na fase de
+  // origem antes de carregar os valores da fase de destino.
+  const handleSwitchFase = (fase: '1' | '2') => {
+    if (fase === editingFase) return;
+    if (!prodWithConds) {
+      setEditingFase(fase);
+      return;
+    }
+
+    const params = buildCurrentParamsObject();
+    const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, params, editingFase);
+
+    const updatedProd: Product = {
+      ...prodWithConds,
+      name: productName.trim() || prodWithConds.name,
+      deliveryDate: deliveryDatePhase1 || deliveryDatePhase2 || '',
+      deliveryDatePhase1,
+      deliveryDatePhase2,
+      isFeatured,
+      conditions: updatedConditions
+    };
+    onSaveProductPolicy(updatedProd);
+
+    const targetCond = updatedConditions.find(c => c.id === activeConditionId);
+    if (targetCond) {
+      loadConditionData(targetCond, fase);
     }
   };
 
@@ -397,31 +509,13 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       mesesTabela2: 72,
       taxaJuros2: 1.0,
       torresHabilitadas: allTorres,
+      torresFase2: [],
       policy: `POLÍTICA COMERCIAL DA CONDIÇÃO ${trimmedName.toUpperCase()}:\n- Parcelamento da entrada em até 72x.\n- Sinal mínimo a partir de R$ 2.000,00.\n- Taxa de 0,00% a.m. até 36 meses e 1,00% a.m. até 72 meses.`
     };
 
-    const parsedCurrentSinal = parseCurrency(sinalMinimo);
-    const formattedCurrentSinal = formatCurrency(parsedCurrentSinal > 0 ? parsedCurrentSinal : 2000);
-
-    // Salvar as edições atuais da condição em tela
-    const currentConditionsUpdated = (prodWithConds.conditions || []).map(c => {
-      if (c.id === activeConditionId) {
-        return {
-          ...c,
-          numParcelas,
-          sinalMinimo: formattedCurrentSinal,
-          riscoRendaPct,
-          riscoImovelPct,
-          mesesTabela1,
-          taxaJuros1,
-          mesesTabela2,
-          taxaJuros2,
-          torresHabilitadas: torresHabilitadas,
-          policy: policyText
-        };
-      }
-      return c;
-    });
+    // Salvar as edições atuais da condição em tela (na fase que estava sendo editada)
+    const params = buildCurrentParamsObject();
+    const currentConditionsUpdated = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, params, editingFase);
 
     const updatedProd: Product = {
       ...prodWithConds,
@@ -435,7 +529,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     onSaveProductPolicy(updatedProd);
     setActiveConditionId(newCondId);
-    loadConditionData(newCond);
+    loadConditionData(newCond, '1');
     setIsNewConditionModalOpen(false);
     setNewConditionName('');
     onShowToast(`Nova condição "${trimmedName}" criada com sucesso!`);
@@ -528,41 +622,35 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setSerie5MesesStr(String(parsedSerie5Meses));
     setSerie6MesesStr(String(parsedSerie6Meses));
 
-    const updatedConditions = (prodWithConds.conditions || []).map(c => {
-      if (c.id === activeConditionId) {
-        return {
-          ...c,
-          numParcelas: isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas,
-          sinalMinimo: formattedSinalMinimo,
-          riscoRendaPct: parsedRiscoRenda,
-          riscoImovelPct: parsedRiscoImovel,
-          percMaxProSolutoGlobal: parsedRiscoImovel,
-          percMaxPosObra: parsedRiscoPos,
-          riscoPosPct: parsedRiscoPos,
-          mesesTabela1: parsedMeses1,
-          taxaJuros1: parsedTaxa1,
-          mesesTabela2: parsedMeses2,
-          taxaJuros2: parsedTaxa2,
-          mesesObra: parsedMesesObra,
-          mesesPos: parsedMesesPos,
-          globalSerie1Pct: parsedGlobal1,
-          globalSerie2Pct: parsedGlobal2,
-          globalSerie3Pct: parsedGlobal3,
-          globalSerie4Pct: parsedGlobal4,
-          globalSerie5Pct: parsedGlobal5,
-          globalSerie6Pct: parsedGlobal6,
-          serie1Meses: parsedSerie1Meses,
-          serie2Meses: parsedSerie2Meses,
-          serie3Meses: parsedSerie3Meses,
-          serie4Meses: parsedSerie4Meses,
-          serie5Meses: parsedSerie5Meses,
-          serie6Meses: parsedSerie6Meses,
-          torresHabilitadas: torresHabilitadas,
-          policy: policyText
-        };
-      }
-      return c;
-    });
+    const savedParams: Partial<CommercialCondition> = {
+      numParcelas: isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas,
+      sinalMinimo: formattedSinalMinimo,
+      riscoRendaPct: parsedRiscoRenda,
+      riscoImovelPct: parsedRiscoImovel,
+      percMaxProSolutoGlobal: parsedRiscoImovel,
+      percMaxPosObra: parsedRiscoPos,
+      riscoPosPct: parsedRiscoPos,
+      mesesTabela1: parsedMeses1,
+      taxaJuros1: parsedTaxa1,
+      mesesTabela2: parsedMeses2,
+      taxaJuros2: parsedTaxa2,
+      mesesObra: parsedMesesObra,
+      mesesPos: parsedMesesPos,
+      globalSerie1Pct: parsedGlobal1,
+      globalSerie2Pct: parsedGlobal2,
+      globalSerie3Pct: parsedGlobal3,
+      globalSerie4Pct: parsedGlobal4,
+      globalSerie5Pct: parsedGlobal5,
+      globalSerie6Pct: parsedGlobal6,
+      serie1Meses: parsedSerie1Meses,
+      serie2Meses: parsedSerie2Meses,
+      serie3Meses: parsedSerie3Meses,
+      serie4Meses: parsedSerie4Meses,
+      serie5Meses: parsedSerie5Meses,
+      serie6Meses: parsedSerie6Meses,
+      policy: policyText
+    };
+    const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, savedParams, editingFase);
 
     const updatedProd: Product = {
       ...prodWithConds,
@@ -932,21 +1020,115 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
             )}
           </div>
 
+          {/* SEÇÃO: FASE DO EMPREENDIMENTO POR TORRE */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+              <div className="p-1.5 bg-violet-100 text-violet-700 rounded-lg">
+                <Layers className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                  Fase do Empreendimento por Torre
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Marque as torres que pertencem à <strong className="text-violet-700">2ª Fase</strong>. Torres não marcadas são consideradas 1ª Fase. A política de crédito de cada fase é configurada separadamente logo abaixo.
+                </p>
+              </div>
+            </div>
+
+            {allTorres.length === 0 ? (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Nenhuma torre identificada na tabela deste empreendimento.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 pt-1">
+                {allTorres.map(torreName => {
+                  const isFase2 = torresFase2.includes(torreName);
+                  return (
+                    <div
+                      key={torreName}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleToggleTorreFase2(torreName)}
+                      onKeyDown={(e) => {
+                        if (e.key === ' ' || e.key === 'Enter') {
+                          e.preventDefault();
+                          handleToggleTorreFase2(torreName);
+                        }
+                      }}
+                      className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-violet-400 ${
+                        isFase2
+                          ? 'bg-violet-50/80 hover:bg-violet-50 border-violet-300 text-slate-900 shadow-2xs'
+                          : 'bg-slate-50/60 hover:bg-slate-100/70 border-slate-200 text-slate-500'
+                      }`}
+                    >
+                      <span className={`text-xs font-bold truncate ${isFase2 ? 'text-slate-900' : 'text-slate-500'}`}>
+                        {torreName}
+                      </span>
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border transition-colors shrink-0 ml-2 ${
+                        isFase2
+                          ? 'bg-violet-100 text-violet-800 border-violet-200'
+                          : 'bg-slate-100 text-slate-500 border-slate-200'
+                      }`}>
+                        {isFase2 ? '2ª Fase' : '1ª Fase'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* PARÂMETROS DA POLÍTICA DE CRÉDITO PARA A CONDIÇÃO SELECIONADA */}
           <div className="bg-gradient-to-r from-sky-50/80 via-slate-50 to-white p-4 rounded-xl border border-sky-100 space-y-4">
-            <div className="flex items-center justify-between border-b border-sky-100 pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sky-100 pb-2">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-sky-600" />
                 <span className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
                   Parâmetros da Política de Crédito (<span className="text-sky-600 font-extrabold">{activeCondObj?.name || '--'}</span>)
                 </span>
               </div>
-              {isMorarCondition && (
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
-                  Condição Sinal c/ Morar ({totalMesesMorar}x)
-                </span>
-              )}
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchFase('1')}
+                    className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      editingFase === '1'
+                        ? 'bg-white text-sky-700 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    1ª Fase
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchFase('2')}
+                    className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      editingFase === '2'
+                        ? 'bg-white text-violet-700 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    2ª Fase
+                  </button>
+                </div>
+                {isMorarCondition && (
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
+                    Condição Sinal c/ Morar ({totalMesesMorar}x)
+                  </span>
+                )}
+              </div>
             </div>
+
+            {editingFase === '2' && (
+              <div className="p-2.5 bg-violet-50 border border-violet-200 rounded-lg text-[11px] text-violet-800 flex items-center gap-2 font-semibold">
+                <Layers className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                <span>Você está editando os parâmetros da <strong>2ª Fase</strong>. Campos não alterados aqui herdam automaticamente o valor da 1ª Fase.</span>
+              </div>
+            )}
 
             {isMorarCondition ? (
               /* ========================================================================= */
