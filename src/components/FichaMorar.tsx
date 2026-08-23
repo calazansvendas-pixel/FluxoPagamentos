@@ -832,6 +832,64 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setIsManualPos(false);
   };
 
+  // Recalcula as parcelas líquidas das séries para um Ato (Imóvel) digitado manualmente.
+  // Usa a mesma fórmula oficial de distribuição, mas passando `atoManual` ao motor para
+  // que `fluxoProSolutoComITBI` (o que efetivamente sobra para ratear entre as séries)
+  // já saia reduzido pelo excedente do Ato sobre o sugerido — sem isso, as parcelas
+  // ficavam "travadas" no valor cheio até o Pró-Soluto zerar de uma vez.
+  const recalcularSeriesParaAtoManual = (atoValor: number) => {
+    if (!hasUnitSelected) return;
+
+    const mesesObraPadrao = currentCond?.mesesObra ?? 33;
+    const mesesObraParam = totalParcObra > 0 ? totalParcObra : mesesObraPadrao;
+    const mesesPosParam = totalParcObra < mesesObraPadrao ? 0 : (totalParcPos > 0 ? totalParcPos : (currentCond?.mesesPos ?? 27));
+
+    const globalPct: [number, number, number, number, number, number] = [
+      currentCond?.globalSerie1Pct ?? 30.0,
+      currentCond?.globalSerie2Pct ?? 25.0,
+      currentCond?.globalSerie3Pct ?? 20.0,
+      currentCond?.globalSerie4Pct ?? 15.0,
+      currentCond?.globalSerie5Pct ?? 10.0,
+      currentCond?.globalSerie6Pct ?? 5.0
+    ];
+
+    const proSolutoGlobalParam = currentCond?.percMaxProSolutoGlobal ?? currentCond?.riscoImovelPct ?? 17.0;
+    const posObraGlobalParam = currentCond?.percMaxPosObra ?? currentCond?.riscoPosPct ?? 8.0;
+
+    const engineResult = calculateMorarFlowEngine({
+      precoTabela: price,
+      avaliacaoBanco: evaluation,
+      itbiRegistro: despCartoriasEfetivas,
+      renda: income,
+      financiamento: maxFinanc,
+      subsidio: subsidy,
+      fgts: fgts,
+      percentualRiscoGeral: proSolutoGlobalParam,
+      percentualRiscoPos: posObraGlobalParam,
+      mesesObra: mesesObraParam,
+      mesesPos: mesesPosParam,
+      globalSeriesPct: globalPct,
+      sinalMinimo: sinalMinimoVal,
+      atoITBI: atoITBIValidado,
+      isAtoPremiadoEnabled,
+      atoManual: atoValor
+    });
+
+    const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
+    const mPosArr = mesesPosParam === 0
+      ? [{ qtd: 0, valor: 0, serieIndex: 0 }, { qtd: 0, valor: 0, serieIndex: 1 }, { qtd: 0, valor: 0, serieIndex: 2 }, { qtd: 0, valor: 0, serieIndex: 3 }]
+      : engineResult.posSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
+
+    setFaixasObra(mObraArr);
+    setFaixasPos(mPosArr);
+    setItbiObraValorManual(engineResult.parcelaMensalITBI);
+    setItbiPosValorManual(mesesPosParam === 0 ? 0 : engineResult.parcelaMensalITBI);
+    setItbiObraQtd(mObraArr.reduce((a, b) => a + b.qtd, 0));
+    setItbiPosQtd(mesesPosParam === 0 ? 0 : mPosArr.reduce((a, b) => a + b.qtd, 0));
+    setIsManualObra(false);
+    setIsManualPos(false);
+  };
+
   // Inicialização inteligente e automática quando a unidade é selecionada ou o sinal líquido é atualizado
   useEffect(() => {
     if (!isManualObra && !isManualPos && hasUnitSelected && valAtoManual === null && sinalLiquidoTotalEfetivo > 0) {
@@ -1860,15 +1918,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               } else {
                 setValAtoManual(novoVal);
                 setAtoInputText(formatCurrency(novoVal));
-                const descAtoCalculado = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(novoVal) : 0;
-                const sinalImovelBase = Math.max(0, price - maxFinanc - subsidy - fgts);
-                const sinalLiqImovel = Math.max(0, Math.round((sinalImovelBase - descAtoCalculado) * 100) / 100);
-                if (novoVal >= sinalLiqImovel) {
-                  setFaixasObra(prev => prev.map(f => ({ ...f, valor: 0 })));
-                  setFaixasPos(prev => prev.map(f => ({ ...f, valor: 0 })));
-                  setIsManualObra(false);
-                  setIsManualPos(false);
-                }
+                recalcularSeriesParaAtoManual(novoVal);
               }
             }}
             onShowToast={onShowToast}
