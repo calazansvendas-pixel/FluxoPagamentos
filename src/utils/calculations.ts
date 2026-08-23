@@ -414,26 +414,39 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   // 4. Distribuição das Séries Morar em cascata (fórmula exata da planilha de referência):
   // Cada balde de 12 meses tem um peso (30%/25%/20%/15%/10%/5%). A série que atravessa a
   // fronteira Obra/Pós-Obra (ex: balde 3 com 9 meses em Obra + 3 meses em Pós) mantém o MESMO
-  // peso e a MESMA parcela nas duas fases — não reinicia a numeração. A parcela bruta mensal de
-  // cada balde é proporcional ao seu peso sobre a soma (peso × meses) de todos os baldes ativos:
-  //   parcela_bruta[i] = peso[i] × fluxoProSolutoComITBI / Σ(peso[j] × meses[j])
+  // peso — não reinicia a numeração.
+  //
+  // Isso acontece em duas etapas (cascata): primeiro cada balde vira uma participação
+  // percentual DENTRO DA SUA FASE (peso×meses do balde ÷ peso×meses de todos os baldes
+  // daquela fase); essa participação é então aplicada sobre a base financeira daquela
+  // fase — e a fase Pós-Obra tem uma base própria, travada em `% Max Pós-Obra` da
+  // política (maxRiscoPos), nunca podendo ultrapassá-la. Se a divisão "natural" (pelo
+  // peso combinado das duas fases) daria à Pós-Obra mais do que esse teto, o excedente
+  // fica com a Obra — mantendo a proporção original entre os baldes de cada fase.
   const seriesWeights = (params.globalSeriesPct && params.globalSeriesPct.length === 6)
     ? params.globalSeriesPct.map(p => (p || 0) / 100)
     : [0.30, 0.25, 0.20, 0.15, 0.10, 0.05];
 
-  const weightedMonthsTotal = seriesWeights.reduce(
-    (sum, w, idx) => sum + w * ((mObra[idx] || 0) + (mPos[idx] || 0)),
-    0
-  );
-  const pricePerWeightPoint = weightedMonthsTotal > 0 ? fluxoProSolutoComITBI / weightedMonthsTotal : 0;
+  const obraWeightedTotal = seriesWeights.reduce((sum, w, idx) => sum + w * (mObra[idx] || 0), 0);
+  const posWeightedTotal = seriesWeights.reduce((sum, w, idx) => sum + w * (mPos[idx] || 0), 0);
+  const combinedWeightedTotal = obraWeightedTotal + posWeightedTotal;
 
-  const seriesMonthlyRatesBrutas = seriesWeights.map(w => pricePerWeightPoint * w);
+  const naturalPosMoney = combinedWeightedTotal > 0
+    ? (posWeightedTotal / combinedWeightedTotal) * fluxoProSolutoComITBI
+    : 0;
+  const totalPosMoney = Math.max(0, Math.min(naturalPosMoney, maxRiscoPos));
+  const totalObraMoney = Math.max(0, fluxoProSolutoComITBI - totalPosMoney);
 
-  const seriesMonthlyRatesLiquidas = seriesMonthlyRatesBrutas.map((brutaExata) => {
+  const obraRatesBrutas = seriesWeights.map(w => obraWeightedTotal > 0 ? (w / obraWeightedTotal) * totalObraMoney : 0);
+  const posRatesBrutas = seriesWeights.map(w => posWeightedTotal > 0 ? (w / posWeightedTotal) * totalPosMoney : 0);
+
+  const toLiquida = (brutaExata: number) => {
     if (brutaExata <= 0) return 0;
     const liquidaExata = brutaExata - parcelaMensalITBIExato;
     return Math.max(0, Math.round(liquidaExata * 100) / 100);
-  });
+  };
+  const obraRatesLiquidas = obraRatesBrutas.map(toLiquida);
+  const posRatesLiquidas = posRatesBrutas.map(toLiquida);
 
   // Obra:
   const obraSeries: MorarSerieResult[] = mObra.map((qtd, idx) => {
@@ -451,8 +464,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         subtotalLiquido: 0
       };
     }
-    const parcelaLiquida = seriesMonthlyRatesLiquidas[idx] || 0;
-    const parcelaBrutaFinal = Math.round(seriesMonthlyRatesBrutas[idx] * 100) / 100;
+    const parcelaLiquida = obraRatesLiquidas[idx] || 0;
+    const parcelaBrutaFinal = Math.round(obraRatesBrutas[idx] * 100) / 100;
     const subtotalLiquido = Math.round(parcelaLiquida * qtd * 100) / 100;
 
     return {
@@ -483,8 +496,8 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
         subtotalLiquido: 0
       };
     }
-    const parcelaLiquida = seriesMonthlyRatesLiquidas[idx] || 0;
-    const parcelaBrutaFinal = Math.round(seriesMonthlyRatesBrutas[idx] * 100) / 100;
+    const parcelaLiquida = posRatesLiquidas[idx] || 0;
+    const parcelaBrutaFinal = Math.round(posRatesBrutas[idx] * 100) / 100;
     const subtotalLiquido = Math.round(parcelaLiquida * qtd * 100) / 100;
 
     return {
@@ -506,13 +519,10 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const itbiObraTotal = Math.round(obraSeries.reduce((acc, s) => acc + s.qtd, 0) * parcelaMensalITBI * 100) / 100;
   const itbiPosTotal = Math.round(posSeries.reduce((acc, s) => acc + s.qtd, 0) * parcelaMensalITBI * 100) / 100;
 
-  const totalObraComITBI = (fluxoProSolutoComITBI === totalProSolutoMaximo)
-    ? maxRiscoObra
-    : Math.round((subtotalObraLiquido + itbiObraTotal) * 100) / 100;
-
-  const totalPosComITBI = (fluxoProSolutoComITBI === totalProSolutoMaximo)
-    ? maxRiscoPos
-    : Math.round((subtotalPosLiquido + itbiPosTotal) * 100) / 100;
+  // totalObraMoney/totalPosMoney (seção 4) já respeitam o teto de % Max Pós-Obra em
+  // qualquer cenário — não é mais preciso um atalho separado para o caso "fluxo no máximo".
+  const totalObraComITBI = Math.round((subtotalObraLiquido + itbiObraTotal) * 100) / 100;
+  const totalPosComITBI = Math.round((subtotalPosLiquido + itbiPosTotal) * 100) / 100;
 
   const itbiParceladoTotal = Math.round(mesesTotaisGeral * parcelaMensalITBI * 100) / 100;
   const atoPremiado = descontoAto;
