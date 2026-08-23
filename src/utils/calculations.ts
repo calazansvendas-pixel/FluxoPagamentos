@@ -441,9 +441,12 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
 
   // 3. Tetos e Travas de Pró-Soluto (fórmula exata da planilha de referência):
   // Total Pró-Soluto (17,00% c/ ITBI) = Base c/ ITBI * 0.17
-  // Risco Max Pós = (Base c/ ITBI - Desconto Ato) * pctMaxPos
+  // Risco Max Pós = Base c/ ITBI * pctMaxPos — `baseCalculoComITBI` já é líquida do
+  // Desconto Ato (calculada como (precoTabela - descontoAto) + itbiRegistro mais acima),
+  // então subtraí-lo de novo aqui descontava o Desconto Ato EM DOBRO, reduzindo o teto
+  // da Pós-Obra indevidamente.
   // Risco Max Obra = Total Pró-Soluto - Risco Max Pós (resíduo, não é um percentual independente)
-  const maxRiscoPos = Math.round((baseCalculoComITBI - saldoDescontoAto) * pctMaxPos * 100) / 100;
+  const maxRiscoPos = Math.round(baseCalculoComITBI * pctMaxPos * 100) / 100;
   const maxRiscoObra = Math.round((totalProSolutoMaximo - maxRiscoPos) * 100) / 100;
 
   const fluxoProSolutoComITBI = Math.max(
