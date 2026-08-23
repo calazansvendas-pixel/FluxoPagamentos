@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { Product } from '../types';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
 
 interface NewProductModalProps {
   isOpen: boolean;
@@ -17,12 +16,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const [name, setName] = useState<string>('');
   const [deliveryDatePhase1, setDeliveryDatePhase1] = useState<string>('');
   const [deliveryDatePhase2, setDeliveryDatePhase2] = useState<string>('');
-  const [numParcelas, setNumParcelas] = useState<number>(72);
-  const [sinalMinimo, setSinalMinimo] = useState<string>('R$ 2.000,00');
-  const [riscoRendaPct, setRiscoRendaPct] = useState<number>(30);
-  const [riscoImovelPct, setRiscoImovelPct] = useState<number>(25);
   const [optionsText, setOptionsText] = useState<string>('');
-  const [policyText, setPolicyText] = useState<string>('');
 
   if (!isOpen) return null;
 
@@ -37,18 +31,21 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       ? optionsText.split(',').map(o => o.trim()).filter(o => o !== '')
       : ['Sinal em 48X c/ Morar', 'Sinal em 72X c/ Banco Direto'];
 
+    // Valores padrão apenas para inicializar a condição — a política de crédito de
+    // verdade (sinal mínimo, riscos, prazos, taxas etc.) é configurada por condição
+    // comercial na tela de Políticas & Empreendimentos, não no cadastro inicial.
     const conditions = optionsList.map((optName, idx) => ({
       id: `cond_${id}_${idx + 1}`,
       name: optName,
-      numParcelas,
-      sinalMinimo,
-      riscoRendaPct,
-      riscoImovelPct,
+      numParcelas: 60,
+      sinalMinimo: 'R$ 2.000,00',
+      riscoRendaPct: 30,
+      riscoImovelPct: 25,
       mesesTabela1: 36,
       taxaJuros1: 0.0,
       mesesTabela2: 72,
       taxaJuros2: 1.0,
-      policy: policyText || `POLÍTICA COMERCIAL DA CONDIÇÃO ${optName.toUpperCase()}:\n- Regras gerais e diretrizes para aprovação.`
+      policy: `POLÍTICA COMERCIAL DA CONDIÇÃO ${optName.toUpperCase()}:\n- Regras gerais e diretrizes para aprovação.`
     }));
 
     const newProd: Product = {
@@ -68,12 +65,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
     setName('');
     setDeliveryDatePhase1('');
     setDeliveryDatePhase2('');
-    setNumParcelas(72);
-    setSinalMinimo('R$ 2.000,00');
-    setRiscoRendaPct(30);
-    setRiscoImovelPct(25);
     setOptionsText('');
-    setPolicyText('');
   };
 
   return (
@@ -132,67 +124,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Nº Parcelas Inicial
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="180"
-                value={numParcelas}
-                onChange={(e) => setNumParcelas(parseInt(e.target.value, 10) || 1)}
-                className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:border-sky-600"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Sinal Mínimo Inicial
-              </label>
-              <input
-                type="text"
-                value={sinalMinimo}
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => setSinalMinimo(e.target.value)}
-                onBlur={() => {
-                  const parsed = parseCurrency(sinalMinimo);
-                  setSinalMinimo(formatCurrency(parsed > 0 ? parsed : 2000));
-                }}
-                placeholder="Ex: R$ 2.000,00"
-                className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-sky-600"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Risco Renda %
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={riscoRendaPct}
-                onChange={(e) => setRiscoRendaPct(parseFloat(e.target.value) || 0)}
-                className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:border-sky-600"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Risco Imóvel %
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={riscoImovelPct}
-                onChange={(e) => setRiscoImovelPct(parseFloat(e.target.value) || 0)}
-                className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:border-sky-600"
-              />
-            </div>
-          </div>
-
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               Condições Comerciais (separadas por vírgula)
@@ -202,19 +133,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               value={optionsText}
               onChange={(e) => setOptionsText(e.target.value)}
               placeholder="Sinal em 48X c/ Morar, Sinal em 72X c/ Banco Direto"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-sky-600"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">
-              Política de Vendas Inicial
-            </label>
-            <textarea
-              rows={3}
-              value={policyText}
-              onChange={(e) => setPolicyText(e.target.value)}
-              placeholder="Descreva aqui as regras de venda..."
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-sky-600"
             />
           </div>
