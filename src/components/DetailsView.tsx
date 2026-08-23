@@ -137,7 +137,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // Get table rows for current product
   const tableRows = currentProd?.tableInfo?.rows || [];
   const uniqueTorres = React.useMemo(() => {
-    return Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== '')));
+    return (Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== ''))) as string[])
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   }, [tableRows]);
 
   // Torres habilitadas para simulação nesta política comercial
@@ -178,13 +179,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   }, [availableTorres, currentProd?.id, currentCond?.id, tableRows]);
 
   // Filter units by selected torre
-  const filteredUnits = selectedTorre 
-    ? Array.from(new Set(
+  const filteredUnits = selectedTorre
+    ? (Array.from(new Set(
         tableRows
           .filter(r => String(r[1] || '').trim().toLowerCase() === selectedTorre.toLowerCase())
           .map(r => String(r[2] || '').trim())
           .filter(u => u !== '')
-      ))
+      )) as string[]).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
     : [];
 
   // Find exact row if torre and unidade are chosen
