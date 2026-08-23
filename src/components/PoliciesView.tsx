@@ -10,9 +10,7 @@ import {
   ShieldAlert, 
   Eraser, 
   Save, 
-  X, 
-  Sparkles, 
-  CheckCircle2,
+  X,
   HardHat,
   KeyRound,
   Coins,
@@ -757,13 +755,6 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                                ((totalObraBucketArr[3]+totalPosBucketArr[3]) * parcGlobal4) +
                                ((totalObraBucketArr[4]+totalPosBucketArr[4]) * parcGlobal5) +
                                ((totalObraBucketArr[5]+totalPosBucketArr[5]) * parcGlobal6);
-
-  const quickConditionSuggestions = [
-    'Sinal em 36X c/ Direto',
-    'À Vista c/ Desconto',
-    'Sinal em 48X Morar',
-    'Direto Construtora 60X'
-  ];
 
   return (
     <div className="w-full space-y-6 animate-fade-in">
@@ -1803,35 +1794,6 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   placeholder="Ex: Sinal em 36X c/ Direto, À Vista c/ Desconto..."
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-600 transition-all"
                 />
-              </div>
-
-              {/* SUGESTÕES RÁPIDAS */}
-              <div>
-                <span className="block text-[11px] font-semibold text-slate-400 mb-1.5 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-500" /> Sugestões rápidas:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {quickConditionSuggestions.map((sug, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setNewConditionName(sug)}
-                      className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 transition-all cursor-pointer border border-slate-200/60"
-                    >
-                      {sug}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
-                <p className="font-semibold text-slate-700 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  Valores padrão inicializados:
-                </p>
-                <p className="text-slate-500">
-                  72 Parcelas, Sinal Mínimo R$ 2.000,00, Risco Renda 30%, Risco Imóvel 25%, Prazos e Taxas (0% até 36m / 1% até 72m). Todos editáveis após a criação.
-                </p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
