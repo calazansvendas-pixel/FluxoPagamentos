@@ -71,6 +71,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     return prodWithConds.conditions[0] || null;
   }, [currentProd, condition]);
 
+  // Quantidade de meses de cada balde (1 a 6), configurável na política de crédito.
+  // Padrão 12 meses cada quando não definido (compatibilidade retroativa).
+  const serieMesesCapacidades = useMemo<[number, number, number, number, number, number]>(() => [
+    currentCond?.serie1Meses ?? 12,
+    currentCond?.serie2Meses ?? 12,
+    currentCond?.serie3Meses ?? 12,
+    currentCond?.serie4Meses ?? 12,
+    currentCond?.serie5Meses ?? 12,
+    currentCond?.serie6Meses ?? 12
+  ], [currentCond]);
+
   const [selectedTorre, setSelectedTorre] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
@@ -417,6 +428,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         mesesObra: mesesObraPadrao,
         mesesPos: mesesPosPadrao,
         globalSeriesPct: globalPct,
+        serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: 0,
         isAtoPremiadoEnabled: true,
@@ -546,11 +558,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraParam,
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       isAtoPremiadoEnabled,
       atoITBI: atoITBIValidado
     });
-  }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, atoITBIValidado, totalParcObra, totalParcPos]);
+  }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, atoITBIValidado, totalParcObra, totalParcPos, serieMesesCapacidades]);
 
   // Piso do Ato Sugerido Inicial e Saldo de Pró-Soluto padrão
   const atoSugeridoResidual = hasUnitSelected ? (morarEngineBase?.atoResidual ?? 0) : 0;
@@ -810,6 +823,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraParam,
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
       isAtoPremiadoEnabled
@@ -869,6 +883,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraParam,
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
       isAtoPremiadoEnabled,
@@ -921,6 +936,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         mesesObra: mesesObraParam,
         mesesPos: mesesPosParam,
         globalSeriesPct: globalPct,
+        serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
         isAtoPremiadoEnabled
@@ -997,6 +1013,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         mesesObra: novoTotalObra,
         mesesPos: 0,
         globalSeriesPct: globalPct,
+        serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
         isAtoPremiadoEnabled
@@ -1043,6 +1060,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         mesesObra: novoTotalObra,
         mesesPos: novoPos,
         globalSeriesPct: globalPct,
+        serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: atoITBIValidado,
         isAtoPremiadoEnabled
@@ -1102,6 +1120,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraAtual,
       mesesPos: novoTotalPos,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
       isAtoPremiadoEnabled
@@ -1210,6 +1229,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       mesesObra: mesesObraParam,
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
+      serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: finalVal,
       isAtoPremiadoEnabled,
@@ -1289,29 +1309,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     );
   };
 
-  // Obra e Pós-Obra usam escadas de peso independentes (ver decomposeMorarMonths):
-  // Série 1/2/3 vêm sempre da Obra (índices 0/1/2) e Série 4/5/6 vêm sempre do
-  // Pós-Obra (índices 2/3/4) — não são o mesmo balde dividido em duas fases, então
-  // não podem ser somadas numa única barra por índice compartilhado.
-  const barSeriesSources: { source: 'obra' | 'pos'; idx: number; label: number }[] = [
-    { source: 'obra', idx: 0, label: 1 },
-    { source: 'obra', idx: 1, label: 2 },
-    { source: 'obra', idx: 2, label: 3 },
-    { source: 'pos', idx: 2, label: 4 },
-    { source: 'pos', idx: 3, label: 5 },
-    { source: 'pos', idx: 4, label: 6 }
-  ];
-  const barData = barSeriesSources.map(({ source, idx, label }) => {
-    const serie = (source === 'obra' ? morarEngineBase?.obraSeries[idx] : morarEngineBase?.posSeries[idx])
-      || { qtd: 0, parcelaBrutaFinal: 0 };
-    const qtdTotal = serie.qtd;
-    const parcelaBruta = serie.parcelaBrutaFinal;
+  const barData = [0, 1, 2, 3, 4, 5].map(idx => {
+    const oSerie = morarEngineBase?.obraSeries[idx] || { qtd: 0, parcelaBrutaFinal: 0 };
+    const pSerie = morarEngineBase?.posSeries[idx] || { qtd: 0, parcelaBrutaFinal: 0 };
+    const qtdTotal = oSerie.qtd + pSerie.qtd;
+    const parcelaBruta = oSerie.qtd > 0 ? oSerie.parcelaBrutaFinal : pSerie.parcelaBrutaFinal;
     const subtotalBruto = qtdTotal * parcelaBruta;
     const percBase = baseLiquidaComITBI > 0 ? (subtotalBruto / baseLiquidaComITBI) * 100 : 0;
     const percRenda = income > 0 ? (parcelaBruta / income) * 100 : 0;
 
     return {
-      name: `Série ${label}`,
+      name: `Série ${idx + 1}`,
       percBase: Number(percBase.toFixed(2)),
       percBaseRaw: percBase,
       parcelaBruta,
@@ -2154,9 +2162,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   const valorLiquido = saldoProSolutoRestante <= 0 ? 0 : (Number(faixa.valor) || 0);
                   const subtotalSerie = (Number(faixa.qtd) || 0) * valorLiquido;
                   const parcelaBrutaComITBI = valorLiquido + itbiParcelaPosValor;
-                  // Pós-Obra usa os baldes de índice global 2 a 5 (pesos 20%/15%/10%/5%),
-                  // que a planilha oficial rotula como Série 4 a Série 6 (índice+2).
-                  const displayIndex = (faixa as any).serieIndex !== undefined ? (faixa as any).serieIndex + 2 : originalIndex + 4;
+                  const displayIndex = (faixa as any).serieIndex !== undefined ? (faixa as any).serieIndex + 1 : originalIndex + 1;
 
                   return (
                     <div key={originalIndex} className="bg-slate-50/70 hover:bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 space-y-1.5 transition-colors">
