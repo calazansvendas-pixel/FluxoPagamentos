@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
-import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
@@ -556,6 +556,43 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // valor do imóvel antes de descontar o Ato em si (Ato + este saldo = tudo
   // que precisa ser pago fora do Ato: mensais de obra + semestrais + chaves).
   const pmSinalTotal = pm.saldoAPagarDireto + pm.atoEfetivo;
+
+  // Percentuais de comprometimento de cada grupo do Parcelamento Morar,
+  // usados no gráfico de barras logo abaixo do Bloco 3 — cada grupo em
+  // relação à sua própria base: Mensais é % da Renda (mesmo teto rígido do
+  // motor de cálculo), os demais são % do valor do Imóvel (price).
+  const pmComprometimentoData: { name: string; value: number; base: 'Imóvel' | 'Renda' }[] = [];
+  if (isParcelamentoMorar) {
+    pmComprometimentoData.push({
+      name: 'Sinal',
+      value: price > 0 ? (pm.atoEfetivo / price) * 100 : 0,
+      base: 'Imóvel'
+    });
+    if (pm.nMensaisObra > 0) {
+      pmComprometimentoData.push({ name: 'Mensais', value: pm.pctRendaMensalObra, base: 'Renda' });
+    }
+    pmSemestraisEnabledIdxs.forEach((_, rank) => {
+      pmComprometimentoData.push({
+        name: `Inter ${rank + 1}`,
+        value: price > 0 ? ((pm.valoresSemestrais[rank] || 0) / price) * 100 : 0,
+        base: 'Imóvel'
+      });
+    });
+    if (pmChavesEnabled && pm.valorChaves > 0) {
+      pmComprometimentoData.push({
+        name: 'Chaves',
+        value: price > 0 ? (pm.valorChaves / price) * 100 : 0,
+        base: 'Imóvel'
+      });
+    }
+    if (pm.qtdParcelasPosObra > 0) {
+      pmComprometimentoData.push({
+        name: 'Pós-Obra',
+        value: price > 0 ? (pm.valorPosObraParcela / price) * 100 : 0,
+        base: 'Imóvel'
+      });
+    }
+  }
 
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
@@ -2041,6 +2078,34 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   <strong className="text-sm sm:text-base font-bold text-sky-700">{formatCurrency(pm.subtotalAteChaves)}</strong>
                 </div>
               </div>
+
+              {/* GRÁFICO: PERCENTUAIS DE COMPROMETIMENTO POR GRUPO (SINAL, MENSAIS, INTERMEDIÁRIAS, CHAVES, PÓS-OBRA) */}
+              {pmComprometimentoData.length > 0 && (
+                <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2 mt-1">
+                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5">
+                    Percentuais de Comprometimento
+                  </h3>
+                  <div style={{ height: Math.max(160, pmComprometimentoData.length * 30) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={pmComprometimentoData} layout="vertical" margin={{ top: 5, right: 46, left: 5, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" width={56} tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
+                          {pmComprometimentoData.map((entry, idx) => (
+                            <Cell key={`pm-comp-${idx}`} fill={entry.base === 'Renda' ? '#0284c7' : '#7c3aed'} />
+                          ))}
+                          <LabelList dataKey="value" formatter={(v: number) => `${v.toFixed(2)}%`} fill="#334155" fontSize={10} fontWeight="bold" position="right" offset={6} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex items-center justify-center gap-3 text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#7c3aed]" />% do Imóvel</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#0284c7]" />% da Renda</span>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
