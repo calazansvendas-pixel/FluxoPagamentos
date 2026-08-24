@@ -4,13 +4,19 @@ import { CommercialCondition, Product, SimulationData } from '../types';
 import { formatCurrency, formatDateBr } from '../utils/formatters';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
-import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 
 export interface MorarPieDatum {
   name: string;
   value: number;
   fill: string;
   label: string;
+}
+
+export interface MorarBarDatum {
+  name: string;
+  percRendaRaw: number;
+  labelFormatado: string;
 }
 
 export interface MorarFaixa {
@@ -67,6 +73,7 @@ interface PdfExportModalMorarProps {
   valorRiscoProSoluto: number;
   pieDataPct: MorarPieDatum[];
   pieDataValor: MorarPieDatum[];
+  barData: MorarBarDatum[];
 }
 
 export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
@@ -118,6 +125,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
   valorRiscoProSoluto,
   pieDataPct,
   pieDataValor,
+  barData,
 }) => {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -459,9 +467,27 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </div>
                 </div>
 
-                {/* BANNER OBSERVAÇÃO MORAR */}
-                <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-medium leading-snug">
-                  <strong>Obs:</strong> As parcelas que compõem o sinal e ITBI tem vencimento juntas, ou seja, na mesma data.
+                {/* GRÁFICO: COMPROMETIMENTO POR SÉRIE (PARCELA / RENDA) */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                    Comprometimento por Série (Parcela / Renda)
+                  </h3>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 30, left: 5, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" width={45} tick={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                        <Bar dataKey="percRendaRaw" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={16}>
+                          {barData.map((entry, idx) => (
+                            <Cell key={`bar-${idx}`} fill={['#312e81', '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8'][idx % 6]} />
+                          ))}
+                          <LabelList dataKey="labelFormatado" fill="#FFFFFF" fontSize={9} fontWeight="bold" position="insideRight" offset={8} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
 
