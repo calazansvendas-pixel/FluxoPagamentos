@@ -2529,60 +2529,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
       </div>
 
-      {/* ANÁLISE DETALHADA DE RISCO E SÉRIES */}
       {hasUnitSelected && (
         <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-5 mt-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-            <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
-              <PieChart className="w-5 h-5" />
-            </div>
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Análise Detalhada de Risco e Séries
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Gráfico 1: Percentual */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
-              <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-2 tracking-wide">Percentual de Risco por Fase</h4>
-              <div className="w-40 h-40 sm:w-48 sm:h-48 mx-auto">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RechartsPieChart>
-                    <Pie data={pieData1} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={64} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderCustomizedLabel}>
-                      {pieData1.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
-                    </Pie>
-                    <RechartsTooltip formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]} />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-4 flex items-center justify-center gap-4 text-xs font-medium text-slate-500 flex-wrap">
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0284C7]"></span>Total Obra</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#7C3AED]"></span>Total Pós-Obra</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#059669]"></span>Total Pró-Soluto</span>
-              </div>
-            </div>
-
-            {/* Gráfico 2: Valor R$ */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
-              <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-2 tracking-wide">Volume Financeiro por Fase (R$)</h4>
-              <div className="w-40 h-40 sm:w-48 sm:h-48 mx-auto">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RechartsPieChart>
-                    <Pie data={pieData2} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={64} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderCustomizedLabel}>
-                      {pieData2.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
-                    </Pie>
-                    <RechartsTooltip formatter={(value: number, name: string) => [formatCurrency(value), name]} />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-4 flex items-center justify-center gap-4 text-xs font-medium text-slate-500 flex-wrap">
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0284C7]"></span>Total Obra</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#7C3AED]"></span>Total Pós-Obra</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#059669]"></span>Total Pró-Soluto</span>
-              </div>
-            </div>
-          </div>
-
           {/* Gráfico 3: BarChart Funil */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-4 tracking-wide">Comprometimento por Série (Parcela / Renda)</h4>
