@@ -2603,6 +2603,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           valorRiscoProSoluto={valorRiscoProSoluto}
           pieDataPct={pieData1}
           pieDataValor={pieData2}
+          barData={barData}
         />
       )}
 
