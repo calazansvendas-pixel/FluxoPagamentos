@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates } from '../utils/calculations';
 import { PdfExportModal } from './PdfExportModal';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -12,6 +12,7 @@ interface DetailsViewProps {
   product: Product | null;
   condition: CommercialCondition | null;
   products?: Product[];
+  currentDate?: string;
   onSelectProduct?: (product: Product, conditionId: string) => void;
   onSelectCondition?: (condition: CommercialCondition) => void;
   simulationData: SimulationData;
@@ -26,6 +27,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   product,
   condition,
   products = [],
+  currentDate,
   onSelectProduct,
   onSelectCondition,
   simulationData,
@@ -93,6 +95,19 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   const [qtdMensais, setQtdMensais] = useState<number>(condNumParcelas);
 
+  // Condição comercial "Parcelamento Morar": mesmo layout desta tela (Sinal c/
+  // Banco Direto), mas com o Bloco 3 substituído por um motor de cálculo próprio
+  // (ver calcularParcelamentoMorar em utils/calculations.ts) — sem financiamento/
+  // Tabela Price, com Sinal mínimo em % do valor do imóvel, parcelas mensais
+  // lineares de obra, intermediárias semestrais, parcela final (chaves) e
+  // parcelamento pós-obra, todos calculados a partir da política de crédito.
+  const isParcelamentoMorar = getConditionKind(currentCond?.name) === 'parcelamento-morar';
+
+  // Quantidade de parcelas pós-obra: parte do padrão da política de crédito,
+  // mas editável manualmente nesta ficha (reseta ao trocar produto/condição ou
+  // ao clicar em "Limpar").
+  const [pmQtdPosObraManual, setPmQtdPosObraManual] = useState<number | null>(null);
+
   // Sync isFirstHomeLocal when simulationData.isFirstHome changes
   useEffect(() => {
     setIsFirstHomeLocal(simulationData.isFirstHome ?? true);
@@ -146,6 +161,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingParc3(false);
     setQtdMensais(condNumParcelas);
     setIsAtoPremiadoEnabled(true);
+    setPmQtdPosObraManual(null);
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
     }
@@ -289,6 +305,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     if (currentCond) {
       setQtdMensais(condNumParcelas);
     }
+    setPmQtdPosObraManual(null);
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
     }
@@ -304,9 +321,16 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const percent = simulationData.finPercent;
   const maxAllowed = (hasUnitSelected && evaluation > 0) ? (evaluation * percent) : 0;
 
-  // Sinal Mínimo configurado na Política de Crédito da condição selecionada
-  const sinalMinimoPolicy = currentCond?.sinalMinimo ? parseCurrency(currentCond.sinalMinimo) : 2000;
-  const sinalMinimoVal = sinalMinimoPolicy > 0 ? sinalMinimoPolicy : 2000;
+  // Sinal Mínimo configurado na Política de Crédito da condição selecionada.
+  // Em "Parcelamento Morar" o piso é um percentual do valor do imóvel (VGV),
+  // não um valor fixo em reais como nas demais condições.
+  const pmSinalMinimoPct = currentCond?.pmSinalMinimoPct ?? 10;
+  const sinalMinimoPolicy = isParcelamentoMorar
+    ? (hasUnitSelected ? Math.round(price * (pmSinalMinimoPct / 100) * 100) / 100 : 0)
+    : (currentCond?.sinalMinimo ? parseCurrency(currentCond.sinalMinimo) : 2000);
+  const sinalMinimoVal = isParcelamentoMorar
+    ? sinalMinimoPolicy
+    : (sinalMinimoPolicy > 0 ? sinalMinimoPolicy : 2000);
 
   let rawMaxFinanc = 0;
   if (hasUnitSelected) {
@@ -367,9 +391,53 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // REFLEXO NO GAP INICIAL (SINAL TOTAL)
   const gapInicial = hasUnitSelected ? Math.max(0, price - totalNegoc) : 0;
 
-  const despCartorias = hasUnitSelected 
+  const despCartorias = hasUnitSelected
     ? (itbiVal > 0 ? itbiVal : (price * 0.0441))
     : 0;
+
+  // ===================== MOTOR "PARCELAMENTO MORAR" =====================
+  // Calculado em paralelo ao motor de "Sinal c/ Banco Direto" logo abaixo — os
+  // dois nunca alimentam a tela ao mesmo tempo (isParcelamentoMorar decide
+  // qual conjunto de valores é realmente usado), mas manter os dois cálculos
+  // sempre executando evita qualquer risco de regressão no fluxo já testado
+  // do Banco Direto: nada no bloco original precisou ser alterado ou
+  // condicionado para este motor novo existir.
+  const isPhase2ParaEntrega = hasUnitSelected && matchingRow ? String(fase).includes('2') : false;
+  const deliveryDateRaw = isPhase2ParaEntrega && currentProd?.deliveryDatePhase2
+    ? currentProd.deliveryDatePhase2
+    : (currentProd?.deliveryDatePhase1 || currentProd?.deliveryDate || '');
+  const hojeRef = currentDate || new Date().toISOString().split('T')[0];
+  const pmMesesObraCalculado = hasUnitSelected ? monthsBetweenDates(hojeRef, deliveryDateRaw) : 0;
+
+  const pm = calcularParcelamentoMorar({
+    price,
+    renda: income,
+    recursos: hasUnitSelected ? (maxFinanc + subsidy + fgts) : 0,
+    mesesObra: pmMesesObraCalculado,
+    qtdParcelasPosObra: pmQtdPosObraManual !== null ? pmQtdPosObraManual : (currentCond?.pmQtdParcelasPosObra ?? 12),
+    pctSinalMinimo: pmSinalMinimoPct,
+    pctSemestralMax: currentCond?.pmParcelaSemestralMaxPct ?? 4,
+    pctChavesMax: currentCond?.pmParcelaChavesMaxPct ?? 15,
+    pctPosObraMax: currentCond?.pmRiscoProSolutoPosObraPct ?? 5,
+    pctRiscoRenda: currentCond?.riscoRendaPct ?? 40,
+    valAtoManual,
+    isAtoPremiadoEnabled
+  });
+  // "Sinal Total" no mesmo sentido do Bloco 1 do Banco Direto: o que falta do
+  // valor do imóvel antes de descontar o Ato em si (Ato + este saldo = tudo
+  // que precisa ser pago fora do Ato: mensais de obra + semestrais + chaves).
+  const pmSinalTotal = pm.saldoAPagarDireto + pm.atoEfetivo;
+
+  // Vencimento da parcela intermediária final (chaves): 2 meses antes do habite-se.
+  const chavesVencimentoStr = (() => {
+    if (!deliveryDateRaw) return '';
+    const parts = deliveryDateRaw.split('-').map(n => parseInt(n, 10));
+    if (parts.length < 2 || parts.some(isNaN)) return '';
+    const totalMonths = parts[0] * 12 + (parts[1] - 1) - 2;
+    const yy = Math.floor(totalMonths / 12);
+    const mm = (totalMonths % 12) + 1;
+    return formatDateMonthYear(`${yy}-${String(mm).padStart(2, '0')}-01`);
+  })();
 
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
@@ -761,6 +829,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingParc3(false);
     setQtdMensais(condNumParcelas);
     setIsAtoPremiadoEnabled(true);
+    setPmQtdPosObraManual(null);
     if (onShowToast) {
       onShowToast('Fluxo de pagamento redefinido para as condições padrão.');
     }
@@ -804,6 +873,22 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     : 0;
   const valorRestanteProSoluto = Math.max(0, baseVendaLiquidaComITBI - valorRiscoProSoluto);
   const pctRestanteProSoluto = Math.max(0, 100 - pctRiscoProSoluto);
+
+  // Valores de exibição dos Blocos 1 e 4: quando a condição é "Parcelamento
+  // Morar", usam o motor `pm` calculado acima; nas demais condições, mantêm
+  // exatamente os valores já calculados pelo fluxo original do Banco Direto
+  // (nada muda para elas).
+  const displaySubsidy = isParcelamentoMorar ? subsidy : subsidyEfetivo;
+  const displayFgts = isParcelamentoMorar ? fgts : fgtsEfetivo;
+  const displayDescontoAto = isParcelamentoMorar ? pm.descontoAtoPremiado : descontoAto;
+  const displayMaxFinanc = isParcelamentoMorar ? maxFinanc : maxFinancEfetivo;
+  const displayTotalNegoc = isParcelamentoMorar ? totalNegoc : totalNegocEfetivo;
+  const displaySinalTotal = isParcelamentoMorar ? pmSinalTotal : sinalTotal;
+
+  const displayPctRiscoParcelaRenda = isParcelamentoMorar ? pm.pctRendaMensalObra : pctRiscoParcelaRenda;
+  const displayValorRiscoParcela = isParcelamentoMorar ? pm.valorMensalObra : valorRiscoParcela;
+  const displayPctRiscoProSoluto = isParcelamentoMorar ? pm.pctSubtotalAteChaves : pctRiscoProSoluto;
+  const displayValorRiscoProSoluto = isParcelamentoMorar ? pm.subtotalAteChaves : valorRiscoProSoluto;
 
   // Função auxiliar para renderizar Gráficos de Pizza Sólidos com percentuais internos refinados
   const renderSolidPie = (
@@ -1003,7 +1088,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     if (!currentProd) return;
     setIsSavingSimulation(true);
     try {
-      const dadosCompletos = {
+      const dadosCompletos: Record<string, any> = {
         empreendimento_id: currentProd.id,
         empreendimento_nome: currentProd.name,
         condicao_id: currentCond?.id || '',
@@ -1016,19 +1101,33 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         preco_tabela: price,
         avaliacao_bancaria: evaluation,
         itbi_total: valorTotalITBI,
-        financiamento_maximo: maxFinancEfetivo,
-        subsidio: subsidyEfetivo,
-        fgts: fgtsEfetivo,
+        financiamento_maximo: displayMaxFinanc,
+        subsidio: displaySubsidy,
+        fgts: displayFgts,
         recurso_proprio: simulationData.ownResource || 0,
-        ato_bruto: atoBruto,
-        desconto_ato_premiado: descontoAto,
-        ato_liquido: atoEfetivo,
+        ato_bruto: isParcelamentoMorar ? (pm.atoEfetivo + pm.descontoAtoPremiado) : atoBruto,
+        desconto_ato_premiado: displayDescontoAto,
+        ato_liquido: isParcelamentoMorar ? pm.atoEfetivo : atoEfetivo,
         itbi_no_ato: valAtoITBI,
-        mensais_qtd: qtdMensais,
-        parcela_mensal: parcela,
-        pro_soluto_total: proSolutoTotalPainel,
         salvo_em: new Date().toISOString()
       };
+
+      if (isParcelamentoMorar) {
+        dadosCompletos.mensais_obra_qtd = pm.nMensaisObra;
+        dadosCompletos.mensais_obra_valor = pm.valorMensalObra;
+        dadosCompletos.semestrais_qtd = pm.nSemestrais;
+        dadosCompletos.semestrais_valor = pm.valorSemestral;
+        dadosCompletos.parcela_chaves_valor = pm.valorChaves;
+        dadosCompletos.parcela_chaves_vencimento = chavesVencimentoStr;
+        dadosCompletos.pos_obra_qtd = pm.qtdParcelasPosObra;
+        dadosCompletos.pos_obra_valor = pm.valorPosObraParcela;
+        dadosCompletos.subtotal_ate_chaves = pm.subtotalAteChaves;
+        dadosCompletos.pct_subtotal_ate_chaves = pm.pctSubtotalAteChaves;
+      } else {
+        dadosCompletos.mensais_qtd = qtdMensais;
+        dadosCompletos.parcela_mensal = parcela;
+        dadosCompletos.pro_soluto_total = proSolutoTotalPainel;
+      }
 
       const res = await imoveisService.salvarSimulacao({
         cliente_nome: simulationData.clientName || 'Cliente Não Informado',
@@ -1167,15 +1266,18 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => setIsPdfModalOpen(true)}
-            className="px-3.5 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
-            title="Exportar Ficha de Análise em PDF / Imprimir"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Exportar PDF</span>
-          </button>
+          {/* Exportação em PDF ainda não contempla o layout de "Parcelamento Morar" */}
+          {!isParcelamentoMorar && (
+            <button
+              type="button"
+              onClick={() => setIsPdfModalOpen(true)}
+              className="px-3.5 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
+              title="Exportar Ficha de Análise em PDF / Imprimir"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Exportar PDF</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1361,15 +1463,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Subsídio:</span>
-                    <strong className="text-emerald-600 font-semibold">{formatCurrency(subsidyEfetivo)}</strong>
+                    <strong className="text-emerald-600 font-semibold">{formatCurrency(displaySubsidy)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">FGTS:</span>
-                    <strong className="text-sky-600 font-semibold">{formatCurrency(fgtsEfetivo)}</strong>
+                    <strong className="text-sky-600 font-semibold">{formatCurrency(displayFgts)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 mt-2">
                     <span className="text-slate-600">Desconto Ato:</span>
-                    <strong className="text-emerald-600 font-semibold">{formatCurrency(descontoAto)}</strong>
+                    <strong className="text-emerald-600 font-semibold">{formatCurrency(displayDescontoAto)}</strong>
                   </div>
                 </div>
               </div>
@@ -1381,19 +1483,19 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </span>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Max Financ:</span>
-                    <strong className="text-sky-600 font-bold">{formatCurrency(maxFinancEfetivo)}</strong>
+                    <strong className="text-sky-600 font-bold">{formatCurrency(displayMaxFinanc)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Total Negoc:</span>
-                    <strong className="text-slate-800 font-semibold">{formatCurrency(totalNegocEfetivo)}</strong>
+                    <strong className="text-slate-800 font-semibold">{formatCurrency(displayTotalNegoc)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Sinal Total:</span>
-                    <strong className="text-amber-600 font-bold">{formatCurrency(sinalTotal)}</strong>
+                    <strong className="text-amber-600 font-bold">{formatCurrency(displaySinalTotal)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 mt-2">
                     <span className="text-slate-600">Sinal + ITBI:</span>
-                    <strong className="text-emerald-600 font-bold">{formatCurrency(sinalTotal + saldoITBI)}</strong>
+                    <strong className="text-emerald-600 font-bold">{formatCurrency(displaySinalTotal + saldoITBI)}</strong>
                   </div>
                 </div>
               </div>
@@ -1434,25 +1536,25 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     Risco Parcela / Renda
                   </h4>
                   <p className="text-[9.5px] text-slate-500 mt-0.5">
-                    1ª Parcela sobre a Base da Renda
+                    {isParcelamentoMorar ? 'Mensal de Obra sobre a Renda' : '1ª Parcela sobre a Base da Renda'}
                   </p>
                 </div>
 
                 <div className="py-1 flex items-center justify-center overflow-visible">
-                  {renderSolidPie(pctRiscoParcelaRenda, '#0284c7', '#cbd5e1')}
+                  {renderSolidPie(displayPctRiscoParcelaRenda, '#0284c7', '#cbd5e1')}
                 </div>
 
                 <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
                   <div className="flex items-center justify-between px-1 text-[10px]">
                     <span className="text-slate-500 font-medium">Comprometimento:</span>
                     <strong className="text-sky-700 font-bold">
-                      {pctRiscoParcelaRenda < 10 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%
+                      {displayPctRiscoParcelaRenda < 10 ? displayPctRiscoParcelaRenda.toFixed(2) : displayPctRiscoParcelaRenda.toFixed(1)}%
                     </strong>
                   </div>
                   <div className="flex items-center justify-between px-1 text-[10px]">
-                    <span className="text-slate-500 font-medium">1ª Parcela:</span>
+                    <span className="text-slate-500 font-medium">{isParcelamentoMorar ? 'Mensal de Obra:' : '1ª Parcela:'}</span>
                     <strong className="text-slate-800 font-semibold">
-                      {formatCurrency(valorRiscoParcela)}
+                      {formatCurrency(displayValorRiscoParcela)}
                     </strong>
                   </div>
                 </div>
@@ -1463,28 +1565,28 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 <div className="border-b border-slate-200/60 pb-1 text-center">
                   <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
-                    Risco Pró-Soluto Total
+                    {isParcelamentoMorar ? 'Subtotal Até as Chaves' : 'Risco Pró-Soluto Total'}
                   </h4>
                   <p className="text-[9.5px] text-slate-500 mt-0.5">
-                    Pró-Soluto Total c/ ITBI s/ Base Líquida
+                    {isParcelamentoMorar ? 'Sinal + Mensais + Semestrais + Chaves s/ Valor do Imóvel' : 'Pró-Soluto Total c/ ITBI s/ Base Líquida'}
                   </p>
                 </div>
 
                 <div className="py-1 flex items-center justify-center overflow-visible">
-                  {renderSolidPie(pctRiscoProSoluto, '#4f46e5', '#cbd5e1')}
+                  {renderSolidPie(displayPctRiscoProSoluto, '#4f46e5', '#cbd5e1')}
                 </div>
 
                 <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
                   <div className="flex items-center justify-between px-1 text-[10px]">
                     <span className="text-slate-500 font-medium">Comprometimento:</span>
                     <strong className="text-indigo-700 font-bold">
-                      {pctRiscoProSoluto < 10 ? pctRiscoProSoluto.toFixed(2) : pctRiscoProSoluto.toFixed(1)}%
+                      {displayPctRiscoProSoluto < 10 ? displayPctRiscoProSoluto.toFixed(2) : displayPctRiscoProSoluto.toFixed(1)}%
                     </strong>
                   </div>
                   <div className="flex items-center justify-between px-1 text-[10px]">
-                    <span className="text-slate-500 font-medium">Pró-Soluto Total:</span>
+                    <span className="text-slate-500 font-medium">{isParcelamentoMorar ? 'Subtotal Até Chaves:' : 'Pró-Soluto Total:'}</span>
                     <strong className="text-slate-800 font-semibold">
-                      {formatCurrency(valorRiscoProSoluto)}
+                      {formatCurrency(displayValorRiscoProSoluto)}
                     </strong>
                   </div>
                 </div>
@@ -1501,9 +1603,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           <FluxoEntradaConstrutora
             title="2. FLUXO DE ENTRADA C/ CONSTRUTORA"
             onLimpar={limparFluxoPagamento}
-            valorAto={atoAposMensais}
-            valorAtoMinimo={atoMinimoCalculado}
-            valorAtoMaximo={price > 0 ? Math.max(0, price - subsidy - atoPremiadoAtual) : 0}
+            valorAto={isParcelamentoMorar ? pm.atoEfetivo : atoAposMensais}
+            valorAtoMinimo={isParcelamentoMorar ? pm.sinalMinimoCalculado : atoMinimoCalculado}
+            valorAtoMaximo={isParcelamentoMorar ? pm.atoMaximoPossivel : (price > 0 ? Math.max(0, price - subsidy - atoPremiadoAtual) : 0)}
             onAtoChange={(novoVal) => {
               setValAtoManual(novoVal);
             }}
@@ -1513,233 +1615,362 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             isFirstHome={isFirstHomeLocal}
             onToggleFirstHome={() => setIsFirstHomeLocal(prev => !prev)}
             onITBIChange={(novoVal) => setValAtoITBI(novoVal)}
-            descontoAto={descontoAto}
+            descontoAto={isParcelamentoMorar ? pm.descontoAtoPremiado : descontoAto}
             isAtoPremiadoActive={isAtoPremiadoEnabled}
             onToggleAtoPremiado={(ativo) => {
               setIsAtoPremiadoEnabled(ativo);
             }}
-            isAVistaActive={isAVistaActive}
-            onToggleAVista={(ativo) => {
+            isAVistaActive={isParcelamentoMorar ? undefined : isAVistaActive}
+            onToggleAVista={isParcelamentoMorar ? undefined : (ativo) => {
               // Mesmo mecanismo de um Ato (Imóvel) digitado manualmente — só que o valor
               // é calculado automaticamente para o ponto exato que zera o Pró-Soluto
               // (Sinal Restante), ou desfeito para voltar ao fluxo parcelado normal.
               setValAtoManual(ativo ? atoAVistaTarget : null);
             }}
           >
-            {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              {/* 1ª MENSAL (30 DIAS) */}
-              <div className={`p-2.5 rounded-lg border transition-all ${
-                isExceededParc2 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
-              }`}>
-                <div className="flex items-center justify-between mb-1">
-                  <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
-                    isExceededParc2 ? 'text-red-900' : 'text-slate-500'
-                  }`}>
-                    1ª Mensal (30 Dias)
-                  </label>
-                </div>
-                <input
-                  id="input-primeira-mensal-30d"
-                  type="text"
-                  value={isEditingParc2 ? parc2InputText : (valParc2 > 0 ? formatCurrency(valParc2) : '')}
-                  onFocus={(e) => {
-                    setIsEditingParc2(true);
-                    setParc2InputText(valParc2 > 0 ? String(valParc2) : '');
-                    e.target.select();
-                  }}
-                  onChange={(e) => {
-                    setParc2InputText(e.target.value);
-                    const parsed = parseFlexibleCurrency(e.target.value);
-                    if (parsed >= 0) {
-                      setValParc2(parsed);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    handleFinishParc2Edit(e.target.value);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleFinishParc2Edit(parc2InputText);
-                      (e.target as HTMLInputElement).blur();
-                    }
-                  }}
-                  placeholder="R$ 0,00"
-                  className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
-                    isExceededParc2
-                      ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
-                      : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
-                  }`}
-                />
-                {isExceededParc2 && (
-                  <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
-                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                    <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
+            {isParcelamentoMorar ? (
+              /* QUANTIDADE DE PARCELAS PÓS-OBRA (ÚNICO CAMPO LIVREMENTE EDITÁVEL DO NOVO MOTOR) */
+              <div className="pt-1">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase whitespace-nowrap">
+                      Qtd. Parcelas Pós-Obra
+                    </label>
+                    <span className="text-[9px] text-slate-400 font-semibold">
+                      Padrão da política: {currentCond?.pmQtdParcelasPosObra ?? 12}x
+                    </span>
                   </div>
-                )}
+                  <div className="relative flex items-center max-w-[160px]">
+                    <input
+                      id="input-pm-qtd-pos-obra"
+                      type="number"
+                      min="0"
+                      value={pmQtdPosObraManual !== null ? pmQtdPosObraManual : (currentCond?.pmQtdParcelasPosObra ?? 12)}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') {
+                          setPmQtdPosObraManual(0);
+                          return;
+                        }
+                        const val = parseInt(raw, 10);
+                        if (isNaN(val) || val < 0) return;
+                        setPmQtdPosObraManual(val);
+                      }}
+                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-600 text-center focus:outline-none focus:border-sky-600 text-xs"
+                    />
+                    <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
+                  </div>
+                </div>
               </div>
+            ) : (
+              /* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                {/* 1ª MENSAL (30 DIAS) */}
+                <div className={`p-2.5 rounded-lg border transition-all ${
+                  isExceededParc2 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
+                }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
+                      isExceededParc2 ? 'text-red-900' : 'text-slate-500'
+                    }`}>
+                      1ª Mensal (30 Dias)
+                    </label>
+                  </div>
+                  <input
+                    id="input-primeira-mensal-30d"
+                    type="text"
+                    value={isEditingParc2 ? parc2InputText : (valParc2 > 0 ? formatCurrency(valParc2) : '')}
+                    onFocus={(e) => {
+                      setIsEditingParc2(true);
+                      setParc2InputText(valParc2 > 0 ? String(valParc2) : '');
+                      e.target.select();
+                    }}
+                    onChange={(e) => {
+                      setParc2InputText(e.target.value);
+                      const parsed = parseFlexibleCurrency(e.target.value);
+                      if (parsed >= 0) {
+                        setValParc2(parsed);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      handleFinishParc2Edit(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleFinishParc2Edit(parc2InputText);
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    placeholder="R$ 0,00"
+                    className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
+                      isExceededParc2
+                        ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
+                        : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
+                    }`}
+                  />
+                  {isExceededParc2 && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
+                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                      <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
+                    </div>
+                  )}
+                </div>
 
-              {/* 2ª MENSAL (60 DIAS) */}
-              <div className={`p-2.5 rounded-lg border transition-all ${
-                isExceededParc3 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
-              }`}>
-                <div className="flex items-center justify-between mb-1">
-                  <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
-                    isExceededParc3 ? 'text-red-900' : 'text-slate-500'
-                  }`}>
-                    2ª Mensal (60 Dias)
-                  </label>
-                </div>
-                <input
-                  id="input-segunda-mensal-60d"
-                  type="text"
-                  value={isEditingParc3 ? parc3InputText : (valParc3 > 0 ? formatCurrency(valParc3) : '')}
-                  onFocus={(e) => {
-                    setIsEditingParc3(true);
-                    setParc3InputText(valParc3 > 0 ? String(valParc3) : '');
-                    e.target.select();
-                  }}
-                  onChange={(e) => {
-                    setParc3InputText(e.target.value);
-                    const parsed = parseFlexibleCurrency(e.target.value);
-                    if (parsed >= 0) {
-                      setValParc3(parsed);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    handleFinishParc3Edit(e.target.value);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleFinishParc3Edit(parc3InputText);
-                      (e.target as HTMLInputElement).blur();
-                    }
-                  }}
-                  placeholder="R$ 0,00"
-                  className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
-                    isExceededParc3
-                      ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
-                      : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
-                  }`}
-                />
-                {isExceededParc3 && (
-                  <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
-                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                    <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
+                {/* 2ª MENSAL (60 DIAS) */}
+                <div className={`p-2.5 rounded-lg border transition-all ${
+                  isExceededParc3 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
+                }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
+                      isExceededParc3 ? 'text-red-900' : 'text-slate-500'
+                    }`}>
+                      2ª Mensal (60 Dias)
+                    </label>
                   </div>
-                )}
+                  <input
+                    id="input-segunda-mensal-60d"
+                    type="text"
+                    value={isEditingParc3 ? parc3InputText : (valParc3 > 0 ? formatCurrency(valParc3) : '')}
+                    onFocus={(e) => {
+                      setIsEditingParc3(true);
+                      setParc3InputText(valParc3 > 0 ? String(valParc3) : '');
+                      e.target.select();
+                    }}
+                    onChange={(e) => {
+                      setParc3InputText(e.target.value);
+                      const parsed = parseFlexibleCurrency(e.target.value);
+                      if (parsed >= 0) {
+                        setValParc3(parsed);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      handleFinishParc3Edit(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleFinishParc3Edit(parc3InputText);
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    placeholder="R$ 0,00"
+                    className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
+                      isExceededParc3
+                        ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
+                        : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
+                    }`}
+                  />
+                  {isExceededParc3 && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
+                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                      <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </FluxoEntradaConstrutora>
 
-          {/* BLOCO 3: PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO */}
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
-                  <Coins className="w-4 h-4" />
+          {/* BLOCO 3: PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO — OU PARCELAMENTO MORAR */}
+          {isParcelamentoMorar ? (
+            <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    3. Parcelamento Morar
+                  </h3>
                 </div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  3. Parcelamento Pró-Soluto / Banco Direto
-                </h3>
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                  {pm.mesesObra} meses de obra
+                </span>
+              </div>
+
+              {pm.excedeRiscoRenda && (
+                <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-rose-700 bg-rose-50 p-2 rounded-lg border border-rose-300">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>Atenção: a mensal de obra compromete mais de {currentCond?.riscoRendaPct ?? 40}% da renda bruta informada.</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2.5 text-xs">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Mensal de Obra ({pm.nMensaisObra}x)
+                  </label>
+                  <strong className={`block mt-1 font-bold text-xs sm:text-sm ${pm.excedeRiscoRenda ? 'text-rose-700' : 'text-slate-900'}`}>
+                    {formatCurrency(pm.valorMensalObra)}
+                  </strong>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Semestral ({pm.nSemestrais}x)
+                  </label>
+                  <strong className="block mt-1 font-bold text-slate-900 text-xs sm:text-sm">
+                    {formatCurrency(pm.valorSemestral)}
+                  </strong>
+                </div>
+
+                <div className="bg-amber-50 p-2.5 rounded-lg border border-amber-200/80 text-center">
+                  <label className="block text-[10px] font-bold text-amber-700 uppercase mb-1">
+                    Parcela Chaves
+                  </label>
+                  <strong className="block mt-1 font-bold text-amber-800 text-xs sm:text-sm">
+                    {formatCurrency(pm.valorChaves)}
+                  </strong>
+                  {chavesVencimentoStr && (
+                    <span className="block mt-0.5 text-[9.5px] text-amber-600 font-semibold">{chavesVencimentoStr}</span>
+                  )}
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Pós-Obra ({pm.qtdParcelasPosObra}x)
+                  </label>
+                  <strong className="block mt-1 font-bold text-slate-900 text-xs sm:text-sm">
+                    {formatCurrency(pm.valorPosObraParcela)}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-xs pt-0.5">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
+                  <span className="text-slate-500 font-medium">
+                    Despesas Cartorárias & ITBI<span className="ml-1 text-[11px] text-slate-400 font-normal">(Total: {formatCurrency(valorTotalITBI)}):</span>
+                  </span>
+                  <strong className="text-slate-800 font-semibold">{formatCurrency(saldoITBI)}</strong>
+                </div>
+
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
+                  <span className="text-slate-500 font-medium">Total Fase Obra (mensais + semestrais):</span>
+                  <strong className="text-slate-900 font-bold">{formatCurrency(pm.valorMensalObraTotal + pm.totalSemestrais)}</strong>
+                </div>
+
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
+                  <span className="text-slate-500 font-medium">Total Pós-Obra:</span>
+                  <strong className="text-slate-900 font-bold">{formatCurrency(pm.valorPosObraTotal)}</strong>
+                </div>
+
+                {/* TARJA SUBTOTAL ATÉ AS CHAVES */}
+                <div className="flex justify-between items-center bg-sky-50 px-3 py-2 rounded-lg border border-sky-200 mt-1">
+                  <span className="text-xs font-semibold text-slate-700">
+                    Subtotal até as Chaves: <span className="text-[10.5px] font-normal text-slate-500">({pm.pctSubtotalAteChaves.toFixed(1)}% do imóvel)</span>
+                  </span>
+                  <strong className="text-sm sm:text-base font-bold text-sky-700">{formatCurrency(pm.subtotalAteChaves)}</strong>
+                </div>
               </div>
             </div>
+          ) : (
+            <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    3. Parcelamento Pró-Soluto / Banco Direto
+                  </h3>
+                </div>
+              </div>
 
-            {/* FAIXA DE AMORTIZAÇÃO E JUROS */}
-            <div className="flex justify-between items-center text-[10px] text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/80">
-              <span>Amortização: <strong className="text-slate-700 font-semibold">Tabela Price</strong></span>
-              <span>Juros: <strong className="text-sky-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
-            </div>
+              {/* FAIXA DE AMORTIZAÇÃO E JUROS */}
+              <div className="flex justify-between items-center text-[10px] text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/80">
+                <span>Amortização: <strong className="text-slate-700 font-semibold">Tabela Price</strong></span>
+                <span>Juros: <strong className="text-sky-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
+              </div>
 
-            <div className="grid grid-cols-3 gap-2.5 text-xs">
-              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Qtd. Mensais
-                </label>
-                <div className="relative flex items-center justify-center">
-                  <input
-                    type="number"
-                    value={qtdMensais > 0 ? qtdMensais : ''}
-                    min="1"
-                    max={limiteMaximoParcelas}
-                    onChange={(e) => {
-                      const rawVal = e.target.value;
-                      if (rawVal === '') {
-                        setQtdMensais(0);
+              <div className="grid grid-cols-3 gap-2.5 text-xs">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Qtd. Mensais
+                  </label>
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="number"
+                      value={qtdMensais > 0 ? qtdMensais : ''}
+                      min="1"
+                      max={limiteMaximoParcelas}
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        if (rawVal === '') {
+                          setQtdMensais(0);
+                          setValAtoManual(null);
+                          setAtoInputText('');
+                          setIsEditingAto(false);
+                          return;
+                        }
+                        const val = parseInt(rawVal, 10);
+                        if (isNaN(val)) return;
+
                         setValAtoManual(null);
                         setAtoInputText('');
                         setIsEditingAto(false);
-                        return;
-                      }
-                      const val = parseInt(rawVal, 10);
-                      if (isNaN(val)) return;
+                        if (val > limiteMaximoParcelas) {
+                          setQtdMensais(limiteMaximoParcelas);
+                          alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
+                          return;
+                        }
+                        if (val < 1) {
+                          setQtdMensais(1);
+                          return;
+                        }
+                        setQtdMensais(val);
+                      }}
+                      onBlur={() => {
+                        setValAtoManual(null);
+                        setAtoInputText('');
+                        setIsEditingAto(false);
+                        if (!qtdMensais || qtdMensais < 1) {
+                          setQtdMensais(1);
+                        } else if (qtdMensais > limiteMaximoParcelas) {
+                          setQtdMensais(limiteMaximoParcelas);
+                          alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
+                        }
+                      }}
+                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-600 text-center focus:outline-none focus:border-sky-600 text-xs"
+                    />
+                    <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
+                  </div>
+                </div>
 
-                      setValAtoManual(null);
-                      setAtoInputText('');
-                      setIsEditingAto(false);
-                      if (val > limiteMaximoParcelas) {
-                        setQtdMensais(limiteMaximoParcelas);
-                        alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
-                        return;
-                      }
-                      if (val < 1) {
-                        setQtdMensais(1);
-                        return;
-                      }
-                      setQtdMensais(val);
-                    }}
-                    onBlur={() => {
-                      setValAtoManual(null);
-                      setAtoInputText('');
-                      setIsEditingAto(false);
-                      if (!qtdMensais || qtdMensais < 1) {
-                        setQtdMensais(1);
-                      } else if (qtdMensais > limiteMaximoParcelas) {
-                        setQtdMensais(limiteMaximoParcelas);
-                        alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
-                      }
-                    }}
-                    className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-600 text-center focus:outline-none focus:border-sky-600 text-xs"
-                  />
-                  <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">1ª Parcela</span>
+                  <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
+                    {formatCurrency(parcela)}
+                  </strong>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Última Parcela</span>
+                  <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
+                    {formatCurrency(parcela)}
+                  </strong>
                 </div>
               </div>
 
-              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
-                <span className="block text-[10px] font-bold text-slate-400 uppercase">1ª Parcela</span>
-                <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
-                  {formatCurrency(parcela)}
-                </strong>
-              </div>
+              <div className="space-y-1.5 text-xs pt-0.5">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
+                  <span className="text-slate-500 font-medium">
+                    Despesas Cartorárias & ITBI<span className="ml-1 text-[11px] text-slate-400 font-normal">(Total: {formatCurrency(valorTotalITBI)}):</span>
+                  </span>
+                  <strong className="text-slate-800 font-semibold">{formatCurrency(saldoITBI)}</strong>
+                </div>
 
-              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
-                <span className="block text-[10px] font-bold text-slate-400 uppercase">Última Parcela</span>
-                <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
-                  {formatCurrency(parcela)}
-                </strong>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
+                  <span className="text-slate-500 font-medium">Pró-Soluto (Sinal Restante):</span>
+                  <strong className="text-slate-900 font-bold">{formatCurrency(proSoluto)}</strong>
+                </div>
+
+                {/* TARJA PRÓ-SOLUTO TOTAL C/ ITBI */}
+                <div className="flex justify-between items-center bg-sky-50 px-3 py-2 rounded-lg border border-sky-200 mt-1">
+                  <span className="text-xs font-semibold text-slate-700">Pró-Soluto Total c/ ITBI:</span>
+                  <strong className="text-sm sm:text-base font-bold text-sky-700">{formatCurrency(proSolutoTotalPainel)}</strong>
+                </div>
               </div>
             </div>
-
-            <div className="space-y-1.5 text-xs pt-0.5">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
-                <span className="text-slate-500 font-medium">
-                  Despesas Cartorárias & ITBI<span className="ml-1 text-[11px] text-slate-400 font-normal">(Total: {formatCurrency(valorTotalITBI)}):</span>
-                </span>
-                <strong className="text-slate-800 font-semibold">{formatCurrency(saldoITBI)}</strong>
-              </div>
-
-              <div className="flex justify-between items-center border-b border-slate-100 pb-1.5 px-1">
-                <span className="text-slate-500 font-medium">Pró-Soluto (Sinal Restante):</span>
-                <strong className="text-slate-900 font-bold">{formatCurrency(proSoluto)}</strong>
-              </div>
-
-              {/* TARJA PRÓ-SOLUTO TOTAL C/ ITBI */}
-              <div className="flex justify-between items-center bg-sky-50 px-3 py-2 rounded-lg border border-sky-200 mt-1">
-                <span className="text-xs font-semibold text-slate-700">Pró-Soluto Total c/ ITBI:</span>
-                <strong className="text-sm sm:text-base font-bold text-sky-700">{formatCurrency(proSolutoTotalPainel)}</strong>
-              </div>
-            </div>
-          </div>
+          )}
 
         </div>
 
