@@ -4,6 +4,19 @@ import { CommercialCondition, Product, SimulationData } from '../types';
 import { formatCurrency, formatDateBr } from '../utils/formatters';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
+import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, Cell, LabelList } from 'recharts';
+
+export interface PdfSemestralItem {
+  label: string;
+  data: string;
+  valor: number;
+}
+
+export interface PdfComprometimentoDatum {
+  name: string;
+  value: number;
+  base: 'Imóvel' | 'Renda';
+}
 
 interface PdfExportModalProps {
   isOpen: boolean;
@@ -45,6 +58,26 @@ interface PdfExportModalProps {
   valorRiscoParcela: number;
   pctRiscoProSoluto: number;
   valorRiscoProSoluto: number;
+  // Campos exclusivos da condição "Parcelamento Morar" — o Bloco 3 (e o
+  // Bloco 4, substituído pelo gráfico de comprometimento) usam um layout
+  // próprio quando isParcelamentoMorar é true; nas demais condições esses
+  // campos são ignorados.
+  isParcelamentoMorar?: boolean;
+  pmValorMensalObra?: number;
+  pmNMensaisObra?: number;
+  pmValorMensalObraTotal?: number;
+  pmMensalObraDataInicio?: string;
+  pmSemestraisList?: PdfSemestralItem[];
+  pmChavesEnabled?: boolean;
+  pmValorChaves?: number;
+  pmChavesVencimento?: string;
+  pmQtdParcelasPosObra?: number;
+  pmValorPosObraParcela?: number;
+  pmValorPosObraTotal?: number;
+  pmPosObraDataInicio?: string;
+  pmSubtotalAteChaves?: number;
+  pmPctSubtotalAteChaves?: number;
+  pmComprometimentoData?: PdfComprometimentoDatum[];
 }
 
 export const PdfExportModal: React.FC<PdfExportModalProps> = ({
@@ -87,6 +120,22 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
   valorRiscoParcela,
   pctRiscoProSoluto,
   valorRiscoProSoluto,
+  isParcelamentoMorar = false,
+  pmValorMensalObra = 0,
+  pmNMensaisObra = 0,
+  pmValorMensalObraTotal = 0,
+  pmMensalObraDataInicio = '',
+  pmSemestraisList = [],
+  pmChavesEnabled = false,
+  pmValorChaves = 0,
+  pmChavesVencimento = '',
+  pmQtdParcelasPosObra = 0,
+  pmValorPosObraParcela = 0,
+  pmValorPosObraTotal = 0,
+  pmPosObraDataInicio = '',
+  pmSubtotalAteChaves = 0,
+  pmPctSubtotalAteChaves = 0,
+  pmComprometimentoData = [],
 }) => {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -587,7 +636,37 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                   </div>
                 </div>
 
-                {/* 4. INDICADORES DE RISCO / COMPROMETIMENTO */}
+                {/* 4. INDICADORES DE RISCO / COMPROMETIMENTO — no Parcelamento Morar,
+                    substituído pelo gráfico "Percentuais de Comprometimento" (mesma
+                    lógica do quadro exibido na tela, que já cobre Mensal de Obra/Renda
+                    e Sinal+Mensais+Semestrais+Chaves/Pós-Obra sobre o Imóvel). */}
+                {isParcelamentoMorar ? (
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 flex-1 flex flex-col justify-between">
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                      4. Percentuais de Comprometimento
+                    </h3>
+                    <div style={{ height: Math.max(140, pmComprometimentoData.length * 22) }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={pmComprometimentoData} layout="vertical" margin={{ top: 5, right: 42, left: 5, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                          <XAxis type="number" hide />
+                          <YAxis dataKey="name" type="category" width={48} tick={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                          <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={13}>
+                            {pmComprometimentoData.map((entry, idx) => (
+                              <Cell key={`pm-comp-pdf-${idx}`} fill={entry.base === 'Renda' ? '#0284c7' : '#7c3aed'} />
+                            ))}
+                            <LabelList dataKey="value" formatter={(v: number) => `${v.toFixed(2)}%`} fill="#334155" fontSize={9} fontWeight="bold" position="right" offset={5} />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex items-center justify-center gap-3 text-[9.5px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#7c3aed]" />% do Imóvel</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#0284c7]" />% da Renda</span>
+                    </div>
+                  </div>
+                ) : (
                 <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 flex-1 flex flex-col justify-between overflow-visible">
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
@@ -642,6 +721,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                     </div>
                   </div>
                 </div>
+                )}
 
               </div>
 
@@ -707,7 +787,76 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                   </div>
                 </div>
 
-                {/* 3. PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO */}
+                {/* 3. PARCELAMENTO MORAR (OU PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO) */}
+                {isParcelamentoMorar ? (
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 flex-1 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                        3. Parcelamento Morar
+                      </h3>
+
+                      {/* MENSAL DE OBRA */}
+                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80">
+                        <div className="flex items-center justify-between text-[9.5px] mb-1">
+                          <span className="font-bold text-slate-700 uppercase">Mensal de Obra</span>
+                          {pmMensalObraDataInicio && <span className="text-slate-500">A partir de {pmMensalObraDataInicio}</span>}
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5 text-[10.5px] text-center">
+                          <div><span className="block text-[9px] text-slate-400">Qtd</span><strong className="text-slate-900">{pmNMensaisObra}X</strong></div>
+                          <div><span className="block text-[9px] text-slate-400">Valor</span><strong className="text-slate-900">{formatCurrency(pmValorMensalObra)}</strong></div>
+                          <div><span className="block text-[9px] text-slate-400">Total</span><strong className="text-slate-900">{formatCurrency(pmValorMensalObraTotal)}</strong></div>
+                        </div>
+                      </div>
+
+                      {/* INTERMEDIÁRIAS SEMESTRAIS */}
+                      {pmSemestraisList.length > 0 && (
+                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 space-y-1">
+                          <span className="font-bold text-slate-700 uppercase text-[9.5px]">Intermediárias Semestrais</span>
+                          <div className="grid grid-cols-2 gap-1 text-[9.5px]">
+                            {pmSemestraisList.map((s, idx) => (
+                              <div key={idx} className="flex justify-between bg-white px-1.5 py-1 rounded border border-slate-200/60">
+                                <span className="text-slate-500">{s.label} ({s.data}):</span>
+                                <strong className="text-slate-900">{formatCurrency(s.valor)}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* PARCELA CHAVES */}
+                      {pmChavesEnabled && (
+                        <div className="flex items-center justify-between bg-amber-50/60 px-2.5 py-1.5 rounded-lg border border-amber-200 text-[10px]">
+                          <span className="font-bold text-amber-800 uppercase">Parcela Chaves{pmChavesVencimento ? ` (${pmChavesVencimento})` : ''}</span>
+                          <strong className="text-amber-900 font-bold">{formatCurrency(pmValorChaves)}</strong>
+                        </div>
+                      )}
+
+                      {/* PÓS-OBRA */}
+                      {pmQtdParcelasPosObra > 0 && (
+                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/80">
+                          <div className="flex items-center justify-between text-[9.5px] mb-1">
+                            <span className="font-bold text-slate-700 uppercase">Pós-Obra</span>
+                            {pmPosObraDataInicio && <span className="text-slate-500">A partir de {pmPosObraDataInicio}</span>}
+                          </div>
+                          <div className="grid grid-cols-3 gap-1.5 text-[10.5px] text-center">
+                            <div><span className="block text-[9px] text-slate-400">Qtd</span><strong className="text-slate-900">{pmQtdParcelasPosObra}X</strong></div>
+                            <div><span className="block text-[9px] text-slate-400">Valor</span><strong className="text-slate-900">{formatCurrency(pmValorPosObraParcela)}</strong></div>
+                            <div><span className="block text-[9px] text-slate-400">Total</span><strong className="text-slate-900">{formatCurrency(pmValorPosObraTotal)}</strong></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* TARJA "SUBTOTAL ATÉ AS CHAVES" */}
+                    <div className="flex justify-between items-center bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200 mt-2">
+                      <span className="text-xs font-semibold text-slate-700">
+                        Subtotal até as Chaves: <span className="text-[9.5px] font-normal text-slate-500">({pmPctSubtotalAteChaves.toFixed(1)}% do imóvel)</span>
+                      </span>
+                      <strong className="text-sm font-bold text-sky-700">{formatCurrency(pmSubtotalAteChaves)}</strong>
+                    </div>
+                  </div>
+                ) : (
                 <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 flex-1 flex flex-col justify-between">
                   <div>
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
@@ -756,6 +905,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                     <strong className="text-sm font-bold text-sky-700">{formatCurrency(proSolutoTotalPainel)}</strong>
                   </div>
                 </div>
+                )}
 
               </div>
 
