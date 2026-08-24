@@ -600,6 +600,23 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   }
 
+  // Lista das intermediárias semestrais habilitadas, com data e valor, para
+  // exibição na Ficha em PDF do Parcelamento Morar (mesma numeração de
+  // "Semestral N" do Bloco 3 na tela).
+  const pmSemestraisList = isParcelamentoMorar
+    ? pmSemestraisDatas
+        .map((dataStr, idx) => ({ idx, dataStr, ativa: pmSemestralIndividualEnabled[idx] !== false }))
+        .filter(s => s.ativa)
+        .map(s => {
+          const rank = pmSemestraisEnabledIdxs.indexOf(s.idx);
+          return {
+            label: `Semestral ${s.idx + 1}`,
+            data: formatDateMonthYear(s.dataStr),
+            valor: pm.valoresSemestrais[rank] || 0
+          };
+        })
+    : [];
+
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
     currentProd,
@@ -1387,18 +1404,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             )}
           </button>
 
-          {/* Exportação em PDF ainda não contempla o layout de "Parcelamento Morar" */}
-          {!isParcelamentoMorar && (
-            <button
-              type="button"
-              onClick={() => setIsPdfModalOpen(true)}
-              className="px-3.5 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
-              title="Exportar Ficha de Análise em PDF / Imprimir"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Exportar PDF</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setIsPdfModalOpen(true)}
+            className="px-3.5 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
+            title="Exportar Ficha de Análise em PDF / Imprimir"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Exportar PDF</span>
+          </button>
         </div>
       </div>
 
@@ -2254,14 +2268,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           evaluation={evaluation}
           deliveryText={deliveryText}
           income={income}
-          subsidyEfetivo={subsidyEfetivo}
-          fgtsEfetivo={fgtsEfetivo}
-          descontoAto={descontoAto}
-          maxFinanc={maxFinancEfetivo}
-          totalNegocEfetivo={totalNegocEfetivo}
-          sinalTotal={sinalTotal}
+          subsidyEfetivo={displaySubsidy}
+          fgtsEfetivo={displayFgts}
+          descontoAto={displayDescontoAto}
+          maxFinanc={displayMaxFinanc}
+          totalNegocEfetivo={displayTotalNegoc}
+          sinalTotal={displaySinalTotal}
           despCartoriasEfetivas={despCartoriasEfetivas}
-          atoAposMensais={atoAposMensais}
+          atoAposMensais={isParcelamentoMorar ? pm.atoEfetivo : atoAposMensais}
           atoITBIValidado={atoITBIValidado}
           valParc2={valParc2}
           valParc3={valParc3}
@@ -2272,12 +2286,28 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           saldoITBI={saldoITBI}
           proSoluto={proSoluto}
           proSolutoTotalPainel={proSolutoTotalPainel}
-          baseVendaLiquidaComITBI={baseVendaLiquidaComITBI}
+          baseVendaLiquidaComITBI={displayBaseLiquida}
           baseRendaInformada={baseRendaInformada}
-          pctRiscoParcelaRenda={pctRiscoParcelaRenda}
-          valorRiscoParcela={valorRiscoParcela}
-          pctRiscoProSoluto={pctRiscoProSoluto}
-          valorRiscoProSoluto={valorRiscoProSoluto}
+          pctRiscoParcelaRenda={displayPctRiscoParcelaRenda}
+          valorRiscoParcela={displayValorRiscoParcela}
+          pctRiscoProSoluto={displayPctRiscoProSoluto}
+          valorRiscoProSoluto={displayValorRiscoProSoluto}
+          isParcelamentoMorar={isParcelamentoMorar}
+          pmValorMensalObra={pm.valorMensalObra}
+          pmNMensaisObra={pm.nMensaisObra}
+          pmValorMensalObraTotal={pm.valorMensalObraTotal}
+          pmMensalObraDataInicio={pmMensalObraDataInicio}
+          pmSemestraisList={pmSemestraisList}
+          pmChavesEnabled={pmChavesEnabled}
+          pmValorChaves={pm.valorChaves}
+          pmChavesVencimento={chavesVencimentoStr}
+          pmQtdParcelasPosObra={pm.qtdParcelasPosObra}
+          pmValorPosObraParcela={pm.valorPosObraParcela}
+          pmValorPosObraTotal={pm.valorPosObraTotal}
+          pmPosObraDataInicio={pmPosObraDataInicio}
+          pmSubtotalAteChaves={pm.subtotalAteChaves}
+          pmPctSubtotalAteChaves={pm.pctSubtotalAteChaves}
+          pmComprometimentoData={pmComprometimentoData}
         />
       )}
 
