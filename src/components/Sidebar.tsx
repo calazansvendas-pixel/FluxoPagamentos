@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calculator, FileCheck2, Building2, FileSpreadsheet } from 'lucide-react';
+import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList } from 'lucide-react';
 import { ActiveTab } from '../types';
 
 interface SidebarProps {
@@ -38,6 +38,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'import-table' as ActiveTab,
       label: 'Importar Tabela (Excel)',
       icon: FileSpreadsheet
+    },
+    {
+      id: 'saved-simulations' as ActiveTab,
+      label: 'Simulações Salvas',
+      icon: ClipboardList
     }
   ];
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
@@ -120,7 +120,16 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // 2. FUNÇÃO E EFFECT DISPARADOS AO TROCAR DE EMPREENDIMENTO OU ATUALIZAR A POLÍTICA DE CRÉDITO:
   // Garante a limpeza do estado residual na memória, reset da seleção ativa de unidade e sincronização da Qtd. Mensais
+  const prevProdCondKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const key = currentProd ? `${currentProd.id}::${currentCond?.id || ''}` : null;
+    const isRealSwitch = prevProdCondKeyRef.current !== null && prevProdCondKeyRef.current !== key;
+    prevProdCondKeyRef.current = key;
+    // No mount inicial (ex.: reabertura de uma simulação salva via "Editar"), a torre/unidade
+    // já vêm restauradas em selectedUnits — não zera aqui, senão a seleção se perde assim que
+    // a ficha monta. Só limpa quando o usuário de fato troca de produto/condição já dentro da ficha.
+    if (!isRealSwitch) return;
+
     setSelectedTorre('');
     setSelectedUnidade('');
     setValAtoManual(null);
@@ -995,10 +1004,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsSavingSimulation(true);
     try {
       const dadosCompletos = {
+        empreendimento_id: currentProd.id,
         empreendimento_nome: currentProd.name,
+        condicao_id: currentCond?.id || '',
         condicao_nome: currentCond?.name || '',
         torre: selectedTorre || 'Não Selecionada',
         unidade: selectedUnidade || 'Não Selecionada',
+        simulation_data: simulationData,
         cliente_nome: simulationData.clientName || 'Cliente Não Informado',
         renda: baseRendaInformada,
         preco_tabela: price,

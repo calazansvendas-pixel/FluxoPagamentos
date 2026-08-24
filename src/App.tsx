@@ -1,5 +1,6 @@
 import React, { useState, Suspense, lazy } from 'react';
 import { ActiveTab, CommercialCondition, Product, SelectedUnit, SimulationData, TableInfo } from './types';
+import type { SavedSimulationRecord } from './components/SavedSimulationsView';
 import { INITIAL_PRODUCTS } from './data/initialProducts';
 import { ensureProductConditions } from './utils/calculations';
 
@@ -16,6 +17,7 @@ const FichaMorar = lazy(() => import('./components/FichaMorar').then(m => ({ def
 const PoliciesView = lazy(() => import('./components/PoliciesView').then(m => ({ default: m.PoliciesView })));
 const ImportTableView = lazy(() => import('./components/ImportTableView').then(m => ({ default: m.ImportTableView })));
 const NewProductModal = lazy(() => import('./components/NewProductModal').then(m => ({ default: m.NewProductModal })));
+const SavedSimulationsView = lazy(() => import('./components/SavedSimulationsView').then(m => ({ default: m.SavedSimulationsView })));
 
 const ViewLoadingFallback = () => (
   <div className="flex items-center justify-center py-24 text-sm text-slate-400">
@@ -313,6 +315,48 @@ export default function App() {
       setActiveTab('details');
     }
     window.scrollTo(0, 0);
+  };
+
+  // Reabre uma simulação salva (tela "Simulações Salvas") na ficha correspondente,
+  // pré-preenchendo os dados do cliente e a torre/unidade que estavam selecionadas.
+  // Os valores manuais que o corretor tenha digitado na hora (Ato, ITBI no Ato, etc.)
+  // não são restaurados — a ficha recalcula os valores sugeridos a partir dos dados
+  // do cliente, prontos para ajuste.
+  const handleEditSimulation = (sim: SavedSimulationRecord) => {
+    const dados = sim.dados || {};
+    const empId = dados.empreendimento_id || sim.empreendimento_id;
+    const prod = products.find(p => p.id === empId);
+    if (!prod) {
+      showToast('O empreendimento desta simulação não foi encontrado (pode ter sido excluído ou renomeado).');
+      return;
+    }
+
+    const prodWithConds = ensureProductConditions({ ...prod });
+    const cond = prodWithConds.conditions.find(c => c.id === dados.condicao_id) || prodWithConds.conditions[0];
+
+    setActiveAnalysisProduct(prodWithConds);
+    setActiveAnalysisCondition(cond);
+
+    setSelectedUnits(prev => ({
+      ...prev,
+      [prodWithConds.id]: {
+        torre: dados.torre && dados.torre !== 'Não Selecionada' ? dados.torre : '',
+        unidade: dados.unidade && dados.unidade !== 'Não Selecionada' ? dados.unidade : ''
+      }
+    }));
+    setSelectedConditions(prev => ({ ...prev, [prodWithConds.id]: cond.id }));
+
+    if (dados.simulation_data) {
+      setSimulationData(dados.simulation_data);
+    }
+
+    if (cond && isMorarCondition(cond.name)) {
+      setActiveTab('ficha-morar');
+    } else {
+      setActiveTab('details');
+    }
+    window.scrollTo(0, 0);
+    showToast(`Simulação de ${dados.cliente_nome || sim.cliente_nome || 'cliente'} reaberta para edição.`);
   };
 
   // Handler para troca de condição comercial com redirecionamento/roteamento inteligente
@@ -615,6 +659,13 @@ export default function App() {
               onSelectImportProduct={setActiveImportProductId}
               onSaveTableInfo={handleSaveTableInfo}
               onDeleteTable={handleDeleteTable}
+              onShowToast={showToast}
+            />
+          )}
+
+          {activeTab === 'saved-simulations' && (
+            <SavedSimulationsView
+              onEditSimulation={handleEditSimulation}
               onShowToast={showToast}
             />
           )}

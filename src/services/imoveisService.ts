@@ -42,6 +42,18 @@ import { parseM2Number, parseCurrency, formatArea } from '../utils/formatters';
  * -- salva apenas no navegador de quem editou):
  * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS conditions JSONB;
  * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
+ *
+ * -- Tabela de Simulações Salvas (propostas). Usada pelo botão "Salvar Simulação"
+ * -- nas fichas Sinal c/ Morar e Sinal c/ Banco Direto, e pela tela "Simulações
+ * -- Salvas" (visualizar / editar / excluir).
+ * CREATE TABLE simulacoes (
+ *   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+ *   cliente_nome TEXT,
+ *   renda NUMERIC,
+ *   empreendimento_id UUID REFERENCES empreendimentos(id) ON DELETE SET NULL,
+ *   dados JSONB,
+ *   created_at TIMESTAMPTZ DEFAULT now()
+ * );
  */
 
 export const imoveisService = {
@@ -369,6 +381,44 @@ export const imoveisService = {
       return { success: true, data };
     } catch (e: any) {
       console.warn('Simulação salva em modo offline (Mock):', dadosProposta);
+      return { success: false, error: e?.message || 'Erro de conexão' };
+    }
+  },
+
+  // Lista todas as simulações salvas (mais recentes primeiro). A ordenação é feita
+  // no cliente por dados.salvo_em (sempre presente em toda simulação salva pela
+  // Ficha Sinal c/ Morar ou Sinal c/ Banco Direto), já que o esquema da tabela
+  // `simulacoes` não tem uma coluna de data garantida em todos os projetos.
+  async listarSimulacoes() {
+    try {
+      const { data, error } = await supabase.from('simulacoes').select('*');
+      if (error) {
+        console.error('Erro ao listar simulações do Supabase:', error);
+        return { success: false, error: error.message, data: [] as any[] };
+      }
+      const ordenadas = (data || []).slice().sort((a: any, b: any) => {
+        const dataA = a?.dados?.salvo_em || '';
+        const dataB = b?.dados?.salvo_em || '';
+        return dataB.localeCompare(dataA);
+      });
+      return { success: true, data: ordenadas };
+    } catch (e: any) {
+      console.warn('Erro ao listar simulações:', e);
+      return { success: false, error: e?.message || 'Erro de conexão', data: [] as any[] };
+    }
+  },
+
+  // Exclui uma simulação salva pelo id
+  async excluirSimulacao(id: string) {
+    try {
+      const { error } = await supabase.from('simulacoes').delete().eq('id', id);
+      if (error) {
+        console.error('Erro ao excluir simulação no Supabase:', error);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
+      console.warn('Erro ao excluir simulação:', e);
       return { success: false, error: e?.message || 'Erro de conexão' };
     }
   },
