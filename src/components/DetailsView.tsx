@@ -958,6 +958,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const displayValorRiscoParcela = isParcelamentoMorar ? pm.valorMensalObra : valorRiscoParcela;
   const displayPctRiscoProSoluto = isParcelamentoMorar ? pm.pctSubtotalAteChaves : pctRiscoProSoluto;
   const displayValorRiscoProSoluto = isParcelamentoMorar ? pm.subtotalAteChaves : valorRiscoProSoluto;
+  // "Parcelamento Morar" não soma ITBI à Base Líquida (não entra ITBI/registro
+  // nesta condição), mas continua deduzindo o desconto do Ato Premiado.
+  const pmBaseLiquida = hasUnitSelected ? Math.max(0, price - pm.descontoAtoPremiado) : 0;
+  const displayBaseLiquida = isParcelamentoMorar ? pmBaseLiquida : baseVendaLiquidaComITBI;
 
   // Função auxiliar para renderizar Gráficos de Pizza Sólidos com percentuais internos refinados
   const renderSolidPie = (
@@ -1588,8 +1592,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
               <div className="flex items-center flex-wrap gap-2 text-[10px]">
                 <div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-600">
-                  <span className="text-slate-400 font-medium">Base Líq. c/ ITBI:</span>
-                  <strong className="font-bold text-slate-800">{formatCurrency(baseVendaLiquidaComITBI)}</strong>
+                  <span className="text-slate-400 font-medium">{isParcelamentoMorar ? 'Base Líquida:' : 'Base Líq. c/ ITBI:'}</span>
+                  <strong className="font-bold text-slate-800">{formatCurrency(displayBaseLiquida)}</strong>
                 </div>
                 <div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-slate-600">
                   <span className="text-slate-400 font-medium">Base Renda:</span>
