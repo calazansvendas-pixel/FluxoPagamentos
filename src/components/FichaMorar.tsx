@@ -1863,60 +1863,116 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </div>
             </div>
 
-            {/* GRÁFICO CONSOLIDADO: PERCENTUAL DE RISCO POR FASE + INDICADORES LATERAIS/RODAPÉ */}
-            <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-4">
-              <div className="text-center">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Percentual de Risco por Fase
-                </h4>
-                <p className="text-[10px] text-slate-500 mt-0.5">
-                  Distribuição percentual do Pró-Soluto sobre a Base Líquida com ITBI
-                </p>
+            {/* GRÁFICOS CONSOLIDADOS: PERCENTUAL DE RISCO POR FASE + VOLUME FINANCEIRO POR FASE, LADO A LADO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* GRÁFICO 1: PERCENTUAL DE RISCO POR FASE */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 space-y-3 shadow-2xs">
+                <div className="text-center">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Percentual de Risco por Fase
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Distribuição percentual do Pró-Soluto sobre a Base Líquida com ITBI
+                  </p>
+                </div>
+
+                <div className="w-full h-56 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie
+                        data={pieData1}
+                        dataKey="value"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={0}
+                        outerRadius={88}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                        startAngle={270}
+                        endAngle={-90}
+                        labelLine={false}
+                        label={renderCustomizedLabel}
+                      >
+                        {pieData1.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]} />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="flex items-center justify-center gap-3 sm:gap-4 text-[11px] font-semibold text-slate-600 flex-wrap pt-1 border-t border-slate-200/60">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7] shrink-0" />
+                    <span>Total Obra</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#7c3aed] shrink-0" />
+                    <span>Total Pós-Obra</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#059669] shrink-0" />
+                    <span>Total Pró-Soluto</span>
+                  </span>
+                </div>
               </div>
 
-              {/* GRÁFICO DE PIZZA / DONUT CONSOLIDADO */}
-              <div className="w-full h-56 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RechartsPieChart>
-                    <Pie
-                      data={pieData1}
-                      dataKey="value"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={0}
-                      outerRadius={88}
-                      stroke="#ffffff"
-                      strokeWidth={2}
-                      startAngle={270}
-                      endAngle={-90}
-                      labelLine={false}
-                      label={renderCustomizedLabel}
-                    >
-                      {pieData1.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]} />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
-              </div>
+              {/* GRÁFICO 2: VOLUME FINANCEIRO POR FASE (R$) */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200/80 space-y-3 shadow-2xs">
+                <div className="text-center">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Volume Financeiro por Fase (R$)
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Distribuição em R$ do Pró-Soluto sobre a Base Líquida com ITBI
+                  </p>
+                </div>
 
-              {/* LEGENDA DAS FATIAS COM AS CORES OFICIAIS */}
-              <div className="flex items-center justify-center gap-3 sm:gap-4 text-[11px] font-semibold text-slate-600 flex-wrap pt-1 border-t border-slate-200/60">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7] shrink-0" />
-                  <span>Total Obra ({pctObra.toFixed(2)}%)</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#7c3aed] shrink-0" />
-                  <span>Total Pós-Obra ({pctPos.toFixed(2)}%)</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#059669] shrink-0" />
-                  <span>Total Pró-Soluto ({pctProSoluto.toFixed(2)}%)</span>
-                </span>
-              </div>
+                <div className="w-full h-56 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie
+                        data={pieData2}
+                        dataKey="value"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={0}
+                        outerRadius={88}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                        startAngle={270}
+                        endAngle={-90}
+                        labelLine={false}
+                        label={renderCustomizedLabel}
+                      >
+                        {pieData2.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip formatter={(value: number, name: string) => [formatCurrency(value), name]} />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </div>
 
+                <div className="flex items-center justify-center gap-3 sm:gap-4 text-[11px] font-semibold text-slate-600 flex-wrap pt-1 border-t border-slate-200/60">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7] shrink-0" />
+                    <span>Total Obra</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#7c3aed] shrink-0" />
+                    <span>Total Pós-Obra</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#059669] shrink-0" />
+                    <span>Total Pró-Soluto</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
               {/* INDICADORES CALCULADOS: 1ª PARCELA / RENDA & PRÓ-SOLUTO TOTAL EM R$ E % */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/70 text-xs">
                 {/* INDICADOR 1: 1ª PARCELA E COMPROMETIMENTO DA RENDA */}
