@@ -101,4 +101,4 @@ export interface SelectedUnit {
   unidade: string;
 }
 
-export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table';
+export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table' | 'saved-simulations';

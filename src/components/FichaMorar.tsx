@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ArrowLeft, 
   RotateCcw, 
@@ -199,7 +199,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   }, [selectedTorre, selectedUnidade]);
 
   // Limpeza completa ao trocar de produto ou condição comercial
+  const prevProdCondKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const key = currentProd ? `${currentProd.id}::${currentCond?.id || ''}` : null;
+    const isRealSwitch = prevProdCondKeyRef.current !== null && prevProdCondKeyRef.current !== key;
+    prevProdCondKeyRef.current = key;
+    // No mount inicial (ex.: reabertura de uma simulação salva via "Editar"), a torre/unidade
+    // já vêm restauradas em selectedUnits — não zera aqui, senão a seleção se perde assim que
+    // a ficha monta. Só limpa quando o usuário de fato troca de produto/condição já dentro da ficha.
+    if (!isRealSwitch) return;
+
     setSelectedTorre('');
     setSelectedUnidade('');
     setValAtoManual(null);
@@ -232,12 +241,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   }, [currentProd?.id, currentCond?.id]);
 
   const [dbUnits, setDbUnits] = useState<any[]>([]);
+  const [dbUnitsLoaded, setDbUnitsLoaded] = useState<boolean>(false);
 
   useEffect(() => {
+    setDbUnitsLoaded(false);
     const fetchUnits = () => {
       if (currentProd) {
         imoveisService.listarUnidadesPorEmpreendimento(currentProd.id).then(data => {
           setDbUnits(data || []);
+          setDbUnitsLoaded(true);
         });
       }
     };
@@ -266,6 +278,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // Validação estrita: se a torre ou unidade selecionada não estiver disponível, reseta a seleção
   useEffect(() => {
     if (!currentProd) return;
+    // Enquanto a busca das unidades no Supabase ainda está em andamento, availableTorres
+    // fica vazio momentaneamente — não podemos usar isso para invalidar uma torre/unidade
+    // já restaurada (ex.: reabertura de simulação salva), senão ela é zerada antes dos
+    // dados chegarem.
+    if (!dbUnitsLoaded) return;
 
     if (selectedTorre) {
       const isTorreValid = availableTorres.some(t => t.toLowerCase() === selectedTorre.toLowerCase());
@@ -291,7 +308,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         }
       }
     }
-  }, [availableTorres, currentProd?.id, currentCond?.id, dbUnits]);
+  }, [availableTorres, currentProd?.id, currentCond?.id, dbUnits, dbUnitsLoaded]);
 
   const filteredUnits = selectedTorre
     ? (Array.from(new Set(
@@ -1375,10 +1392,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setIsSavingSimulation(true);
     try {
       const dadosCompletos = {
+        empreendimento_id: currentProd.id,
         empreendimento_nome: currentProd.name,
+        condicao_id: currentCond?.id || '',
         condicao_nome: currentCond?.name || '',
         torre: selectedTorre || 'Não Selecionada',
         unidade: selectedUnidade || 'Não Selecionada',
+        simulation_data: simulationData,
         cliente_nome: simulationData.clientName || 'Cliente Não Informado',
         renda: income,
         preco_tabela: price,
