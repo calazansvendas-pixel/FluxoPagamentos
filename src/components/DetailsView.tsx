@@ -117,7 +117,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // Ligar/desligar cada intermediária semestral individualmente (índice ->
   // usada ou não). Ausente no mapa = usada (padrão true).
   const [pmSemestralIndividualEnabled, setPmSemestralIndividualEnabled] = useState<Record<number, boolean>>({});
-  const [pmSemestralValorManual, setPmSemestralValorManual] = useState<number | null>(null);
+  // Valor de cada intermediária semestral, editável individualmente (índice
+  // -> valor manual). Cada uma é independente das demais: editar uma não
+  // altera o valor das outras, mas entra no mesmo motor de cálculo, então
+  // dispara um novo cálculo geral do fluxo (o Ato absorve a diferença).
+  const [pmSemestralValorManual, setPmSemestralValorManual] = useState<Record<number, number>>({});
   // Data de cada intermediária semestral, editável individualmente (índice ->
   // "YYYY-MM"). Quando não há override, usa a data sugerida automaticamente.
   const [pmSemestralDatasManual, setPmSemestralDatasManual] = useState<Record<number, string>>({});
@@ -182,7 +186,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmMesesObraManual(null);
     setPmChavesEnabled(true);
     setPmSemestralIndividualEnabled({});
-    setPmSemestralValorManual(null);
+    setPmSemestralValorManual({});
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
@@ -334,7 +338,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmMesesObraManual(null);
     setPmChavesEnabled(true);
     setPmSemestralIndividualEnabled({});
-    setPmSemestralValorManual(null);
+    setPmSemestralValorManual({});
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
@@ -477,6 +481,17 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   ));
   const pmSemestraisQtdEfetiva = pmSemestraisDatasAuto.filter((_, idx) => pmSemestralIndividualEnabled[idx] !== false).length;
 
+  // Overrides de valor das intermediárias semestrais alinhados à ordem das
+  // HABILITADAS (mesmo índice usado por pm.nSemestrais/pm.valoresSemestrais
+  // no motor de cálculo) — pula as desligadas, preservando a ordem
+  // cronológica das demais.
+  const pmSemestraisEnabledIdxs = pmSemestraisDatasAuto
+    .map((_, idx) => idx)
+    .filter(idx => pmSemestralIndividualEnabled[idx] !== false);
+  const pmSemestraisValoresManuais = pmSemestraisEnabledIdxs.map(idx => (
+    pmSemestralValorManual[idx] !== undefined ? pmSemestralValorManual[idx] : null
+  ));
+
   const pmPosObraQtd = pmObraReduzida
     ? 0
     : (pmQtdPosObraManual !== null ? pmQtdPosObraManual : (currentCond?.pmQtdParcelasPosObra ?? 12));
@@ -529,7 +544,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     // Ato para existir.
     posObraValorManual: pmIsAVistaActive ? 0 : pmPosObraValorManual,
     chavesValorManual: pmIsAVistaActive ? 0 : pmChavesValorManual,
-    semestralValorManual: pmIsAVistaActive ? 0 : pmSemestralValorManual,
+    semestraisValoresManuais: pmIsAVistaActive ? [] : pmSemestraisValoresManuais,
     mensalObraValorManual: pmIsAVistaActive ? 0 : pmMensalObraValorManual,
     parcelaMinimaMensalObra: currentCond?.pmParcelaMinimaMensalObra ?? 200,
     parcelaMinimaSemestral: currentCond?.pmParcelaMinimaSemestral ?? 200,
@@ -936,7 +951,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmMesesObraManual(null);
     setPmChavesEnabled(true);
     setPmSemestralIndividualEnabled({});
-    setPmSemestralValorManual(null);
+    setPmSemestralValorManual({});
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
@@ -1179,7 +1194,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         dadosCompletos.mensais_obra_qtd = pm.nMensaisObra;
         dadosCompletos.mensais_obra_valor = pm.valorMensalObra;
         dadosCompletos.semestrais_qtd = pm.nSemestrais;
-        dadosCompletos.semestrais_valor = pm.valorSemestral;
+        dadosCompletos.semestrais_valor = pm.nSemestrais > 0 ? Math.round((pm.totalSemestrais / pm.nSemestrais) * 100) / 100 : 0;
         dadosCompletos.parcela_chaves_valor = pm.valorChaves;
         dadosCompletos.parcela_chaves_vencimento = chavesVencimentoStr;
         dadosCompletos.pos_obra_qtd = pm.qtdParcelasPosObra;
@@ -1885,6 +1900,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
                 {pmSemestraisDatas.map((dataStr, idx) => {
                   const semestralAtiva = pmSemestralIndividualEnabled[idx] !== false;
+                  const semestralRank = pmSemestraisEnabledIdxs.indexOf(idx);
+                  const semestralValorAtual = semestralRank >= 0 ? (pm.valoresSemestrais[semestralRank] ?? 0) : 0;
                   return (
                     <div key={idx} className={`p-2.5 rounded-lg border flex items-center justify-between gap-3 ${semestralAtiva ? 'bg-slate-50 border-slate-200/80' : 'bg-slate-50/60 border-slate-200/60 opacity-60'}`}>
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -1914,8 +1931,18 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                             label="Valor"
                             tipo="moeda"
                             minimo={currentCond?.pmParcelaMinimaSemestral ?? 200}
-                            value={pm.valorSemestral}
-                            onCommit={setPmSemestralValorManual}
+                            value={semestralValorAtual}
+                            onCommit={(novoValor) => {
+                              setPmSemestralValorManual(prev => {
+                                const next = { ...prev };
+                                if (novoValor === null) {
+                                  delete next[idx];
+                                } else {
+                                  next[idx] = novoValor;
+                                }
+                                return next;
+                              });
+                            }}
                             onShowToast={onShowToast}
                           />
                         </div>

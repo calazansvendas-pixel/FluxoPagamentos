@@ -1082,7 +1082,12 @@ export interface ParcelamentoMorarParams {
   // calculada a partir do saldo ainda disponível naquele ponto da cascata).
   posObraValorManual?: number | null;
   chavesValorManual?: number | null;
-  semestralValorManual?: number | null;
+  // Overrides manuais de VALOR por intermediária semestral (índice = posição
+  // entre as HABILITADAS, na ordem cronológica — mesma ordem de nSemestrais).
+  // Cada uma é editável independentemente das demais: null/undefined numa
+  // posição usa a sugestão automática só ali, sem afetar as outras; o array
+  // pode ser mais curto que `semestraisQtd` (posições ausentes = automático).
+  semestraisValoresManuais?: (number | null)[];
   mensalObraValorManual?: number | null;
 
   // Parcela mínima (R$) de cada bloco recorrente: abaixo desse piso, o bloco é
@@ -1110,7 +1115,7 @@ export interface ParcelamentoMorarResult {
   descontoAtoPremiado: number;
   saldoAPagarDireto: number;
   nSemestrais: number;
-  valorSemestral: number;
+  valoresSemestrais: number[];
   totalSemestrais: number;
   valorChaves: number;
   qtdParcelasPosObra: number;
@@ -1166,7 +1171,7 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
   let descontoAtoPremiado = 0;
   let valorMensalObra = 0;
   let valorMensalObraTotal = 0;
-  let valorSemestral = 0;
+  let valoresSemestrais: number[] = [];
   let totalSemestrais = 0;
   let valorChaves = 0;
   let valorPosObraParcela = 0;
@@ -1188,15 +1193,19 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
       : mensalObraCapRenda;
     valorMensalObraTotal = nMensaisObra > 0 ? valorMensalObra * nMensaisObra : 0;
 
-    // INTERMEDIÁRIAS SEMESTRAIS — teto de % do Valor Utilizado, valor cheio
-    // por padrão; abaixo da parcela mínima, o bloco é zerado.
-    const semestralTeto = valorUtilizado * ((p.pctSemestralMax ?? 4) / 100);
-    if (p.semestralValorManual !== null && p.semestralValorManual !== undefined) {
-      valorSemestral = Math.max(0, p.semestralValorManual);
-    } else {
-      valorSemestral = semestralTeto < parcelaMinimaSemestral ? 0 : semestralTeto;
-    }
-    totalSemestrais = nSemestrais > 0 ? valorSemestral * nSemestrais : 0;
+    // INTERMEDIÁRIAS SEMESTRAIS — teto de % do Valor Utilizado como sugestão
+    // automática (abaixo da parcela mínima, zera); cada intermediária pode
+    // ter seu valor editado manualmente de forma independente das demais —
+    // qualquer edição entra direto nesta mesma cascata iterativa, então
+    // dispara um novo cálculo geral (Ato residual, desconto do Ato Premiado
+    // etc.) sem alterar o valor das outras intermediárias.
+    const semestralTetoAuto = valorUtilizado * ((p.pctSemestralMax ?? 4) / 100);
+    const semestralValorAuto = semestralTetoAuto < parcelaMinimaSemestral ? 0 : semestralTetoAuto;
+    valoresSemestrais = Array.from({ length: nSemestrais }, (_, idx) => {
+      const override = p.semestraisValoresManuais?.[idx];
+      return (override !== null && override !== undefined) ? Math.max(0, override) : semestralValorAuto;
+    });
+    totalSemestrais = valoresSemestrais.reduce((soma, v) => soma + v, 0);
 
     // PARCELA DE CHAVES — teto de % do Valor Utilizado (pagamento único, sem
     // piso de parcela mínima); desligável, e nesse caso o teto some por
@@ -1263,7 +1272,7 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     descontoAtoPremiado: Math.round(descontoAtoPremiado * 100) / 100,
     saldoAPagarDireto: Math.round(saldoAPagarDireto * 100) / 100,
     nSemestrais,
-    valorSemestral: Math.round(valorSemestral * 100) / 100,
+    valoresSemestrais: valoresSemestrais.map(v => Math.round(v * 100) / 100),
     totalSemestrais: Math.round(totalSemestrais * 100) / 100,
     valorChaves: Math.round(valorChaves * 100) / 100,
     qtdParcelasPosObra,
