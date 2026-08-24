@@ -181,7 +181,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
       if (document.fonts?.ready) {
         await document.fonts.ready;
       }
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       // foreignObjectRendering fica explicitamente desligado: o modo baseado
       // em SVG <foreignObject> é bem menos compatível entre navegadores e,
@@ -495,7 +495,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                         <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
                         <XAxis type="number" hide />
                         <YAxis dataKey="name" type="category" width={45} tick={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                        <Bar dataKey="percRendaRaw" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={16}>
+                        <Bar dataKey="percRendaRaw" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={16} isAnimationActive={false}>
                           {barData.map((entry, idx) => (
                             <Cell key={`bar-${idx}`} fill={['#312e81', '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8'][idx % 6]} />
                           ))}
@@ -639,7 +639,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   <div className="w-28 h-28">
                     <ResponsiveContainer width="100%" height="100%">
                       <RechartsPieChart>
-                        <Pie data={pieDataPct} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={52} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderPieLabel}>
+                        <Pie data={pieDataPct} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={52} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderPieLabel} isAnimationActive={false}>
                           {pieDataPct.map((entry, idx) => <Cell key={`pct-${idx}`} fill={entry.fill} />)}
                         </Pie>
                       </RechartsPieChart>
@@ -652,7 +652,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   <div className="w-28 h-28">
                     <ResponsiveContainer width="100%" height="100%">
                       <RechartsPieChart>
-                        <Pie data={pieDataValor} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={52} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderPieLabel}>
+                        <Pie data={pieDataValor} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={52} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderPieLabel} isAnimationActive={false}>
                           {pieDataValor.map((entry, idx) => <Cell key={`valor-${idx}`} fill={entry.fill} />)}
                         </Pie>
                       </RechartsPieChart>
