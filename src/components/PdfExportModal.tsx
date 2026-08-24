@@ -403,7 +403,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             <div className="flex items-start justify-between border-b border-slate-200 pb-3 gap-4">
               <div className="space-y-1">
                 <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-                  Simulação Comercial & Ficha de Análise de Crédito
+                  Simulação Comercial
                 </h1>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
                   <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
