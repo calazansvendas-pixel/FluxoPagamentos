@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto } from '../utils/calculations';
 import { PdfExportModal } from './PdfExportModal';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -458,6 +458,24 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const mens30d = valParc2 || 0;
   const mens60d = valParc3 || 0;
   const somaMensais = mens30d + mens60d;
+
+  // Valor de "Ato (Imóvel)" (opção "À Vista") que zera exatamente o Pró-Soluto (Sinal
+  // Restante), sem tocar Financiamento/FGTS/Subsídio — ponto fixo ato* = baseAVista -
+  // desconto(ato*), calculado sobre os recursos ORIGINAIS (maxFinanc + subsidy + fgts,
+  // antes de qualquer abatimento), já descontando as mensais 30d/60d (que continuam
+  // sendo pagas à parte). A regra do Ato Premiado usada aqui (10% do Ato, capado em
+  // R$5.000, a partir de R$5.000) é a mesma de resolverTetoAtoComDesconto/
+  // calcularDescontoAtoPremiado, então a função é reaproveitada.
+  const baseAVista = hasUnitSelected
+    ? Math.max(0, price - (maxFinanc + subsidy + fgts) - somaMensais)
+    : 0;
+  const atoAposMensaisAVistaTarget = hasUnitSelected
+    ? resolverTetoAtoComDesconto(baseAVista, isAtoPremiadoEnabled)
+    : 0;
+  // valAtoManual é o Ato ANTES da absorção das mensais (mesma convenção já usada pelo
+  // onAtoChange existente do FluxoEntradaConstrutora), então somamos de volta.
+  const atoAVistaTarget = atoAposMensaisAVistaTarget + somaMensais;
+  const isAVistaActive = hasUnitSelected && valAtoManual !== null && Math.abs(valAtoManual - atoAVistaTarget) < 0.01;
 
   // Teto Máximo do Ato Imóvel: O valor máximo possível é o saldo que quita integralmente a unidade
   // atoMaximoPossivel = precoTabela - subsidio - descontoAto (usamos atoPremiadoAtual já calculado)
@@ -1487,6 +1505,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             isAtoPremiadoActive={isAtoPremiadoEnabled}
             onToggleAtoPremiado={(ativo) => {
               setIsAtoPremiadoEnabled(ativo);
+            }}
+            isAVistaActive={isAVistaActive}
+            onToggleAVista={(ativo) => {
+              // Mesmo mecanismo de um Ato (Imóvel) digitado manualmente — só que o valor
+              // é calculado automaticamente para o ponto exato que zera o Pró-Soluto
+              // (Sinal Restante), ou desfeito para voltar ao fluxo parcelado normal.
+              setValAtoManual(ativo ? atoAVistaTarget : null);
             }}
           >
             {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) */}
