@@ -112,6 +112,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [pmIntermediariasEnabled, setPmIntermediariasEnabled] = useState<boolean>(true);
   const [pmSemestralQtdManual, setPmSemestralQtdManual] = useState<number | null>(null);
   const [pmSemestralValorManual, setPmSemestralValorManual] = useState<number | null>(null);
+  // Data de cada intermediária semestral, editável individualmente (índice ->
+  // "YYYY-MM"). Quando não há override, usa a data sugerida automaticamente.
+  const [pmSemestralDatasManual, setPmSemestralDatasManual] = useState<Record<number, string>>({});
   const [pmChavesValorManual, setPmChavesValorManual] = useState<number | null>(null);
   const [pmQtdPosObraManual, setPmQtdPosObraManual] = useState<number | null>(null);
   const [pmPosObraValorManual, setPmPosObraValorManual] = useState<number | null>(null);
@@ -173,6 +176,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmIntermediariasEnabled(true);
     setPmSemestralQtdManual(null);
     setPmSemestralValorManual(null);
+    setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
@@ -323,6 +327,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmIntermediariasEnabled(true);
     setPmSemestralQtdManual(null);
     setPmSemestralValorManual(null);
+    setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
@@ -450,7 +455,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const pmSemestraisQtd = !pmIntermediariasEnabled
     ? 0
     : (pmSemestralQtdManual !== null ? pmSemestralQtdManual : pmSemestraisQtdAuto);
-  const pmSemestraisDatas = hasUnitSelected ? gerarDatasSemestrais(hojeRef, pmSemestraisQtd) : [];
+  const pmSemestraisDatasAuto = hasUnitSelected ? gerarDatasSemestrais(hojeRef, pmSemestraisQtd) : [];
+  const pmSemestraisDatas = pmSemestraisDatasAuto.map((dataAuto, idx) => (
+    pmSemestralDatasManual[idx] ? `${pmSemestralDatasManual[idx]}-01` : dataAuto
+  ));
 
   const pmPosObraQtd = pmQtdPosObraManual !== null ? pmQtdPosObraManual : (currentCond?.pmQtdParcelasPosObra ?? 12);
 
@@ -483,7 +491,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     mensalObraValorManual: pmMensalObraValorManual,
     parcelaMinimaMensalObra: currentCond?.pmParcelaMinimaMensalObra ?? 200,
     parcelaMinimaSemestral: currentCond?.pmParcelaMinimaSemestral ?? 200,
-    parcelaMinimaPosObra: currentCond?.pmParcelaMinimaPosObra ?? 200
+    parcelaMinimaPosObra: currentCond?.pmParcelaMinimaPosObra ?? 200,
+    mensaisAntecipadas: (valParc2 || 0) + (valParc3 || 0)
   });
   // "Sinal Total" no mesmo sentido do Bloco 1 do Banco Direto: o que falta do
   // valor do imóvel antes de descontar o Ato em si (Ato + este saldo = tudo
@@ -884,6 +893,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmIntermediariasEnabled(true);
     setPmSemestralQtdManual(null);
     setPmSemestralValorManual(null);
+    setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
@@ -1692,16 +1702,130 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               setValAtoManual(ativo ? atoAVistaTarget : null);
             }}
           >
-            {isParcelamentoMorar ? (
-              /* MENSAL DE OBRA: LOGO ABAIXO DO ATO (IMÓVEL) / ATO PREMIADO, EM UM ÚNICO QUADRO LARGO */
-              <div className={`p-2.5 rounded-lg border mt-1 ${pm.excedeRiscoRenda || pm.abaixoParcelaMinimaMensalObra ? 'bg-rose-50/60 border-rose-300' : 'bg-slate-50 border-slate-200/80'}`}>
+            {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) — MESMO LAYOUT EM TODAS AS CONDIÇÕES */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {/* 1ª MENSAL (30 DIAS) */}
+              <div className={`p-2.5 rounded-lg border transition-all ${
+                isExceededParc2 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
+                    isExceededParc2 ? 'text-red-900' : 'text-slate-500'
+                  }`}>
+                    1ª Mensal (30 Dias)
+                  </label>
+                </div>
+                <input
+                  id="input-primeira-mensal-30d"
+                  type="text"
+                  value={isEditingParc2 ? parc2InputText : (valParc2 > 0 ? formatCurrency(valParc2) : '')}
+                  onFocus={(e) => {
+                    setIsEditingParc2(true);
+                    setParc2InputText(valParc2 > 0 ? String(valParc2) : '');
+                    e.target.select();
+                  }}
+                  onChange={(e) => {
+                    setParc2InputText(e.target.value);
+                    const parsed = parseFlexibleCurrency(e.target.value);
+                    if (parsed >= 0) {
+                      setValParc2(parsed);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleFinishParc2Edit(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleFinishParc2Edit(parc2InputText);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  placeholder="R$ 0,00"
+                  className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
+                    isExceededParc2
+                      ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
+                      : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
+                  }`}
+                />
+                {isExceededParc2 && (
+                  <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
+                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                    <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 2ª MENSAL (60 DIAS) */}
+              <div className={`p-2.5 rounded-lg border transition-all ${
+                isExceededParc3 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
+                    isExceededParc3 ? 'text-red-900' : 'text-slate-500'
+                  }`}>
+                    2ª Mensal (60 Dias)
+                  </label>
+                </div>
+                <input
+                  id="input-segunda-mensal-60d"
+                  type="text"
+                  value={isEditingParc3 ? parc3InputText : (valParc3 > 0 ? formatCurrency(valParc3) : '')}
+                  onFocus={(e) => {
+                    setIsEditingParc3(true);
+                    setParc3InputText(valParc3 > 0 ? String(valParc3) : '');
+                    e.target.select();
+                  }}
+                  onChange={(e) => {
+                    setParc3InputText(e.target.value);
+                    const parsed = parseFlexibleCurrency(e.target.value);
+                    if (parsed >= 0) {
+                      setValParc3(parsed);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleFinishParc3Edit(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleFinishParc3Edit(parc3InputText);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  placeholder="R$ 0,00"
+                  className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
+                    isExceededParc3
+                      ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
+                      : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
+                  }`}
+                />
+                {isExceededParc3 && (
+                  <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
+                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                    <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {isParcelamentoMorar && (
+              /* MENSAL DE OBRA: EM UM QUADRO SEPARADO, LOGO ABAIXO DAS DUAS MENSAIS ACIMA */
+              <div className={`p-2.5 rounded-lg border mt-2 ${pm.excedeRiscoRenda || pm.abaixoParcelaMinimaMensalObra ? 'bg-rose-50/60 border-rose-300' : 'bg-slate-50 border-slate-200/80'}`}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Mensal de Obra ({pmMesesObraQtd}x)</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Mensal de Obra</span>
                   {pmMensalObraDataInicio && (
                     <span className="text-[9.5px] text-slate-400 font-semibold">A partir de {pmMensalObraDataInicio}</span>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">Qtd. Meses</label>
+                    <div className="relative flex items-center">
+                      <div className="w-full bg-slate-100 px-2 py-1.5 rounded-md border border-slate-200 font-bold text-slate-500 text-center text-xs">
+                        {pmMesesObraQtd}
+                      </div>
+                      <span className="absolute right-2 text-[10px] font-extrabold text-slate-400 pointer-events-none">X</span>
+                    </div>
+                  </div>
                   <PmCampoEditavel
                     label="Valor da Parcela"
                     tipo="moeda"
@@ -1729,111 +1853,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     <span>Abaixo da parcela mínima configurada na política.</span>
                   </div>
                 )}
-              </div>
-            ) : (
-              /* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) */
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                {/* 1ª MENSAL (30 DIAS) */}
-                <div className={`p-2.5 rounded-lg border transition-all ${
-                  isExceededParc2 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
-                }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
-                      isExceededParc2 ? 'text-red-900' : 'text-slate-500'
-                    }`}>
-                      1ª Mensal (30 Dias)
-                    </label>
-                  </div>
-                  <input
-                    id="input-primeira-mensal-30d"
-                    type="text"
-                    value={isEditingParc2 ? parc2InputText : (valParc2 > 0 ? formatCurrency(valParc2) : '')}
-                    onFocus={(e) => {
-                      setIsEditingParc2(true);
-                      setParc2InputText(valParc2 > 0 ? String(valParc2) : '');
-                      e.target.select();
-                    }}
-                    onChange={(e) => {
-                      setParc2InputText(e.target.value);
-                      const parsed = parseFlexibleCurrency(e.target.value);
-                      if (parsed >= 0) {
-                        setValParc2(parsed);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      handleFinishParc2Edit(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleFinishParc2Edit(parc2InputText);
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
-                      isExceededParc2
-                        ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
-                        : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
-                    }`}
-                  />
-                  {isExceededParc2 && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
-                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                      <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2ª MENSAL (60 DIAS) */}
-                <div className={`p-2.5 rounded-lg border transition-all ${
-                  isExceededParc3 ? 'bg-red-50/90 border-red-500' : 'bg-slate-50 border-slate-200/80'
-                }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={`block text-[10px] font-bold uppercase whitespace-nowrap ${
-                      isExceededParc3 ? 'text-red-900' : 'text-slate-500'
-                    }`}>
-                      2ª Mensal (60 Dias)
-                    </label>
-                  </div>
-                  <input
-                    id="input-segunda-mensal-60d"
-                    type="text"
-                    value={isEditingParc3 ? parc3InputText : (valParc3 > 0 ? formatCurrency(valParc3) : '')}
-                    onFocus={(e) => {
-                      setIsEditingParc3(true);
-                      setParc3InputText(valParc3 > 0 ? String(valParc3) : '');
-                      e.target.select();
-                    }}
-                    onChange={(e) => {
-                      setParc3InputText(e.target.value);
-                      const parsed = parseFlexibleCurrency(e.target.value);
-                      if (parsed >= 0) {
-                        setValParc3(parsed);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      handleFinishParc3Edit(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleFinishParc3Edit(parc3InputText);
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
-                      isExceededParc3
-                        ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
-                        : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
-                    }`}
-                  />
-                  {isExceededParc3 && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-50 p-1 rounded border border-rose-400">
-                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                      <span>Atenção: parcela excede 35% da renda (máx: {formatCurrency(income * 0.35)})!</span>
-                    </div>
-                  )}
-                </div>
               </div>
             )}
           </FluxoEntradaConstrutora>
@@ -1882,10 +1901,18 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 </div>
 
                 {pmIntermediariasEnabled && pmSemestraisDatas.map((dataStr, idx) => (
-                  <div key={dataStr + idx} className="p-2.5 rounded-lg border bg-slate-50 border-slate-200/80 flex items-center justify-between gap-3">
+                  <div key={idx} className="p-2.5 rounded-lg border bg-slate-50 border-slate-200/80 flex items-center justify-between gap-3">
                     <div>
-                      <span className="block text-[10px] font-bold text-slate-500 uppercase">Semestral {idx + 1}</span>
-                      <span className="block text-[9.5px] text-slate-400 font-semibold mt-0.5">{formatDateMonthYear(dataStr)}</span>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Semestral {idx + 1}</label>
+                      <input
+                        type="month"
+                        value={dataStr.slice(0, 7)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPmSemestralDatasManual(prev => ({ ...prev, [idx]: val }));
+                        }}
+                        className="bg-white px-2 py-1 rounded-md border border-slate-200 font-semibold text-slate-700 text-xs focus:outline-none focus:border-sky-600"
+                      />
                     </div>
                     <div className="w-32">
                       <PmCampoEditavel
