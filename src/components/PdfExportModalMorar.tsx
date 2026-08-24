@@ -4,6 +4,14 @@ import { CommercialCondition, Product, SimulationData } from '../types';
 import { formatCurrency, formatDateBr } from '../utils/formatters';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
+import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+
+export interface MorarPieDatum {
+  name: string;
+  value: number;
+  fill: string;
+  label: string;
+}
 
 export interface MorarFaixa {
   qtd: number;
@@ -48,6 +56,17 @@ interface PdfExportModalMorarProps {
   itbiObraValor: number;
   itbiPosQtd: number;
   itbiPosValor: number;
+  isAtoPremiadoEnabled: boolean;
+  baseLiquidaComITBI: number;
+  baseRendaInformada: number;
+  limiteMaximoRiscoRenda: number;
+  limiteMaximoProSoluto: number;
+  pctRiscoParcelaRenda: number;
+  valorRiscoParcela: number;
+  pctRiscoProSoluto: number;
+  valorRiscoProSoluto: number;
+  pieDataPct: MorarPieDatum[];
+  pieDataValor: MorarPieDatum[];
 }
 
 export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
@@ -88,11 +107,35 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
   itbiObraValor,
   itbiPosQtd,
   itbiPosValor,
+  isAtoPremiadoEnabled,
+  baseLiquidaComITBI,
+  baseRendaInformada,
+  limiteMaximoRiscoRenda,
+  limiteMaximoProSoluto,
+  pctRiscoParcelaRenda,
+  valorRiscoParcela,
+  pctRiscoProSoluto,
+  valorRiscoProSoluto,
+  pieDataPct,
+  pieDataValor,
 }) => {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, payload }: any) => {
+    if (payload.value <= 0) return null;
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (
+      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="normal">
+        {payload.label}
+      </text>
+    );
+  };
 
   const sanitizeFileName = (str: string) => {
     return (str || '')
@@ -237,14 +280,6 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
             {/* 1. TOPO: LOGO / CABEÇALHO DA CONSTRUTORA & EMPREENDIMENTO */}
             <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-3">
               <div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="px-2 py-0.5 bg-sky-600 text-white rounded text-[10px] font-extrabold uppercase tracking-wider">
-                    CALAZANS IMOB
-                  </span>
-                  <span className="px-2 py-0.5 bg-slate-800 text-white rounded text-[10px] font-extrabold uppercase tracking-wider">
-                    PADRÃO MORAR
-                  </span>
-                </div>
                 <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
                   Ficha de Análise Comercial
                 </h1>
@@ -390,7 +425,9 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
-                      <span className="text-slate-600 font-medium">Desconto (Ato Premiado):</span>
+                      <span className="text-slate-600 font-medium">
+                        Ato Premiado: <strong className={isAtoPremiadoEnabled ? 'text-emerald-700' : 'text-slate-500'}>{isAtoPremiadoEnabled ? 'Ativo' : 'Não Utilizado'}</strong>
+                      </span>
                       <strong className="text-emerald-600 font-semibold">{formatCurrency(desconto)}</strong>
                     </div>
 
@@ -538,6 +575,82 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
 
               </div>
 
+            </div>
+
+            {/* 3. INDICADORES DE RISCO / COMPROMETIMENTO (GRÁFICOS) */}
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-1.5 gap-1">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                  Indicadores de Risco / Comprometimento
+                </h3>
+                <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium">
+                  <span>Base Líq. c/ ITBI: <strong className="text-slate-800">{formatCurrency(baseLiquidaComITBI)}</strong></span>
+                  <span>•</span>
+                  <span>Base Renda: <strong className="text-slate-800">{formatCurrency(baseRendaInformada)}</strong></span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase mb-1">Percentual de Risco por Fase</span>
+                  <div className="w-28 h-28">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie data={pieDataPct} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={52} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderPieLabel}>
+                          {pieDataPct.map((entry, idx) => <Cell key={`pct-${idx}`} fill={entry.fill} />)}
+                        </Pie>
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase mb-1">Volume Financeiro por Fase (R$)</span>
+                  <div className="w-28 h-28">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie data={pieDataValor} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={52} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderPieLabel}>
+                          {pieDataValor.map((entry, idx) => <Cell key={`valor-${idx}`} fill={entry.fill} />)}
+                        </Pie>
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 text-[10px] font-medium text-slate-500 flex-wrap pt-1 border-t border-slate-200/60">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#0284C7]" />Total Obra</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#7C3AED]" />Total Pós-Obra</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#059669]" />Total Pró-Soluto</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100 space-y-0.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">1ª Parcela:</span>
+                    <strong className="text-slate-900 font-bold">{formatCurrency(valorRiscoParcela)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Comprometimento da Renda:</span>
+                    <strong className={`font-bold ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'text-red-600' : 'text-sky-700'}`}>
+                      {pctRiscoParcelaRenda < 10 && pctRiscoParcelaRenda > 0 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%
+                    </strong>
+                  </div>
+                </div>
+                <div className="bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100 space-y-0.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Pró-Soluto Total (R$):</span>
+                    <strong className="text-slate-900 font-bold">{formatCurrency(valorRiscoProSoluto)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Pró-Soluto Total (%):</span>
+                    <strong className={`font-bold ${pctRiscoProSoluto > limiteMaximoProSoluto ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {pctRiscoProSoluto < 10 && pctRiscoProSoluto > 0 ? pctRiscoProSoluto.toFixed(2) : pctRiscoProSoluto.toFixed(2)}%
+                    </strong>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* RODAPÉ OFICIAL MORAR / CAIXA */}

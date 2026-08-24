@@ -2592,6 +2592,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           itbiObraValor={itbiParcelaObraValor}
           itbiPosQtd={itbiPosQtd}
           itbiPosValor={itbiParcelaPosValor}
+          isAtoPremiadoEnabled={isAtoPremiadoEnabled}
+          baseLiquidaComITBI={baseLiquidaComITBI}
+          baseRendaInformada={baseRendaInformada}
+          limiteMaximoRiscoRenda={limiteMaximoRiscoRenda}
+          limiteMaximoProSoluto={limiteMaximoProSoluto}
+          pctRiscoParcelaRenda={pctRiscoParcelaRenda}
+          valorRiscoParcela={valorRiscoParcela}
+          pctRiscoProSoluto={pctRiscoProSoluto}
+          valorRiscoProSoluto={valorRiscoProSoluto}
+          pieDataPct={pieData1}
+          pieDataValor={pieData2}
         />
       )}
 
