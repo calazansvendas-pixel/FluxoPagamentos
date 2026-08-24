@@ -1028,7 +1028,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     if (clampedPct >= 100) {
       return (
         <svg
-          className="w-32 h-32 sm:w-40 sm:h-40 mx-auto select-none overflow-visible block"
+          className="w-36 h-36 sm:w-44 sm:h-44 mx-auto select-none overflow-visible block"
           viewBox="-10 -10 120 120"
         >
           <circle cx={cx} cy={cy} r={r} fill={colorPrimary} />
@@ -1050,7 +1050,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     if (clampedPct <= 0) {
       return (
         <svg
-          className="w-32 h-32 sm:w-40 sm:h-40 mx-auto select-none overflow-visible block"
+          className="w-36 h-36 sm:w-44 sm:h-44 mx-auto select-none overflow-visible block"
           viewBox="-10 -10 120 120"
         >
           <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
@@ -1099,7 +1099,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
     return (
       <svg
-        className="w-32 h-32 sm:w-40 sm:h-40 mx-auto select-none overflow-visible block"
+        className="w-36 h-36 sm:w-44 sm:h-44 mx-auto select-none overflow-visible block"
         viewBox="-12 -12 124 124"
       >
         {/* Fatia 2 (Círculo de Fundo Neutro / Saldo Livre) */}
