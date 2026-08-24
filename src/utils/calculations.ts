@@ -1127,109 +1127,129 @@ export interface ParcelamentoMorarResult {
 }
 
 /**
- * Motor de cálculo da condição "Parcelamento Morar": Sinal (Ato) mínimo de
- * X% do valor do imóvel, Ato Premiado pela mesma fórmula já usada nas demais
- * condições, e o saldo restante dividido em parcelas mensais lineares
- * (obra), intermediárias semestrais e uma parcela final (chaves) — todas
- * limitadas a um percentual do valor do imóvel definido na política — e
- * parcelas mensais pós-obra, limitadas ao teto de pró-soluto pós-obra da
- * política. A ordem de reserva é Sinal → Pós-Obra → Chaves → Semestrais →
- * Mensais de Obra (o que sobrar): é essa ordem que reproduz o exemplo
- * numérico oficial da condição comercial, e também é o que garante que o
- * período de Obra nunca fica zerado por causa da parcela mínima de outro
- * bloco — ele é sempre o último a receber, então qualquer bloco anterior
- * zerado por ficar abaixo do piso simplesmente libera mais saldo para a Obra.
+ * Motor de cálculo da condição "Parcelamento Morar" — replica a lógica da
+ * planilha oficial usada pela Morar (fluxo direto): cada bloco recorrente é
+ * calculado de forma INDEPENDENTE, sempre no seu teto máximo configurado na
+ * política (a menos que editado manualmente na ficha):
+ *   - Mensal de Obra: limitada por % da RENDA (padrão 40%) — é um teto
+ *     rígido, não apenas um aviso.
+ *   - Semestrais, Chaves e Pós-Obra: limitados por % do "Valor Utilizado"
+ *     (Preço de Tabela menos o Desconto do Ato Premiado; o financiamento
+ *     bancário eventual também é descontado, embora esta condição
+ *     normalmente não o utilize).
+ * O Ato (Sinal) é o bloco RESIDUAL: recebe o que sobra do Valor Utilizado
+ * depois de reservados os tetos de todos os demais blocos, nunca abaixo do
+ * Sinal Mínimo da política. Como o Desconto do Ato Premiado depende do
+ * próprio Ato, e o Valor Utilizado depende do Desconto, a resolução é
+ * iterativa (ponto fixo), mesmo padrão de referência circular já usado em
+ * outros pontos do app.
  */
 export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): ParcelamentoMorarResult {
   const price = Math.max(0, p.price || 0);
   const recursos = Math.max(0, p.recursos || 0);
+  const renda = Math.max(0, p.renda || 0);
 
   const sinalMinimoCalculado = Math.round(price * ((p.pctSinalMinimo ?? 10) / 100) * 100) / 100;
-  const atoEfetivoBruto = (p.valAtoManual !== null && p.valAtoManual >= sinalMinimoCalculado)
-    ? p.valAtoManual
-    : sinalMinimoCalculado;
 
-  // 1ª/2ª Mensal (30/60 dias): abatem primeiro do Ato, até o piso mínimo
-  // (sinalMinimoCalculado) — só o que sobrar depois disso reduz o saldo a
-  // parcelar diretamente. O desconto do Ato Premiado é calculado sobre o Ato
-  // JÁ com esse abatimento aplicado (mesma ordem usada nas demais condições).
+  const nMensaisObra = Math.max(0, Math.round(p.mesesObraQtd || 0));
+  const nSemestrais = Math.max(0, Math.round(p.semestraisQtd || 0));
+  const qtdParcelasPosObra = Math.max(0, Math.round(p.posObraQtd || 0));
+  const chavesHabilitada = p.chavesHabilitada !== false;
+
+  const parcelaMinimaMensalObra = Math.max(0, p.parcelaMinimaMensalObra ?? 200);
+  const parcelaMinimaSemestral = Math.max(0, p.parcelaMinimaSemestral ?? 200);
+  const parcelaMinimaPosObra = Math.max(0, p.parcelaMinimaPosObra ?? 200);
+
   const mensaisAntecipadas = Math.max(0, p.mensaisAntecipadas || 0);
-  const disponivelAbatimentoAto = Math.max(0, atoEfetivoBruto - sinalMinimoCalculado);
-  const atoAbsorvidoAntecipadas = Math.min(disponivelAbatimentoAto, mensaisAntecipadas);
-  const atoAposAntecipadas = atoEfetivoBruto - atoAbsorvidoAntecipadas;
-  const antecipadasRestante = mensaisAntecipadas - atoAbsorvidoAntecipadas;
 
-  const descontoAtoPremiado = p.isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoAposAntecipadas) : 0;
+  let atoAposAntecipadas = sinalMinimoCalculado;
+  let descontoAtoPremiado = 0;
+  let valorMensalObra = 0;
+  let valorMensalObraTotal = 0;
+  let valorSemestral = 0;
+  let totalSemestrais = 0;
+  let valorChaves = 0;
+  let valorPosObraParcela = 0;
+  let valorPosObraTotal = 0;
+  let antecipadasRestante = 0;
+
+  // 40 iterações convergem com folga: a taxa de desconto do Ato Premiado
+  // (10%) atua como fator de contração, reduzindo o erro pela metade (na
+  // prática, por 10x) a cada passo.
+  for (let iter = 0; iter < 40; iter++) {
+    descontoAtoPremiado = p.isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoAposAntecipadas) : 0;
+    const valorUtilizado = Math.max(0, price - descontoAtoPremiado - recursos);
+
+    // MENSAL DE OBRA — teto rígido de % da renda (padrão 40%), usado no valor
+    // cheio por padrão (nunca zerada pela parcela mínima — apenas avisada).
+    const mensalObraCapRenda = renda > 0 ? renda * ((p.pctRiscoRenda ?? 40) / 100) : 0;
+    valorMensalObra = (p.mensalObraValorManual !== null && p.mensalObraValorManual !== undefined)
+      ? Math.max(0, p.mensalObraValorManual)
+      : mensalObraCapRenda;
+    valorMensalObraTotal = nMensaisObra > 0 ? valorMensalObra * nMensaisObra : 0;
+
+    // INTERMEDIÁRIAS SEMESTRAIS — teto de % do Valor Utilizado, valor cheio
+    // por padrão; abaixo da parcela mínima, o bloco é zerado.
+    const semestralTeto = valorUtilizado * ((p.pctSemestralMax ?? 4) / 100);
+    if (p.semestralValorManual !== null && p.semestralValorManual !== undefined) {
+      valorSemestral = Math.max(0, p.semestralValorManual);
+    } else {
+      valorSemestral = semestralTeto < parcelaMinimaSemestral ? 0 : semestralTeto;
+    }
+    totalSemestrais = nSemestrais > 0 ? valorSemestral * nSemestrais : 0;
+
+    // PARCELA DE CHAVES — teto de % do Valor Utilizado (pagamento único, sem
+    // piso de parcela mínima); desligável, e nesse caso o teto some por
+    // completo (o Ato absorve o que sobrar).
+    const chavesTeto = valorUtilizado * ((p.pctChavesMax ?? 15) / 100);
+    if (!chavesHabilitada) {
+      valorChaves = 0;
+    } else if (p.chavesValorManual !== null && p.chavesValorManual !== undefined) {
+      valorChaves = Math.max(0, p.chavesValorManual);
+    } else {
+      valorChaves = chavesTeto;
+    }
+
+    // PÓS-OBRA — teto total de % do Valor Utilizado, dividido pela
+    // quantidade de parcelas; abaixo da parcela mínima, o bloco é zerado.
+    if (qtdParcelasPosObra > 0) {
+      const posObraTetoTotal = valorUtilizado * ((p.pctPosObraMax ?? 5) / 100);
+      const natural = posObraTetoTotal / qtdParcelasPosObra;
+      valorPosObraParcela = (p.posObraValorManual !== null && p.posObraValorManual !== undefined)
+        ? Math.max(0, p.posObraValorManual)
+        : (natural < parcelaMinimaPosObra ? 0 : natural);
+      valorPosObraTotal = valorPosObraParcela * qtdParcelasPosObra;
+    } else {
+      valorPosObraParcela = 0;
+      valorPosObraTotal = 0;
+    }
+
+    const somaDemaisBlocos = valorMensalObraTotal + totalSemestrais + valorChaves + valorPosObraTotal;
+    const atoResidual = valorUtilizado - somaDemaisBlocos;
+    const atoBrutoPreAntecipadas = (p.valAtoManual !== null && p.valAtoManual >= sinalMinimoCalculado)
+      ? p.valAtoManual
+      : Math.max(sinalMinimoCalculado, atoResidual);
+
+    // 1ª/2ª Mensal (30/60 dias): abatem primeiro do Ato, até o piso mínimo
+    // (sinalMinimoCalculado) — o que não couber fica em antecipadasRestante.
+    const disponivelAbatimentoAto = Math.max(0, atoBrutoPreAntecipadas - sinalMinimoCalculado);
+    const atoAbsorvidoAntecipadas = Math.min(disponivelAbatimentoAto, mensaisAntecipadas);
+    atoAposAntecipadas = atoBrutoPreAntecipadas - atoAbsorvidoAntecipadas;
+    antecipadasRestante = mensaisAntecipadas - atoAbsorvidoAntecipadas;
+  }
+
+  // Antecipadas que não couberam no abatimento do Ato (raro: Ato já no piso
+  // mínimo) reduzem o total das Mensais de Obra.
+  if (antecipadasRestante > 0) {
+    valorMensalObraTotal = Math.max(0, valorMensalObraTotal - antecipadasRestante);
+    valorMensalObra = nMensaisObra > 0 ? valorMensalObraTotal / nMensaisObra : 0;
+  }
+
   const atoMaximoPossivel = Math.max(0, price - recursos - descontoAtoPremiado);
   const atoEfetivo = Math.min(atoAposAntecipadas, atoMaximoPossivel);
+  const saldoAPagarDireto = valorMensalObraTotal + totalSemestrais + valorChaves + valorPosObraTotal;
 
-  const saldoAPagarDireto = Math.max(0, (price - descontoAtoPremiado) - recursos - atoEfetivo - antecipadasRestante);
-
-  const qtdParcelasPosObra = Math.max(0, Math.round(p.posObraQtd || 0));
-  const nSemestrais = Math.max(0, Math.round(p.semestraisQtd || 0));
-  const nMensaisObra = Math.max(0, Math.round(p.mesesObraQtd || 0));
-
-  const parcelaMinimaPosObra = Math.max(0, p.parcelaMinimaPosObra ?? 200);
-  const parcelaMinimaSemestral = Math.max(0, p.parcelaMinimaSemestral ?? 200);
-  const parcelaMinimaMensalObra = Math.max(0, p.parcelaMinimaMensalObra ?? 200);
-
-  let restante = saldoAPagarDireto;
-
-  // 1) PÓS-OBRA
-  const posObraTeto = Math.round(price * ((p.pctPosObraMax ?? 5) / 100) * 100) / 100;
-  let valorPosObraParcela = 0;
-  if (p.posObraValorManual !== null && p.posObraValorManual !== undefined) {
-    valorPosObraParcela = Math.max(0, p.posObraValorManual);
-  } else if (qtdParcelasPosObra > 0 && restante > 0) {
-    const natural = Math.min(posObraTeto, restante) / qtdParcelasPosObra;
-    valorPosObraParcela = natural >= parcelaMinimaPosObra ? Math.round(natural * 100) / 100 : 0;
-  }
-  const valorPosObraTotal = qtdParcelasPosObra > 0
-    ? Math.min(Math.round(valorPosObraParcela * qtdParcelasPosObra * 100) / 100, restante)
-    : 0;
-  restante = Math.max(0, restante - valorPosObraTotal);
-
-  // 2) CHAVES (parcela única — sem piso de "parcela mínima", é um pagamento só;
-  // desligável — quando desligada, o saldo que seria dela segue na cascata)
-  const chavesHabilitada = p.chavesHabilitada !== false;
-  const chavesTeto = Math.round(price * ((p.pctChavesMax ?? 15) / 100) * 100) / 100;
-  const valorChaves = !chavesHabilitada
-    ? 0
-    : (p.chavesValorManual !== null && p.chavesValorManual !== undefined)
-      ? Math.min(Math.max(0, p.chavesValorManual), restante)
-      : Math.min(chavesTeto, restante);
-  restante = Math.max(0, restante - valorChaves);
-
-  // 3) INTERMEDIÁRIAS SEMESTRAIS
-  const semestralTeto = Math.round(price * ((p.pctSemestralMax ?? 4) / 100) * 100) / 100;
-  let valorSemestral = 0;
-  if (p.semestralValorManual !== null && p.semestralValorManual !== undefined) {
-    valorSemestral = Math.max(0, p.semestralValorManual);
-  } else if (nSemestrais > 0 && restante > 0) {
-    const natural = Math.min(semestralTeto, restante / nSemestrais);
-    valorSemestral = natural >= parcelaMinimaSemestral ? Math.round(natural * 100) / 100 : 0;
-  }
-  const totalSemestrais = nSemestrais > 0
-    ? Math.min(Math.round(valorSemestral * nSemestrais * 100) / 100, restante)
-    : 0;
-  restante = Math.max(0, restante - totalSemestrais);
-
-  // 4) MENSAIS DE OBRA (residual — nunca zerado pela parcela mínima, é a
-  // prioridade da cascata; só fica com o que sobrar)
-  let valorMensalObra: number;
-  let valorMensalObraTotal: number;
-  if (p.mensalObraValorManual !== null && p.mensalObraValorManual !== undefined) {
-    valorMensalObra = Math.max(0, p.mensalObraValorManual);
-    valorMensalObraTotal = nMensaisObra > 0
-      ? Math.min(Math.round(valorMensalObra * nMensaisObra * 100) / 100, restante)
-      : 0;
-  } else {
-    valorMensalObraTotal = restante;
-    valorMensalObra = nMensaisObra > 0 ? Math.round((valorMensalObraTotal / nMensaisObra) * 100) / 100 : 0;
-  }
   const abaixoParcelaMinimaMensalObra = nMensaisObra > 0 && valorMensalObra > 0 && valorMensalObra < parcelaMinimaMensalObra - 0.005;
-
-  const renda = Math.max(0, p.renda || 0);
   const pctRendaMensalObra = renda > 0 ? (valorMensalObra / renda) * 100 : 0;
   const excedeRiscoRenda = renda > 0 && valorMensalObra > renda * ((p.pctRiscoRenda ?? 40) / 100) + 0.01;
 
@@ -1238,24 +1258,24 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
 
   return {
     sinalMinimoCalculado,
-    atoEfetivo,
-    atoMaximoPossivel,
-    descontoAtoPremiado,
-    saldoAPagarDireto,
+    atoEfetivo: Math.round(atoEfetivo * 100) / 100,
+    atoMaximoPossivel: Math.round(atoMaximoPossivel * 100) / 100,
+    descontoAtoPremiado: Math.round(descontoAtoPremiado * 100) / 100,
+    saldoAPagarDireto: Math.round(saldoAPagarDireto * 100) / 100,
     nSemestrais,
-    valorSemestral,
-    totalSemestrais,
-    valorChaves,
+    valorSemestral: Math.round(valorSemestral * 100) / 100,
+    totalSemestrais: Math.round(totalSemestrais * 100) / 100,
+    valorChaves: Math.round(valorChaves * 100) / 100,
     qtdParcelasPosObra,
-    valorPosObraTotal,
-    valorPosObraParcela,
+    valorPosObraTotal: Math.round(valorPosObraTotal * 100) / 100,
+    valorPosObraParcela: Math.round(valorPosObraParcela * 100) / 100,
     nMensaisObra,
-    valorMensalObraTotal,
-    valorMensalObra,
+    valorMensalObraTotal: Math.round(valorMensalObraTotal * 100) / 100,
+    valorMensalObra: Math.round(valorMensalObra * 100) / 100,
     pctRendaMensalObra,
     excedeRiscoRenda,
     abaixoParcelaMinimaMensalObra,
-    subtotalAteChaves,
+    subtotalAteChaves: Math.round(subtotalAteChaves * 100) / 100,
     pctSubtotalAteChaves
   };
 }

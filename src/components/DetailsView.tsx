@@ -487,6 +487,25 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const pmPosObraDataInicioStr = (hasUnitSelected && deliveryDateRaw) ? subtractMonthsFromDate(deliveryDateRaw, -1) : '';
   const pmPosObraDataInicio = pmPosObraDataInicioStr ? formatDateMonthYear(pmPosObraDataInicioStr) : '';
 
+  // Valor de "Ato (Imóvel)" (opção "À Vista") que quita tudo de uma vez,
+  // trazendo o saldo inteiro para o Ato — mesmo mecanismo do Banco Direto:
+  // ponto fixo ato* = base - desconto(ato*), calculado sobre o financiamento
+  // bancário eventual (maxFinanc) já descontando as mensais 30d/60d (que
+  // continuam sendo pagas à parte e são somadas de volta ao final, mesma
+  // convenção de valAtoManual). Precisa ser calculado ANTES do motor porque,
+  // quando ativo, ele também zera os demais blocos (ver chamada abaixo) —
+  // no motor novo eles não são mais "o que sobra do Ato", são calculados de
+  // forma independente, então só reduzir o Ato não bastaria para esvaziá-los.
+  const pmMensaisAntecipadas = (valParc2 || 0) + (valParc3 || 0);
+  const pmBaseAVista = hasUnitSelected
+    ? Math.max(0, price - maxFinanc - pmMensaisAntecipadas)
+    : 0;
+  const pmAtoAposAntecipadasAVistaTarget = hasUnitSelected
+    ? resolverTetoAtoComDesconto(pmBaseAVista, isAtoPremiadoEnabled)
+    : 0;
+  const pmAtoAVistaTarget = pmAtoAposAntecipadasAVistaTarget + pmMensaisAntecipadas;
+  const pmIsAVistaActive = hasUnitSelected && valAtoManual !== null && Math.abs(valAtoManual - pmAtoAVistaTarget) < 0.01;
+
   const pm = calcularParcelamentoMorar({
     price,
     renda: income,
@@ -503,36 +522,24 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     pctSemestralMax: currentCond?.pmParcelaSemestralMaxPct ?? 4,
     pctChavesMax: currentCond?.pmParcelaChavesMaxPct ?? 15,
     pctPosObraMax: currentCond?.pmRiscoProSolutoPosObraPct ?? 5,
-    posObraValorManual: pmPosObraValorManual,
-    chavesValorManual: pmChavesValorManual,
-    semestralValorManual: pmSemestralValorManual,
-    mensalObraValorManual: pmMensalObraValorManual,
+    // "À Vista" ativo: zera os demais blocos (todo o saldo já foi
+    // direcionado para o Ato acima) — do contrário eles continuariam
+    // usando seus tetos normais, já que no motor novo não dependem mais do
+    // Ato para existir.
+    posObraValorManual: pmIsAVistaActive ? 0 : pmPosObraValorManual,
+    chavesValorManual: pmIsAVistaActive ? 0 : pmChavesValorManual,
+    semestralValorManual: pmIsAVistaActive ? 0 : pmSemestralValorManual,
+    mensalObraValorManual: pmIsAVistaActive ? 0 : pmMensalObraValorManual,
     parcelaMinimaMensalObra: currentCond?.pmParcelaMinimaMensalObra ?? 200,
     parcelaMinimaSemestral: currentCond?.pmParcelaMinimaSemestral ?? 200,
     parcelaMinimaPosObra: currentCond?.pmParcelaMinimaPosObra ?? 200,
-    mensaisAntecipadas: (valParc2 || 0) + (valParc3 || 0),
-    chavesHabilitada: pmChavesEnabled
+    mensaisAntecipadas: pmMensaisAntecipadas,
+    chavesHabilitada: pmIsAVistaActive ? false : pmChavesEnabled
   });
   // "Sinal Total" no mesmo sentido do Bloco 1 do Banco Direto: o que falta do
   // valor do imóvel antes de descontar o Ato em si (Ato + este saldo = tudo
   // que precisa ser pago fora do Ato: mensais de obra + semestrais + chaves).
   const pmSinalTotal = pm.saldoAPagarDireto + pm.atoEfetivo;
-
-  // Valor de "Ato (Imóvel)" (opção "À Vista") que zera o saldo a parcelar
-  // (mensais de obra + semestrais + chaves + pós-obra), trazendo tudo para o
-  // Ato — mesmo mecanismo do Banco Direto: ponto fixo ato* = base -
-  // desconto(ato*), calculado sobre o financiamento bancário eventual
-  // (maxFinanc) já descontando as mensais 30d/60d (que continuam sendo pagas
-  // à parte e são somadas de volta ao final, mesma convenção de valAtoManual).
-  const pmMensaisAntecipadas = (valParc2 || 0) + (valParc3 || 0);
-  const pmBaseAVista = hasUnitSelected
-    ? Math.max(0, price - maxFinanc - pmMensaisAntecipadas)
-    : 0;
-  const pmAtoAposAntecipadasAVistaTarget = hasUnitSelected
-    ? resolverTetoAtoComDesconto(pmBaseAVista, isAtoPremiadoEnabled)
-    : 0;
-  const pmAtoAVistaTarget = pmAtoAposAntecipadasAVistaTarget + pmMensaisAntecipadas;
-  const pmIsAVistaActive = hasUnitSelected && valAtoManual !== null && Math.abs(valAtoManual - pmAtoAVistaTarget) < 0.01;
 
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
