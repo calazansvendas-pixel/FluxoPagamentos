@@ -1876,7 +1876,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   </p>
                 </div>
 
-                <div className="w-36 h-36 sm:w-44 sm:h-44 mx-auto flex items-center justify-center">
+                <div className="w-40 h-40 sm:w-48 sm:h-48 mx-auto flex items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
                     <RechartsPieChart>
                       <Pie
@@ -1885,7 +1885,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         cx="50%"
                         cy="50%"
                         innerRadius={0}
-                        outerRadius={58}
+                        outerRadius={64}
                         stroke="#ffffff"
                         strokeWidth={2}
                         startAngle={270}
@@ -1929,7 +1929,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   </p>
                 </div>
 
-                <div className="w-36 h-36 sm:w-44 sm:h-44 mx-auto flex items-center justify-center">
+                <div className="w-40 h-40 sm:w-48 sm:h-48 mx-auto flex items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
                     <RechartsPieChart>
                       <Pie
@@ -1938,7 +1938,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         cx="50%"
                         cy="50%"
                         innerRadius={0}
-                        outerRadius={58}
+                        outerRadius={64}
                         stroke="#ffffff"
                         strokeWidth={2}
                         startAngle={270}
@@ -2545,10 +2545,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             {/* Gráfico 1: Percentual */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
               <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-2 tracking-wide">Percentual de Risco por Fase</h4>
-              <div className="w-36 h-36 sm:w-44 sm:h-44 mx-auto">
+              <div className="w-40 h-40 sm:w-48 sm:h-48 mx-auto">
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPieChart>
-                    <Pie data={pieData1} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={58} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderCustomizedLabel}>
+                    <Pie data={pieData1} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={64} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderCustomizedLabel}>
                       {pieData1.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                     </Pie>
                     <RechartsTooltip formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name]} />
@@ -2565,10 +2565,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             {/* Gráfico 2: Valor R$ */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
               <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-2 tracking-wide">Volume Financeiro por Fase (R$)</h4>
-              <div className="w-36 h-36 sm:w-44 sm:h-44 mx-auto">
+              <div className="w-40 h-40 sm:w-48 sm:h-48 mx-auto">
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPieChart>
-                    <Pie data={pieData2} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={58} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderCustomizedLabel}>
+                    <Pie data={pieData2} dataKey="value" cx="50%" cy="50%" innerRadius={0} outerRadius={64} stroke="#ffffff" strokeWidth={2} startAngle={270} endAngle={-90} labelLine={false} label={renderCustomizedLabel}>
                       {pieData2.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                     </Pie>
                     <RechartsTooltip formatter={(value: number, name: string) => [formatCurrency(value), name]} />
