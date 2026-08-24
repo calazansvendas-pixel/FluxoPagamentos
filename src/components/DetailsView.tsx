@@ -1626,7 +1626,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             </div>
           </div>
 
-          {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO (REPOSICIONADO NA COLUNA ESQUERDA) */}
+          {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO (REPOSICIONADO NA COLUNA ESQUERDA) —
+              no Parcelamento Morar, substituído pelo gráfico "Percentuais de Comprometimento"
+              logo abaixo, que já cobre Mensal de Obra/Renda e Subtotal Até as Chaves. */}
+          {!isParcelamentoMorar && (
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
             {/* Cabeçalho de Bases Compartilhadas */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
@@ -1717,6 +1720,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
             </div>
           </div>
+          )}
 
           {/* GRÁFICO: PERCENTUAIS DE COMPROMETIMENTO POR GRUPO (SINAL, MENSAIS, INTERMEDIÁRIAS, CHAVES, PÓS-OBRA) */}
           {pmComprometimentoData.length > 0 && (
