@@ -1344,7 +1344,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
     return (
-      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize="13" fontWeight="bold">
+      <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize="11" fontWeight="normal">
         {payload.label}
       </text>
     );
