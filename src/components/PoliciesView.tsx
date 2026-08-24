@@ -395,9 +395,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const pmParcelaChavesMesesAntes = Math.max(0, parseInt(pmChavesMesesAntesStr, 10) || 0);
   const pmRiscoProSolutoPosObraPct = parseDecimal(pmPosObraMaxStr, 5.0);
   const pmQtdParcelasPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
-  const pmParcelaMinimaMensalObraNum = (() => { const v = parseCurrency(pmParcelaMinMensalObra); return v > 0 ? v : 200; })();
-  const pmParcelaMinimaSemestralNum = (() => { const v = parseCurrency(pmParcelaMinSemestral); return v > 0 ? v : 200; })();
-  const pmParcelaMinimaPosObraNum = (() => { const v = parseCurrency(pmParcelaMinPosObra); return v > 0 ? v : 200; })();
+  // Piso 0 é um valor válido (indica que o bloco nunca é zerado por parcela
+  // mínima) — não cai de volta para 200 como um valor "inválido".
+  const pmParcelaMinimaMensalObraNum = Math.max(0, parseCurrency(pmParcelaMinMensalObra));
+  const pmParcelaMinimaSemestralNum = Math.max(0, parseCurrency(pmParcelaMinSemestral));
+  const pmParcelaMinimaPosObraNum = Math.max(0, parseCurrency(pmParcelaMinPosObra));
 
   // Reúne os valores atualmente em edição no formulário como um objeto de
   // parâmetros de política de crédito — usado para gravar tanto na condição
@@ -654,9 +656,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedPmChavesMesesAntes = Math.max(0, parseInt(pmChavesMesesAntesStr, 10) || 0);
     const parsedPmPosObra = parseDecimal(pmPosObraMaxStr, 5.0);
     const parsedPmQtdPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
-    const parsedPmMinMensalObra = (() => { const v = parseCurrency(pmParcelaMinMensalObra); return v > 0 ? v : 200; })();
-    const parsedPmMinSemestral = (() => { const v = parseCurrency(pmParcelaMinSemestral); return v > 0 ? v : 200; })();
-    const parsedPmMinPosObra = (() => { const v = parseCurrency(pmParcelaMinPosObra); return v > 0 ? v : 200; })();
+    // Piso 0 é um valor válido (indica que o bloco nunca é zerado por parcela
+    // mínima) — não cai de volta para 200 como um valor "inválido".
+    const parsedPmMinMensalObra = Math.max(0, parseCurrency(pmParcelaMinMensalObra));
+    const parsedPmMinSemestral = Math.max(0, parseCurrency(pmParcelaMinSemestral));
+    const parsedPmMinPosObra = Math.max(0, parseCurrency(pmParcelaMinPosObra));
 
     // Atualiza a formatação visual dos inputs ao salvar
     setNumParcelasStr(String(isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas));
@@ -1668,8 +1672,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => setPmParcelaMinMensalObra(e.target.value)}
                       onBlur={() => {
-                        const v = parseCurrency(pmParcelaMinMensalObra);
-                        setPmParcelaMinMensalObra(formatCurrency(v > 0 ? v : 200));
+                        const v = Math.max(0, parseCurrency(pmParcelaMinMensalObra));
+                        setPmParcelaMinMensalObra(formatCurrency(v));
                       }}
                       className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
                     />
@@ -1688,8 +1692,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => setPmParcelaMinSemestral(e.target.value)}
                       onBlur={() => {
-                        const v = parseCurrency(pmParcelaMinSemestral);
-                        setPmParcelaMinSemestral(formatCurrency(v > 0 ? v : 200));
+                        const v = Math.max(0, parseCurrency(pmParcelaMinSemestral));
+                        setPmParcelaMinSemestral(formatCurrency(v));
                       }}
                       className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
                     />
@@ -1708,8 +1712,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => setPmParcelaMinPosObra(e.target.value)}
                       onBlur={() => {
-                        const v = parseCurrency(pmParcelaMinPosObra);
-                        setPmParcelaMinPosObra(formatCurrency(v > 0 ? v : 200));
+                        const v = Math.max(0, parseCurrency(pmParcelaMinPosObra));
+                        setPmParcelaMinPosObra(formatCurrency(v));
                       }}
                       className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
                     />
