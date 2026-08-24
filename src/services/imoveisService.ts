@@ -261,6 +261,30 @@ export const imoveisService = {
     }
   },
 
+  // Exclui um empreendimento e suas unidades do Supabase. Sem isso, excluir um
+  // empreendimento pelo app removia só localmente — o registro continuava no
+  // banco e podia "voltar" na próxima sincronização de outro navegador.
+  async excluirEmpreendimento(empId: string) {
+    try {
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(empId);
+      if (!isUUID) return { success: true }; // id local nunca sincronizado, nada a excluir no banco
+
+      // Remove as unidades primeiro (redundante se houver ON DELETE CASCADE na FK,
+      // mas seguro mesmo se a constraint não existir no schema do usuário).
+      await supabase.from('unidades').delete().eq('empreendimento_id', empId);
+
+      const { error } = await supabase.from('empreendimentos').delete().eq('id', empId);
+      if (error) {
+        console.error('Erro ao excluir empreendimento no Supabase:', error);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
+      console.error('Exceção ao excluir empreendimento:', e);
+      return { success: false, error: e?.message || 'Falha ao excluir empreendimento no banco' };
+    }
+  },
+
   // Lista unidades por empreendimento (Tenta Supabase, se falhar tenta Mock)
   async listarUnidadesPorEmpreendimento(empId: string) {
     try {

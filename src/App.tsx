@@ -416,10 +416,21 @@ export default function App() {
     }).catch(e => console.warn('Aviso ao sincronizar política de crédito no Supabase:', e));
   };
 
-  const handleDeleteProduct = (productId: string) => {
+  const handleDeleteProduct = async (productId: string) => {
     if (products.length <= 1) {
       showToast("É necessário manter ao menos um empreendimento.");
       return;
+    }
+
+    // Exclui no Supabase primeiro — sem isso, o registro continuaria no banco e
+    // poderia "voltar" na próxima sincronização de outro navegador/usuário.
+    try {
+      const result = await imoveisService.excluirEmpreendimento(productId);
+      if (!result.success) {
+        console.warn('Aviso ao excluir empreendimento no Supabase:', result.error);
+      }
+    } catch (e) {
+      console.warn('Aviso ao excluir empreendimento no Supabase:', e);
     }
 
     const remaining = products.filter(p => p.id !== productId);
