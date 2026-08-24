@@ -1350,26 +1350,39 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     );
   };
 
-  const barData = [0, 1, 2, 3, 4, 5].map(idx => {
+  // Cada balde/série (0-5) pode ter meses tanto em Obra quanto em Pós-Obra
+  // quando atravessa a fronteira entre as duas fases (o mesmo peso da
+  // política é mantido, só o rateio de meses muda) — cada fase tem sua
+  // própria parcelaBrutaFinal (taxas diferentes), então precisam virar DUAS
+  // barras distintas ("Série N (Obra)" / "Série N (Pós-Obra)") em vez de uma
+  // só, que descartava silenciosamente o valor de uma das duas fases.
+  const barData: { name: string; percBase: number; percBaseRaw: number; parcelaBruta: number; percRenda: number; percRendaRaw: number; qtdTotal: number; labelFormatado: string }[] = [];
+  [0, 1, 2, 3, 4, 5].forEach(idx => {
     const oSerie = morarEngineBase?.obraSeries[idx] || { qtd: 0, parcelaBrutaFinal: 0 };
     const pSerie = morarEngineBase?.posSeries[idx] || { qtd: 0, parcelaBrutaFinal: 0 };
-    const qtdTotal = oSerie.qtd + pSerie.qtd;
-    const parcelaBruta = oSerie.qtd > 0 ? oSerie.parcelaBrutaFinal : pSerie.parcelaBrutaFinal;
-    const subtotalBruto = qtdTotal * parcelaBruta;
-    const percBase = baseLiquidaComITBI > 0 ? (subtotalBruto / baseLiquidaComITBI) * 100 : 0;
-    const percRenda = income > 0 ? (parcelaBruta / income) * 100 : 0;
+    const isSplit = oSerie.qtd > 0 && pSerie.qtd > 0;
 
-    return {
-      name: `Série ${idx + 1}`,
-      percBase: Number(percBase.toFixed(2)),
-      percBaseRaw: percBase,
-      parcelaBruta,
-      percRenda: Number(percRenda.toFixed(2)),
-      percRendaRaw: percRenda,
-      qtdTotal,
-      labelFormatado: `${percRenda.toFixed(2)}%`
+    const pushFase = (fase: { qtd: number; parcelaBrutaFinal: number }, sufixo: string) => {
+      if (fase.qtd <= 0) return;
+      const parcelaBruta = fase.parcelaBrutaFinal;
+      const subtotalBruto = fase.qtd * parcelaBruta;
+      const percBase = baseLiquidaComITBI > 0 ? (subtotalBruto / baseLiquidaComITBI) * 100 : 0;
+      const percRenda = income > 0 ? (parcelaBruta / income) * 100 : 0;
+      barData.push({
+        name: isSplit ? `Série ${idx + 1} ${sufixo}` : `Série ${idx + 1}`,
+        percBase: Number(percBase.toFixed(2)),
+        percBaseRaw: percBase,
+        parcelaBruta,
+        percRenda: Number(percRenda.toFixed(2)),
+        percRendaRaw: percRenda,
+        qtdTotal: fase.qtd,
+        labelFormatado: `${percRenda.toFixed(2)}%`
+      });
     };
-  }).filter(d => d.qtdTotal > 0);
+
+    pushFase(oSerie, '(Obra)');
+    pushFase(pSerie, '(Pós-Obra)');
+  });
 
   const CustomBarTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
