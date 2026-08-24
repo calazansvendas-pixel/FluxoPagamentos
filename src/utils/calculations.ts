@@ -987,19 +987,80 @@ export function monthsBetweenDates(fromDateStr?: string, toDateStr?: string): nu
   return Math.max(0, diff);
 }
 
+/**
+ * Subtrai `months` meses de calendário de uma data "YYYY-MM-DD" (o dia do mês
+ * é ignorado, o resultado sempre volta com o dia "01"). Usado para calcular o
+ * vencimento da parcela intermediária final (chaves), que vence alguns meses
+ * antes do habite-se.
+ */
+export function subtractMonthsFromDate(dateStr?: string, months: number = 0): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-').map(n => parseInt(n, 10));
+  if (parts.length < 2 || parts.some(isNaN)) return '';
+  const totalMonths = parts[0] * 12 + (parts[1] - 1) - months;
+  const yy = Math.floor(totalMonths / 12);
+  const mm = (totalMonths % 12) + 1;
+  return `${yy}-${String(mm).padStart(2, '0')}-01`;
+}
+
+/**
+ * Conta quantas datas de Junho ou Dezembro caem estritamente entre `hojeStr`
+ * e `chavesDataStr` (os dois extremos não contam: um Junho/Dezembro que já
+ * passou não gera intermediária, e a própria data das chaves é uma parcela à
+ * parte, não uma intermediária semestral).
+ */
+export function contarSemestraisJunhoDezembro(hojeStr?: string, chavesDataStr?: string): number {
+  if (!hojeStr || !chavesDataStr) return 0;
+  const h = hojeStr.split('-').map(n => parseInt(n, 10));
+  const c = chavesDataStr.split('-').map(n => parseInt(n, 10));
+  if (h.length < 2 || c.length < 2 || h.some(isNaN) || c.some(isNaN)) return 0;
+  const hojeIdx = h[0] * 12 + (h[1] - 1);
+  const chavesIdx = c[0] * 12 + (c[1] - 1);
+  let count = 0;
+  for (let y = h[0]; y <= c[0]; y++) {
+    for (const mes of [6, 12]) {
+      const idx = y * 12 + (mes - 1);
+      if (idx > hojeIdx && idx < chavesIdx) count++;
+    }
+  }
+  return count;
+}
+
 export interface ParcelamentoMorarParams {
   price: number; // Valor do imóvel (VGV) — base de todos os percentuais desta condição
   renda: number;
-  recursos: number; // Financiamento + Subsídio + FGTS já aprovados (normalmente 0 nesta condição)
-  mesesObra: number; // Meses da data de venda (referência) até a entrega (habite-se)
-  qtdParcelasPosObra: number;
+  recursos: number; // Apenas financiamento bancário — Subsídio e FGTS não entram nesta condição
+  valAtoManual: number | null;
+  isAtoPremiadoEnabled: boolean;
   pctSinalMinimo: number;
+  pctRiscoRenda: number; // Teto da parcela mensal de obra como % da renda (referência 40%)
+
+  // Quantidades já resolvidas pelo chamador (override manual do usuário, ou a
+  // sugestão automática quando não há override): meses de obra (mensais
+  // lineares), quantidade de intermediárias semestrais (0 se desligadas) e
+  // quantidade de parcelas pós-obra.
+  mesesObraQtd: number;
+  semestraisQtd: number;
+  posObraQtd: number;
+
   pctSemestralMax: number;
   pctChavesMax: number;
   pctPosObraMax: number;
-  pctRiscoRenda: number; // Teto da parcela mensal de obra como % da renda (referência 40%)
-  valAtoManual: number | null;
-  isAtoPremiadoEnabled: boolean;
+
+  // Overrides manuais de VALOR (null/undefined = usa a sugestão automática
+  // calculada a partir do saldo ainda disponível naquele ponto da cascata).
+  posObraValorManual?: number | null;
+  chavesValorManual?: number | null;
+  semestralValorManual?: number | null;
+  mensalObraValorManual?: number | null;
+
+  // Parcela mínima (R$) de cada bloco recorrente: abaixo desse piso, o bloco é
+  // zerado e o saldo flui para o próximo da cascata — sempre priorizando o
+  // período de Obra, que é o último da cascata e nunca é zerado por conta
+  // deste piso (só fica com o que sobrar, mesmo que baixo).
+  parcelaMinimaMensalObra: number;
+  parcelaMinimaSemestral: number;
+  parcelaMinimaPosObra: number;
 }
 
 export interface ParcelamentoMorarResult {
@@ -1008,7 +1069,6 @@ export interface ParcelamentoMorarResult {
   atoMaximoPossivel: number;
   descontoAtoPremiado: number;
   saldoAPagarDireto: number;
-  mesesObra: number;
   nSemestrais: number;
   valorSemestral: number;
   totalSemestrais: number;
@@ -1021,6 +1081,7 @@ export interface ParcelamentoMorarResult {
   valorMensalObra: number;
   pctRendaMensalObra: number;
   excedeRiscoRenda: boolean;
+  abaixoParcelaMinimaMensalObra: boolean;
   subtotalAteChaves: number;
   pctSubtotalAteChaves: number;
 }
@@ -1033,8 +1094,11 @@ export interface ParcelamentoMorarResult {
  * limitadas a um percentual do valor do imóvel definido na política — e
  * parcelas mensais pós-obra, limitadas ao teto de pró-soluto pós-obra da
  * política. A ordem de reserva é Sinal → Pós-Obra → Chaves → Semestrais →
- * Mensais de Obra (o que sobrar), pois é essa ordem que reproduz o exemplo
- * numérico oficial da condição comercial.
+ * Mensais de Obra (o que sobrar): é essa ordem que reproduz o exemplo
+ * numérico oficial da condição comercial, e também é o que garante que o
+ * período de Obra nunca fica zerado por causa da parcela mínima de outro
+ * bloco — ele é sempre o último a receber, então qualquer bloco anterior
+ * zerado por ficar abaixo do piso simplesmente libera mais saldo para a Obra.
  */
 export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): ParcelamentoMorarResult {
   const price = Math.max(0, p.price || 0);
@@ -1051,34 +1115,65 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
 
   const saldoAPagarDireto = Math.max(0, (price - descontoAtoPremiado) - recursos - atoEfetivo);
 
-  const mesesObra = Math.max(0, Math.round(p.mesesObra || 0));
-  const qtdParcelasPosObra = Math.max(0, Math.round(p.qtdParcelasPosObra || 0));
+  const qtdParcelasPosObra = Math.max(0, Math.round(p.posObraQtd || 0));
+  const nSemestrais = Math.max(0, Math.round(p.semestraisQtd || 0));
+  const nMensaisObra = Math.max(0, Math.round(p.mesesObraQtd || 0));
 
-  const valorPosObraTeto = Math.round(price * ((p.pctPosObraMax ?? 5) / 100) * 100) / 100;
-  const valorPosObraTotal = Math.min(valorPosObraTeto, saldoAPagarDireto);
-  const valorPosObraParcela = qtdParcelasPosObra > 0
-    ? Math.round((valorPosObraTotal / qtdParcelasPosObra) * 100) / 100
+  const parcelaMinimaPosObra = Math.max(0, p.parcelaMinimaPosObra ?? 200);
+  const parcelaMinimaSemestral = Math.max(0, p.parcelaMinimaSemestral ?? 200);
+  const parcelaMinimaMensalObra = Math.max(0, p.parcelaMinimaMensalObra ?? 200);
+
+  let restante = saldoAPagarDireto;
+
+  // 1) PÓS-OBRA
+  const posObraTeto = Math.round(price * ((p.pctPosObraMax ?? 5) / 100) * 100) / 100;
+  let valorPosObraParcela = 0;
+  if (p.posObraValorManual !== null && p.posObraValorManual !== undefined) {
+    valorPosObraParcela = Math.max(0, p.posObraValorManual);
+  } else if (qtdParcelasPosObra > 0 && restante > 0) {
+    const natural = Math.min(posObraTeto, restante) / qtdParcelasPosObra;
+    valorPosObraParcela = natural >= parcelaMinimaPosObra ? Math.round(natural * 100) / 100 : 0;
+  }
+  const valorPosObraTotal = qtdParcelasPosObra > 0
+    ? Math.min(Math.round(valorPosObraParcela * qtdParcelasPosObra * 100) / 100, restante)
     : 0;
-  const restanteAposPos = Math.max(0, saldoAPagarDireto - valorPosObraTotal);
+  restante = Math.max(0, restante - valorPosObraTotal);
 
-  const valorChavesTeto = Math.round(price * ((p.pctChavesMax ?? 15) / 100) * 100) / 100;
-  const valorChaves = Math.min(valorChavesTeto, restanteAposPos);
-  const restanteAposChaves = Math.max(0, restanteAposPos - valorChaves);
+  // 2) CHAVES (parcela única — sem piso de "parcela mínima", é um pagamento só)
+  const chavesTeto = Math.round(price * ((p.pctChavesMax ?? 15) / 100) * 100) / 100;
+  const valorChaves = (p.chavesValorManual !== null && p.chavesValorManual !== undefined)
+    ? Math.min(Math.max(0, p.chavesValorManual), restante)
+    : Math.min(chavesTeto, restante);
+  restante = Math.max(0, restante - valorChaves);
 
-  // Intermediárias semestrais: uma a cada 6 meses entre a venda e a parcela
-  // final (chaves), que por sua vez vence 2 meses antes do habite-se.
-  const mesesAteChavesFinal = Math.max(0, mesesObra - 2);
-  const nSemestrais = Math.floor(mesesAteChavesFinal / 6);
-  const valorSemestralTeto = Math.round(price * ((p.pctSemestralMax ?? 4) / 100) * 100) / 100;
-  const totalSemestraisTeto = Math.round(valorSemestralTeto * nSemestrais * 100) / 100;
-  const totalSemestrais = Math.min(totalSemestraisTeto, restanteAposChaves);
-  const valorSemestral = nSemestrais > 0 ? Math.round((totalSemestrais / nSemestrais) * 100) / 100 : 0;
-
-  const nMensaisObra = mesesObra;
-  const valorMensalObraTotal = Math.max(0, restanteAposChaves - totalSemestrais);
-  const valorMensalObra = nMensaisObra > 0
-    ? Math.round((valorMensalObraTotal / nMensaisObra) * 100) / 100
+  // 3) INTERMEDIÁRIAS SEMESTRAIS
+  const semestralTeto = Math.round(price * ((p.pctSemestralMax ?? 4) / 100) * 100) / 100;
+  let valorSemestral = 0;
+  if (p.semestralValorManual !== null && p.semestralValorManual !== undefined) {
+    valorSemestral = Math.max(0, p.semestralValorManual);
+  } else if (nSemestrais > 0 && restante > 0) {
+    const natural = Math.min(semestralTeto, restante / nSemestrais);
+    valorSemestral = natural >= parcelaMinimaSemestral ? Math.round(natural * 100) / 100 : 0;
+  }
+  const totalSemestrais = nSemestrais > 0
+    ? Math.min(Math.round(valorSemestral * nSemestrais * 100) / 100, restante)
     : 0;
+  restante = Math.max(0, restante - totalSemestrais);
+
+  // 4) MENSAIS DE OBRA (residual — nunca zerado pela parcela mínima, é a
+  // prioridade da cascata; só fica com o que sobrar)
+  let valorMensalObra: number;
+  let valorMensalObraTotal: number;
+  if (p.mensalObraValorManual !== null && p.mensalObraValorManual !== undefined) {
+    valorMensalObra = Math.max(0, p.mensalObraValorManual);
+    valorMensalObraTotal = nMensaisObra > 0
+      ? Math.min(Math.round(valorMensalObra * nMensaisObra * 100) / 100, restante)
+      : 0;
+  } else {
+    valorMensalObraTotal = restante;
+    valorMensalObra = nMensaisObra > 0 ? Math.round((valorMensalObraTotal / nMensaisObra) * 100) / 100 : 0;
+  }
+  const abaixoParcelaMinimaMensalObra = nMensaisObra > 0 && valorMensalObra > 0 && valorMensalObra < parcelaMinimaMensalObra - 0.005;
 
   const renda = Math.max(0, p.renda || 0);
   const pctRendaMensalObra = renda > 0 ? (valorMensalObra / renda) * 100 : 0;
@@ -1093,7 +1188,6 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     atoMaximoPossivel,
     descontoAtoPremiado,
     saldoAPagarDireto,
-    mesesObra,
     nSemestrais,
     valorSemestral,
     totalSemestrais,
@@ -1106,6 +1200,7 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     valorMensalObra,
     pctRendaMensalObra,
     excedeRiscoRenda,
+    abaixoParcelaMinimaMensalObra,
     subtotalAteChaves,
     pctSubtotalAteChaves
   };

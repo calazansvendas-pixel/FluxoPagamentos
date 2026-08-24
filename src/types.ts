@@ -45,12 +45,21 @@ export interface CommercialCondition {
   fase2Params?: Partial<CommercialCondition>; // Overrides de parâmetros para a 2ª Fase
 
   // Campos específicos para a condição "Parcelamento Morar" (riscoRendaPct já
-  // existente é reaproveitado como o teto de renda de 40% desta condição).
+  // existente é reaproveitado como o teto de renda de 40% desta condição). Esta
+  // condição não usa financiamento bancário/subsídio/FGTS/ITBI — apenas Sinal +
+  // Ato Premiado + mensais de obra + intermediárias semestrais + parcela final
+  // (chaves) + parcelamento pós-obra.
   pmSinalMinimoPct?: number; // % mínimo do Sinal (Ato) sobre o valor do imóvel (padrão 10%)
   pmParcelaSemestralMaxPct?: number; // % máximo do valor do imóvel por parcela intermediária semestral (padrão 4%)
   pmParcelaChavesMaxPct?: number; // % máximo do valor do imóvel para a parcela intermediária final/chaves (padrão 15%)
   pmRiscoProSolutoPosObraPct?: number; // % máximo do valor do imóvel para o somatório das mensais pós-obra (padrão 5%)
   pmQtdParcelasPosObra?: number; // Quantidade de parcelas mensais pós-obra (padrão 12)
+  // Parcela mínima (em R$) de cada campo recorrente: se o valor calculado ficar
+  // abaixo do piso, aquele bloco é zerado e o saldo é redirecionado — sempre
+  // priorizando manter o período de Obra financiado antes do Pós-Obra.
+  pmParcelaMinimaMensalObra?: number; // padrão R$ 200,00
+  pmParcelaMinimaSemestral?: number; // padrão R$ 200,00
+  pmParcelaMinimaPosObra?: number; // padrão R$ 200,00
 }
 
 export interface TableRow {
