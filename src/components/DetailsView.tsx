@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
+import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
@@ -1007,7 +1008,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const pmBaseLiquida = hasUnitSelected ? Math.max(0, price - pm.descontoAtoPremiado) : 0;
   const displayBaseLiquida = isParcelamentoMorar ? pmBaseLiquida : baseVendaLiquidaComITBI;
 
-  // Função auxiliar para renderizar Gráficos de Pizza Sólidos com percentuais internos refinados
+  // Função auxiliar para renderizar Gráficos de Pizza Sólidos com percentuais internos
+  // refinados — mesmo motor de renderização (Recharts) e mesma identidade visual
+  // (raio, borda branca entre fatias, estilo de rótulo) dos gráficos de "Sinal c/
+  // Morar", mantendo a lógica própria de cada gráfico daqui: 1 valor de risco/
+  // comprometimento (fatia colorida) + o saldo livre (fatia neutra), em vez das 3
+  // categorias exaustivas que "Sinal c/ Morar" usa.
   const renderSolidPie = (
     pct: number,
     colorPrimary: string,
@@ -1015,9 +1021,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     primaryTextColor: string = '#ffffff',
     secondaryTextColor: string = '#1e293b'
   ) => {
-    const cx = 50;
-    const cy = 50;
-    const r = 40; // Raio proporcional com folga perimetral anti-clipping
     const clampedPct = Math.min(100, Math.max(0, pct));
     const restPct = Math.max(0, 100 - clampedPct);
 
@@ -1025,144 +1028,87 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       return (val < 10 && val > 0) ? val.toFixed(2) : val.toFixed(1);
     };
 
-    if (clampedPct >= 100) {
-      return (
-        <svg
-          className="w-40 h-40 sm:w-48 sm:h-48 mx-auto select-none overflow-visible block"
-          viewBox="-10 -10 120 120"
-        >
-          <circle cx={cx} cy={cy} r={r} fill={colorPrimary} />
-          <text
-            x={cx}
-            y={cy}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill={primaryTextColor}
-            fontSize="9"
-            fontWeight="normal"
-          >
-            100.0%
-          </text>
-        </svg>
-      );
-    }
+    const isSolo = clampedPct <= 0 || restPct <= 0;
+    const data = isSolo
+      ? [{ name: 'primary', value: 100, fill: clampedPct > 0 ? colorPrimary : colorSecondary }]
+      : [
+          { name: 'primary', value: clampedPct, fill: colorPrimary },
+          { name: 'secondary', value: restPct, fill: colorSecondary }
+        ];
 
-    if (clampedPct <= 0) {
-      return (
-        <svg
-          className="w-40 h-40 sm:w-48 sm:h-48 mx-auto select-none overflow-visible block"
-          viewBox="-10 -10 120 120"
-        >
-          <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
-          <text
-            x={cx}
-            y={cy}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill={secondaryTextColor}
-            fontSize="9"
-            fontWeight="normal"
-          >
-            0.0%
-          </text>
-        </svg>
-      );
-    }
-
-    const angle = (clampedPct / 100) * 360;
-    const rad = (angle - 90) * (Math.PI / 180);
-    const x = cx + r * Math.cos(rad);
-    const y = cy + r * Math.sin(rad);
-    const largeArcFlag = clampedPct > 50 ? 1 : 0;
-
-    const pathD = `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${largeArcFlag} 1 ${x} ${y} Z`;
-
-    const calcCentroidRadius = (sliceAngleDeg: number) => {
+    const calcCentroidRadius = (innerR: number, outerR: number, sliceAngleDeg: number) => {
       const theta = (sliceAngleDeg * Math.PI) / 180;
-      if (theta <= 0.001) return r * 0.58;
+      if (theta <= 0.001) return outerR * 0.58;
       const factor = (2 / 3) * (Math.sin(theta / 2) / (theta / 2));
-      return r * Math.min(0.68, Math.max(0.48, factor));
+      return outerR * Math.min(0.68, Math.max(0.48, factor));
     };
 
-    const midAngle1 = angle / 2;
-    const rLabel1 = calcCentroidRadius(angle);
-    const rad1 = (midAngle1 - 90) * (Math.PI / 180);
-    const textX1 = cx + rLabel1 * Math.cos(rad1);
-    const textY1 = cy + rLabel1 * Math.sin(rad1);
+    const renderLabel = (props: any) => {
+      const { cx, cy, midAngle, innerRadius, outerRadius, value, name, percent } = props;
+      if (value <= 0) return null;
+      const isPrimary = name === 'primary';
 
-    const restAngle = 360 - angle;
-    const midAngle2 = angle + (restAngle / 2);
-    const rLabel2 = calcCentroidRadius(restAngle);
-    const rad2 = (midAngle2 - 90) * (Math.PI / 180);
-    const textX2 = cx + rLabel2 * Math.cos(rad2);
-    const textY2 = cy + rLabel2 * Math.sin(rad2);
-
-    return (
-      <svg
-        className="w-40 h-40 sm:w-48 sm:h-48 mx-auto select-none overflow-visible block"
-        viewBox="-12 -12 124 124"
-      >
-        {/* Fatia 2 (Círculo de Fundo Neutro / Saldo Livre) */}
-        <circle cx={cx} cy={cy} r={r} fill={colorSecondary} />
-        {/* Fatia 1 (Arco Primário de Comprometimento / Risco) */}
-        <path d={pathD} fill={colorPrimary} />
-        {/* Linhas de Separação Brancas Nítidas */}
-        <line x1={cx} y1={cy} x2={cx} y2={cy - r} stroke="#ffffff" strokeWidth="1.5" />
-        <line x1={cx} y1={cy} x2={x} y2={y} stroke="#ffffff" strokeWidth="1.5" />
-
-        {/* Rótulo Interno Fatia 1 (Risco / Comprometimento) */}
-        {clampedPct >= 14 ? (
-          <text
-            x={textX1}
-            y={textY1}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill={primaryTextColor}
-            fontSize="9"
-            fontWeight="normal"
-          >
-            {formatPct(clampedPct)}%
+      if (isSolo) {
+        return (
+          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fill={clampedPct > 0 ? primaryTextColor : secondaryTextColor} fontSize="9" fontWeight="normal">
+            {clampedPct > 0 ? '100.0%' : '0.0%'}
           </text>
-        ) : (
+        );
+      }
+
+      if (!isPrimary && value < 18) return null;
+
+      const sliceAngleDeg = (percent || 0) * 360;
+      const radius = calcCentroidRadius(innerRadius, outerRadius, sliceAngleDeg);
+      const RADIAN = Math.PI / 180;
+      const x = cx + radius * Math.cos(-midAngle * RADIAN);
+      const y = cy + radius * Math.sin(-midAngle * RADIAN);
+      const labelText = `${formatPct(value)}%`;
+
+      if (isPrimary && value < 14) {
+        return (
           <g>
-            <rect
-              x={textX1 - 16}
-              y={textY1 - 6}
-              width="32"
-              height="12"
-              rx="4"
-              fill={colorPrimary}
-              opacity="0.95"
-            />
-            <text
-              x={textX1}
-              y={textY1}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill="#ffffff"
-              fontSize="7"
-              fontWeight="normal"
-            >
-              {formatPct(clampedPct)}%
+            <rect x={x - 16} y={y - 6} width="32" height="12" rx="4" fill={colorPrimary} opacity="0.95" />
+            <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fill="#ffffff" fontSize="7" fontWeight="normal">
+              {labelText}
             </text>
           </g>
-        )}
+        );
+      }
 
-        {/* Rótulo Interno Fatia 2 (Restante / Livre) */}
-        {restPct >= 18 && (
-          <text
-            x={textX2}
-            y={textY2}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill={secondaryTextColor}
-            fontSize="9"
-            fontWeight="normal"
-          >
-            {restPct.toFixed(1)}%
-          </text>
-        )}
-      </svg>
+      return (
+        <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fill={isPrimary ? primaryTextColor : secondaryTextColor} fontSize="9" fontWeight="normal">
+          {labelText}
+        </text>
+      );
+    };
+
+    return (
+      <div className="w-40 h-40 sm:w-48 sm:h-48 mx-auto select-none overflow-visible">
+        <ResponsiveContainer width="100%" height="100%">
+          <RechartsPieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              cx="50%"
+              cy="50%"
+              innerRadius={0}
+              outerRadius={64}
+              stroke="#ffffff"
+              strokeWidth={2}
+              startAngle={90}
+              endAngle={-270}
+              labelLine={false}
+              label={renderLabel}
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Pie>
+            <RechartsTooltip formatter={(value: number, name: string) => [`${value.toFixed(2)}%`, name === 'primary' ? 'Comprometimento' : 'Saldo Livre']} />
+          </RechartsPieChart>
+        </ResponsiveContainer>
+      </div>
     );
   };
 
