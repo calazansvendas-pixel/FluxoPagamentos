@@ -110,7 +110,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // ou ao clicar em "Limpar" (null = usa a sugestão automática).
   const [pmMensalObraValorManual, setPmMensalObraValorManual] = useState<number | null>(null);
   const [pmIntermediariasEnabled, setPmIntermediariasEnabled] = useState<boolean>(true);
-  const [pmSemestralQtdManual, setPmSemestralQtdManual] = useState<number | null>(null);
+  const [pmChavesEnabled, setPmChavesEnabled] = useState<boolean>(true);
   const [pmSemestralValorManual, setPmSemestralValorManual] = useState<number | null>(null);
   // Data de cada intermediária semestral, editável individualmente (índice ->
   // "YYYY-MM"). Quando não há override, usa a data sugerida automaticamente.
@@ -174,7 +174,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsAtoPremiadoEnabled(true);
     setPmMensalObraValorManual(null);
     setPmIntermediariasEnabled(true);
-    setPmSemestralQtdManual(null);
+    setPmChavesEnabled(true);
     setPmSemestralValorManual(null);
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
@@ -325,7 +325,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
     setPmMensalObraValorManual(null);
     setPmIntermediariasEnabled(true);
-    setPmSemestralQtdManual(null);
+    setPmChavesEnabled(true);
     setPmSemestralValorManual(null);
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
@@ -452,9 +452,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // Intermediárias semestrais: sempre em Junho e Dezembro de cada ano, entre
   // hoje e o vencimento das chaves.
   const pmSemestraisQtdAuto = hasUnitSelected ? contarSemestraisJunhoDezembro(hojeRef, pmChavesDataStr) : 0;
-  const pmSemestraisQtd = !pmIntermediariasEnabled
-    ? 0
-    : (pmSemestralQtdManual !== null ? pmSemestralQtdManual : pmSemestraisQtdAuto);
+  const pmSemestraisQtd = pmIntermediariasEnabled ? pmSemestraisQtdAuto : 0;
   const pmSemestraisDatasAuto = hasUnitSelected ? gerarDatasSemestrais(hojeRef, pmSemestraisQtd) : [];
   const pmSemestraisDatas = pmSemestraisDatasAuto.map((dataAuto, idx) => (
     pmSemestralDatasManual[idx] ? `${pmSemestralDatasManual[idx]}-01` : dataAuto
@@ -492,7 +490,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     parcelaMinimaMensalObra: currentCond?.pmParcelaMinimaMensalObra ?? 200,
     parcelaMinimaSemestral: currentCond?.pmParcelaMinimaSemestral ?? 200,
     parcelaMinimaPosObra: currentCond?.pmParcelaMinimaPosObra ?? 200,
-    mensaisAntecipadas: (valParc2 || 0) + (valParc3 || 0)
+    mensaisAntecipadas: (valParc2 || 0) + (valParc3 || 0),
+    chavesHabilitada: pmChavesEnabled
   });
   // "Sinal Total" no mesmo sentido do Bloco 1 do Banco Direto: o que falta do
   // valor do imóvel antes de descontar o Ato em si (Ato + este saldo = tudo
@@ -891,7 +890,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsAtoPremiadoEnabled(true);
     setPmMensalObraValorManual(null);
     setPmIntermediariasEnabled(true);
-    setPmSemestralQtdManual(null);
+    setPmChavesEnabled(true);
     setPmSemestralValorManual(null);
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
@@ -1807,54 +1806,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
             </div>
 
-            {isParcelamentoMorar && (
-              /* MENSAL DE OBRA: EM UM QUADRO SEPARADO, LOGO ABAIXO DAS DUAS MENSAIS ACIMA */
-              <div className={`p-2.5 rounded-lg border mt-2 ${pm.excedeRiscoRenda || pm.abaixoParcelaMinimaMensalObra ? 'bg-rose-50/60 border-rose-300' : 'bg-slate-50 border-slate-200/80'}`}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Mensal de Obra</span>
-                  {pmMensalObraDataInicio && (
-                    <span className="text-[9.5px] text-slate-400 font-semibold">A partir de {pmMensalObraDataInicio}</span>
-                  )}
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">Qtd. Meses</label>
-                    <div className="relative flex items-center">
-                      <div className="w-full bg-slate-100 px-2 py-1.5 rounded-md border border-slate-200 font-bold text-slate-500 text-center text-xs">
-                        {pmMesesObraQtd}
-                      </div>
-                      <span className="absolute right-2 text-[10px] font-extrabold text-slate-400 pointer-events-none">X</span>
-                    </div>
-                  </div>
-                  <PmCampoEditavel
-                    label="Valor da Parcela"
-                    tipo="moeda"
-                    minimo={currentCond?.pmParcelaMinimaMensalObra ?? 200}
-                    value={pm.valorMensalObra}
-                    onCommit={setPmMensalObraValorManual}
-                    onShowToast={onShowToast}
-                  />
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">Valor Total</label>
-                    <div className="w-full bg-white px-2 py-1.5 rounded-md border border-slate-200 font-bold text-slate-900 text-center text-xs">
-                      {formatCurrency(pm.valorMensalObraTotal)}
-                    </div>
-                  </div>
-                </div>
-                {pm.excedeRiscoRenda && (
-                  <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-100/70 p-1 rounded border border-rose-300">
-                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                    <span>Compromete mais de {currentCond?.riscoRendaPct ?? 40}% da renda bruta informada.</span>
-                  </div>
-                )}
-                {pm.abaixoParcelaMinimaMensalObra && !pm.excedeRiscoRenda && (
-                  <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-100/70 p-1 rounded border border-rose-300">
-                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                    <span>Abaixo da parcela mínima configurada na política.</span>
-                  </div>
-                )}
-              </div>
-            )}
           </FluxoEntradaConstrutora>
 
           {/* BLOCO 3: PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO — OU PARCELAMENTO MORAR */}
@@ -1875,7 +1826,54 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
 
               <div className="space-y-2 text-xs">
-                {/* INTERMEDIÁRIAS SEMESTRAIS: LIGAR/DESLIGAR + QUANTIDADE, DEPOIS UM QUADRO POR SEMESTRAL */}
+                {/* MENSAL DE OBRA: PRIMEIRO QUADRO DO PARCELAMENTO MORAR */}
+                <div className={`p-2.5 rounded-lg border ${pm.excedeRiscoRenda || pm.abaixoParcelaMinimaMensalObra ? 'bg-rose-50/60 border-rose-300' : 'bg-slate-50 border-slate-200/80'}`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Mensal de Obra</span>
+                    {pmMensalObraDataInicio && (
+                      <span className="text-[9.5px] text-slate-400 font-semibold">A partir de {pmMensalObraDataInicio}</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">Qtd. Meses</label>
+                      <div className="relative flex items-center">
+                        <div className="w-full bg-slate-100 px-2 py-1.5 rounded-md border border-slate-200 font-bold text-slate-500 text-center text-xs">
+                          {pmMesesObraQtd}
+                        </div>
+                        <span className="absolute right-2 text-[10px] font-extrabold text-slate-400 pointer-events-none">X</span>
+                      </div>
+                    </div>
+                    <PmCampoEditavel
+                      label="Valor da Parcela"
+                      tipo="moeda"
+                      minimo={currentCond?.pmParcelaMinimaMensalObra ?? 200}
+                      value={pm.valorMensalObra}
+                      onCommit={setPmMensalObraValorManual}
+                      onShowToast={onShowToast}
+                    />
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">Valor Total</label>
+                      <div className="w-full bg-white px-2 py-1.5 rounded-md border border-slate-200 font-bold text-slate-900 text-center text-xs">
+                        {formatCurrency(pm.valorMensalObraTotal)}
+                      </div>
+                    </div>
+                  </div>
+                  {pm.excedeRiscoRenda && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-100/70 p-1 rounded border border-rose-300">
+                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                      <span>Compromete mais de {currentCond?.riscoRendaPct ?? 40}% da renda bruta informada.</span>
+                    </div>
+                  )}
+                  {pm.abaixoParcelaMinimaMensalObra && !pm.excedeRiscoRenda && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-rose-700 bg-rose-100/70 p-1 rounded border border-rose-300">
+                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                      <span>Abaixo da parcela mínima configurada na política.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* INTERMEDIÁRIAS SEMESTRAIS: LIGAR/DESLIGAR, QUANTIDADE SEMPRE AUTOMÁTICA, DEPOIS UM QUADRO POR SEMESTRAL */}
                 <div className="flex items-center justify-between gap-2 px-1">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1887,16 +1885,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     <span className="text-[10px] font-bold text-slate-500 uppercase">Intermediárias Semestrais (Jun/Dez)</span>
                   </label>
                   {pmIntermediariasEnabled && (
-                    <div className="w-20">
-                      <PmCampoEditavel
-                        label="Qtd."
-                        tipo="inteiro"
-                        suffix="X"
-                        value={pm.nSemestrais}
-                        onCommit={setPmSemestralQtdManual}
-                        onShowToast={onShowToast}
-                      />
-                    </div>
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                      {pm.nSemestrais}X
+                    </span>
                   )}
                 </div>
 
@@ -1927,24 +1918,34 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </div>
                 ))}
 
-                {/* PARCELA FINAL (CHAVES) — O VENCIMENTO VEM DA POLÍTICA, NÃO É EDITÁVEL AQUI */}
-                <div className="p-2.5 rounded-lg border bg-amber-50 border-amber-200/80 flex items-center justify-between gap-3">
-                  <div>
-                    <span className="block text-[10px] font-bold text-amber-700 uppercase">Parcela Chaves</span>
-                    {chavesVencimentoStr && (
-                      <span className="block text-[9.5px] text-amber-600 font-semibold mt-0.5">{chavesVencimentoStr}</span>
-                    )}
-                  </div>
-                  <div className="w-32">
-                    <PmCampoEditavel
-                      label="Valor"
-                      tipo="moeda"
-                      colorClass="text-amber-800"
-                      value={pm.valorChaves}
-                      onCommit={setPmChavesValorManual}
-                      onShowToast={onShowToast}
+                {/* PARCELA FINAL (CHAVES) — LIGAR/DESLIGAR; O VENCIMENTO VEM DA POLÍTICA, NÃO É EDITÁVEL AQUI */}
+                <div className={`p-2.5 rounded-lg border flex items-center justify-between gap-3 ${pmChavesEnabled ? 'bg-amber-50 border-amber-200/80' : 'bg-slate-50 border-slate-200/80'}`}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pmChavesEnabled}
+                      onChange={(e) => setPmChavesEnabled(e.target.checked)}
+                      className="rounded text-sky-600 focus:ring-sky-600 cursor-pointer"
                     />
-                  </div>
+                    <div>
+                      <span className={`block text-[10px] font-bold uppercase ${pmChavesEnabled ? 'text-amber-700' : 'text-slate-500'}`}>Parcela Chaves</span>
+                      {pmChavesEnabled && chavesVencimentoStr && (
+                        <span className="block text-[9.5px] text-amber-600 font-semibold mt-0.5">{chavesVencimentoStr}</span>
+                      )}
+                    </div>
+                  </label>
+                  {pmChavesEnabled && (
+                    <div className="w-32">
+                      <PmCampoEditavel
+                        label="Valor"
+                        tipo="moeda"
+                        colorClass="text-amber-800"
+                        value={pm.valorChaves}
+                        onCommit={setPmChavesValorManual}
+                        onShowToast={onShowToast}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* PARCELAMENTO PÓS-OBRA */}

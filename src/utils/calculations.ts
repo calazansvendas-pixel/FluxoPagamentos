@@ -1097,6 +1097,10 @@ export interface ParcelamentoMorarParams {
   // demais condições comerciais — abatem primeiro do Ato (até o piso mínimo
   // de X% do imóvel), e o que sobrar reduz o saldo a parcelar diretamente.
   mensaisAntecipadas?: number;
+
+  // Liga/desliga a parcela de chaves — o fluxo pode ser montado sem ela (o
+  // saldo que seria dela flui para Semestrais/Mensais de Obra). Padrão true.
+  chavesHabilitada?: boolean;
 }
 
 export interface ParcelamentoMorarResult {
@@ -1185,11 +1189,15 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     : 0;
   restante = Math.max(0, restante - valorPosObraTotal);
 
-  // 2) CHAVES (parcela única — sem piso de "parcela mínima", é um pagamento só)
+  // 2) CHAVES (parcela única — sem piso de "parcela mínima", é um pagamento só;
+  // desligável — quando desligada, o saldo que seria dela segue na cascata)
+  const chavesHabilitada = p.chavesHabilitada !== false;
   const chavesTeto = Math.round(price * ((p.pctChavesMax ?? 15) / 100) * 100) / 100;
-  const valorChaves = (p.chavesValorManual !== null && p.chavesValorManual !== undefined)
-    ? Math.min(Math.max(0, p.chavesValorManual), restante)
-    : Math.min(chavesTeto, restante);
+  const valorChaves = !chavesHabilitada
+    ? 0
+    : (p.chavesValorManual !== null && p.chavesValorManual !== undefined)
+      ? Math.min(Math.max(0, p.chavesValorManual), restante)
+      : Math.min(chavesTeto, restante);
   restante = Math.max(0, restante - valorChaves);
 
   // 3) INTERMEDIÁRIAS SEMESTRAIS
