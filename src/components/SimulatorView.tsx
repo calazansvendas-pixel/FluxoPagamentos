@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Product, SimulationData } from '../types';
 import { formatCurrency, formatDeliveryText, parseCurrency } from '../utils/formatters';
-import { ensureProductConditions, calculatePolicyRiskValues } from '../utils/calculations';
+import { ensureProductConditions } from '../utils/calculations';
 
 interface SimulatorViewProps {
   simulationData: SimulationData;
@@ -49,6 +49,10 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
 
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldTexts, setFieldTexts] = useState<Record<string, string>>({});
+  // Empreendimento selecionado no dropdown único do Bloco 3 — substitui a
+  // lista com um card por empreendimento por uma escolha única, que revela
+  // a condição comercial (e o "Avançar") apenas do empreendimento escolhido.
+  const [selectedProdId, setSelectedProdId] = useState<string>('');
 
   const handleFieldFocus = (field: keyof SimulationData, e: React.FocusEvent<HTMLInputElement>) => {
     setEditingField(field);
@@ -361,92 +365,91 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                 </button>
               </div>
 
-              {/* LISTA LIMPA DE PRODUTOS */}
-              <div className="space-y-3.5">
-                {(products || []).map((p) => {
-                  if (!p) return null;
-                  const prodWithConds = ensureProductConditions({ ...p });
-                  const selectedCondId = (selectedConditions || {})[p.id] || '';
-                  
-                  const borderBg = p.isFeatured ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200 bg-white';
-                  const badgeDot = p.isFeatured ? 'bg-amber-500' : 'bg-sky-600';
-                  const titleClass = p.isFeatured ? 'text-amber-900' : 'text-slate-900';
-
-                  const deliveryText = formatDeliveryText(p.deliveryDatePhase1, p.deliveryDatePhase2, p.deliveryDate);
-
-                  // Calcula preview local se condição selecionada
-                  let calcPreview = null;
-                  if (selectedCondId) {
-                    const cond = prodWithConds.conditions.find(c => c.id === selectedCondId);
-                    if (cond) {
-                      calcPreview = calculatePolicyRiskValues(
-                        prodWithConds,
-                        cond,
-                        safeSimulationData.income || 0,
-                        undefined,
-                        undefined,
-                        undefined,
-                        undefined,
-                        undefined,
-                        safeSimulationData.financing || 0,
-                        safeSimulationData.subsidy || 0,
-                        safeSimulationData.fgts || 0,
-                        safeSimulationData.finPercent || 0.80
-                      );
-                    }
-                  }
-
-                  return (
-                    <div 
-                      key={p.id} 
-                      className={`p-4 rounded-xl border ${borderBg} shadow-2xs w-full hover:shadow-sm transition-all space-y-3`}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-1">
-                        <span className={`text-sm font-bold ${titleClass} uppercase flex items-center gap-1.5`}>
-                          <span className={`w-2 h-2 rounded-full ${badgeDot}`}></span> {p.name || 'Empreendimento'}
-                        </span>
-                        {deliveryText && (
-                          <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
-                            <KeyRound className="w-3.5 h-3.5 text-sky-600 shrink-0" /> Chaves: {deliveryText}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2 w-full">
-                        <select
-                          value={selectedCondId}
-                          onChange={(e) => onSelectCondition(p.id, e.target.value)}
-                          className="flex-1 min-w-0 py-2 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-sky-600 cursor-pointer font-medium shadow-2xs"
-                        >
-                          <option value="">-- Selecionar Condição --</option>
-                          {prodWithConds.conditions.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          disabled={!selectedCondId}
-                          onClick={() => onAdvanceToDetails(prodWithConds, selectedCondId)}
-                          className={`shrink-0 px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 border ${
-                            selectedCondId 
-                              ? 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600 cursor-pointer shadow-md' 
-                              : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
-                          }`}
-                        >
-                          <span>Avançar</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* The financial summary block was removed per user request */}
-
-                    </div>
-                  );
-                })}
+              {/* DROPDOWN ÚNICO DE EMPREENDIMENTO — substitui a lista com um
+                  card por empreendimento: escolhe-se o empreendimento aqui,
+                  e só então aparece o card com sua condição comercial e o
+                  "Avançar". */}
+              <div>
+                <select
+                  value={selectedProdId}
+                  onChange={(e) => setSelectedProdId(e.target.value)}
+                  className="w-full py-2.5 px-3 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-sky-600 cursor-pointer font-semibold shadow-2xs"
+                >
+                  <option value="">-- Selecionar Empreendimento --</option>
+                  {(products || []).filter(Boolean).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name || 'Empreendimento'}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {(() => {
+                const p = (products || []).find(prod => prod && prod.id === selectedProdId);
+                if (!p) {
+                  return (
+                    <p className="text-xs text-slate-400 font-medium text-center py-2">
+                      Selecione um empreendimento acima para ver as condições comerciais disponíveis.
+                    </p>
+                  );
+                }
+
+                const prodWithConds = ensureProductConditions({ ...p });
+                const selectedCondId = (selectedConditions || {})[p.id] || '';
+
+                const borderBg = p.isFeatured ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200 bg-white';
+                const badgeDot = p.isFeatured ? 'bg-amber-500' : 'bg-sky-600';
+                const titleClass = p.isFeatured ? 'text-amber-900' : 'text-slate-900';
+
+                const deliveryText = formatDeliveryText(p.deliveryDatePhase1, p.deliveryDatePhase2, p.deliveryDate);
+
+                return (
+                  <div
+                    key={p.id}
+                    className={`p-4 rounded-xl border ${borderBg} shadow-2xs w-full space-y-3`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                      <span className={`text-sm font-bold ${titleClass} uppercase flex items-center gap-1.5`}>
+                        <span className={`w-2 h-2 rounded-full ${badgeDot}`}></span> {p.name || 'Empreendimento'}
+                      </span>
+                      {deliveryText && (
+                        <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                          <KeyRound className="w-3.5 h-3.5 text-sky-600 shrink-0" /> Chaves: {deliveryText}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 w-full">
+                      <select
+                        value={selectedCondId}
+                        onChange={(e) => onSelectCondition(p.id, e.target.value)}
+                        className="flex-1 min-w-0 py-2 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-sky-600 cursor-pointer font-medium shadow-2xs"
+                      >
+                        <option value="">-- Selecionar Condição --</option>
+                        {prodWithConds.conditions.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        disabled={!selectedCondId}
+                        onClick={() => onAdvanceToDetails(prodWithConds, selectedCondId)}
+                        className={`shrink-0 px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 border ${
+                          selectedCondId
+                            ? 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600 cursor-pointer shadow-md'
+                            : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>Avançar</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
