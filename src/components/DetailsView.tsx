@@ -108,7 +108,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // cada bloco) partem de uma sugestão calculada pela política de crédito, mas
   // são livremente editáveis nesta ficha — resetam ao trocar produto/condição
   // ou ao clicar em "Limpar" (null = usa a sugestão automática).
-  const [pmMensalObraQtdManual, setPmMensalObraQtdManual] = useState<number | null>(null);
   const [pmMensalObraValorManual, setPmMensalObraValorManual] = useState<number | null>(null);
   const [pmIntermediariasEnabled, setPmIntermediariasEnabled] = useState<boolean>(true);
   const [pmSemestralQtdManual, setPmSemestralQtdManual] = useState<number | null>(null);
@@ -170,7 +169,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingParc3(false);
     setQtdMensais(condNumParcelas);
     setIsAtoPremiadoEnabled(true);
-    setPmMensalObraQtdManual(null);
     setPmMensalObraValorManual(null);
     setPmIntermediariasEnabled(true);
     setPmSemestralQtdManual(null);
@@ -321,7 +319,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     if (currentCond) {
       setQtdMensais(condNumParcelas);
     }
-    setPmMensalObraQtdManual(null);
     setPmMensalObraValorManual(null);
     setPmIntermediariasEnabled(true);
     setPmSemestralQtdManual(null);
@@ -434,7 +431,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     : (currentProd?.deliveryDatePhase1 || currentProd?.deliveryDate || '');
   const hojeRef = currentDate || new Date().toISOString().split('T')[0];
   const pmMesesObraAuto = hasUnitSelected ? monthsBetweenDates(hojeRef, deliveryDateRaw) : 0;
-  const pmMesesObraQtd = pmMensalObraQtdManual !== null ? pmMensalObraQtdManual : pmMesesObraAuto;
+  // A quantidade de meses de obra não é editável na ficha — é sempre calculada
+  // a partir de hoje e da previsão de entrega (habite-se) cadastrada no
+  // empreendimento (Políticas & Empreendimentos é onde ela é, na prática,
+  // ajustada).
+  const pmMesesObraQtd = pmMesesObraAuto;
 
   // Vencimento da parcela intermediária final (chaves): quantidade de meses
   // antes do habite-se definida na política de crédito (não é editável na
@@ -879,7 +880,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingParc3(false);
     setQtdMensais(condNumParcelas);
     setIsAtoPremiadoEnabled(true);
-    setPmMensalObraQtdManual(null);
     setPmMensalObraValorManual(null);
     setPmIntermediariasEnabled(true);
     setPmSemestralQtdManual(null);
@@ -1696,20 +1696,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               /* MENSAL DE OBRA: LOGO ABAIXO DO ATO (IMÓVEL) / ATO PREMIADO, EM UM ÚNICO QUADRO LARGO */
               <div className={`p-2.5 rounded-lg border mt-1 ${pm.excedeRiscoRenda || pm.abaixoParcelaMinimaMensalObra ? 'bg-rose-50/60 border-rose-300' : 'bg-slate-50 border-slate-200/80'}`}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Mensal de Obra</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Mensal de Obra ({pmMesesObraQtd}x)</span>
                   {pmMensalObraDataInicio && (
                     <span className="text-[9.5px] text-slate-400 font-semibold">A partir de {pmMensalObraDataInicio}</span>
                   )}
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <PmCampoEditavel
-                    label="Qtd. Meses"
-                    tipo="inteiro"
-                    suffix="X"
-                    value={pmMesesObraQtd}
-                    onCommit={setPmMensalObraQtdManual}
-                    onShowToast={onShowToast}
-                  />
+                <div className="grid grid-cols-2 gap-1.5">
                   <PmCampoEditavel
                     label="Valor da Parcela"
                     tipo="moeda"
