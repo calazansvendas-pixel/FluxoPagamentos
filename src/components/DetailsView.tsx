@@ -346,12 +346,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // FINANCIAL CALCULATIONS
   const income = simulationData.income || 0;
-  // "Parcelamento Morar" não trabalha com Subsídio nem FGTS — zerados aqui na
-  // origem para que também não consumam desnecessariamente o teto/cascata de
-  // recursos abaixo (que abate Financiamento antes de Subsídio/FGTS).
+  // "Parcelamento Morar" não trabalha com Subsídio, FGTS nem Financiamento
+  // Bancário — zerados aqui na origem, mesmo que o corretor tenha digitado
+  // algum valor no Simulador, para que também não consumam desnecessariamente
+  // o teto/cascata de recursos abaixo.
   const rawSubsidy = (hasUnitSelected && !isParcelamentoMorar) ? (simulationData.subsidy || 0) : 0;
   const rawFGTS = (hasUnitSelected && !isParcelamentoMorar) ? (simulationData.fgts || 0) : 0;
-  const inputFinancing = simulationData.financing || 0;
+  const inputFinancing = (hasUnitSelected && !isParcelamentoMorar) ? (simulationData.financing || 0) : 0;
 
   const percent = simulationData.finPercent;
   const maxAllowed = (hasUnitSelected && evaluation > 0) ? (evaluation * percent) : 0;
@@ -367,14 +368,17 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? sinalMinimoPolicy
     : (sinalMinimoPolicy > 0 ? sinalMinimoPolicy : 2000);
 
+  // Nunca "inventamos" um valor de financiamento: só usamos exatamente o que
+  // foi digitado em "Financiamento Estimado" no Simulador (capado pelo teto
+  // do banco/avaliação ou pelo preço, quando aplicável) — se nada foi
+  // digitado (ou foi digitado 0), o financiamento considerado é 0, nunca um
+  // percentual estimado da avaliação. Vale para toda condição comercial.
   let rawMaxFinanc = 0;
-  if (hasUnitSelected) {
-    if (inputFinancing > 0 && maxAllowed > 0) {
+  if (hasUnitSelected && inputFinancing > 0) {
+    if (maxAllowed > 0) {
       rawMaxFinanc = Math.min(inputFinancing, maxAllowed);
-    } else if (inputFinancing > 0 && price > 0) {
+    } else if (price > 0) {
       rawMaxFinanc = Math.min(inputFinancing, price);
-    } else if (evaluation > 0) {
-      rawMaxFinanc = maxAllowed;
     } else {
       rawMaxFinanc = inputFinancing;
     }

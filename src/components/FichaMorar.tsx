@@ -493,14 +493,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // 1. VALOR BASE: Maior entre Preço de Tabela e Avaliação Bancária
   const valorBase = hasUnitSelected ? Math.max(price, evaluation) : 0;
 
+  // Nunca "inventamos" um valor de financiamento: só usamos exatamente o que
+  // foi digitado em "Financiamento Estimado" no Simulador (capado pelo teto
+  // do banco/avaliação ou pelo preço, quando aplicável) — se nada foi
+  // digitado (ou foi digitado 0), o financiamento considerado é 0, nunca um
+  // percentual estimado da avaliação.
   let rawMaxFinanc = 0;
-  if (hasUnitSelected) {
-    if (inputFinancing > 0 && maxAllowed > 0) {
+  if (hasUnitSelected && inputFinancing > 0) {
+    if (maxAllowed > 0) {
       rawMaxFinanc = Math.min(inputFinancing, maxAllowed);
-    } else if (inputFinancing > 0 && price > 0) {
+    } else if (price > 0) {
       rawMaxFinanc = Math.min(inputFinancing, price);
-    } else if (evaluation > 0) {
-      rawMaxFinanc = maxAllowed;
     } else {
       rawMaxFinanc = inputFinancing;
     }
