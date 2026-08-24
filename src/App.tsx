@@ -2,7 +2,7 @@ import React, { useState, Suspense, lazy } from 'react';
 import { ActiveTab, CommercialCondition, Product, SelectedUnit, SimulationData, TableInfo } from './types';
 import type { SavedSimulationRecord } from './components/SavedSimulationsView';
 import { INITIAL_PRODUCTS } from './data/initialProducts';
-import { ensureProductConditions, getConditionKind } from './utils/calculations';
+import { ensureProductConditions, getConditionKind, ConditionKind } from './utils/calculations';
 
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -383,22 +383,29 @@ export default function App() {
     }
   };
 
-  // Ao alternar abas pelo menu lateral, sincroniza a condição ativa
-  const handleSidebarTabSelect = (tab: ActiveTab) => {
+  // Ao alternar abas pelo menu lateral, sincroniza a condição ativa. "Sinal
+  // c/ Banco Direto" e "Parcelamento Morar" compartilham a mesma aba
+  // ('details'), então o item do menu manda também um "variant" indicando
+  // qual das duas condições deve ser priorizada ao entrar na tela.
+  const handleSidebarTabSelect = (tab: ActiveTab, variant?: ConditionKind) => {
     if (tab === 'details') {
+      const targetKind: ConditionKind = variant === 'parcelamento-morar' ? 'parcelamento-morar' : 'banco-direto';
       // Se não temos produto ativo, inicializa com o primeiro
       if (!activeAnalysisProduct && products.length > 0) {
         const prodWithConds = ensureProductConditions({ ...products[0] });
         setActiveAnalysisProduct(prodWithConds);
-        const nonMorarCond = prodWithConds.conditions.find(c => !isMorarCondition(c.name)) || prodWithConds.conditions[0];
-        setActiveAnalysisCondition(nonMorarCond);
+        const targetCond = prodWithConds.conditions.find(c => getConditionKind(c.name) === targetKind)
+          || prodWithConds.conditions.find(c => !isMorarCondition(c.name))
+          || prodWithConds.conditions[0];
+        setActiveAnalysisCondition(targetCond);
       } else if (activeAnalysisProduct) {
         const prodWithConds = ensureProductConditions({ ...activeAnalysisProduct });
-        // Se a condição atual for Morar, ajusta para uma condição Banco Direto se disponível
-        if (activeAnalysisCondition && isMorarCondition(activeAnalysisCondition.name)) {
-          const nonMorarCond = prodWithConds.conditions.find(c => !isMorarCondition(c.name));
-          if (nonMorarCond) {
-            setActiveAnalysisCondition(nonMorarCond);
+        const currentKind = activeAnalysisCondition ? getConditionKind(activeAnalysisCondition.name) : undefined;
+        if (currentKind !== targetKind) {
+          const targetCond = prodWithConds.conditions.find(c => getConditionKind(c.name) === targetKind)
+            || (currentKind === 'sinal-morar' ? prodWithConds.conditions.find(c => !isMorarCondition(c.name)) : undefined);
+          if (targetCond) {
+            setActiveAnalysisCondition(targetCond);
           }
         }
       }
@@ -569,6 +576,7 @@ export default function App() {
           activeTab={activeTab}
           onSelectTab={handleSidebarTabSelect}
           isCollapsed={isSidebarCollapsed}
+          activeConditionKind={activeAnalysisCondition ? getConditionKind(activeAnalysisCondition.name) : undefined}
         />
 
         {/* MAIN VIEW AREA */}

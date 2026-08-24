@@ -1,19 +1,25 @@
 import React from 'react';
-import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList } from 'lucide-react';
+import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins } from 'lucide-react';
 import { ActiveTab } from '../types';
+import { ConditionKind } from '../utils/calculations';
 
 interface SidebarProps {
   activeTab: ActiveTab;
-  onSelectTab: (tab: ActiveTab) => void;
+  onSelectTab: (tab: ActiveTab, variant?: ConditionKind) => void;
   isCollapsed: boolean;
+  // Condição comercial atualmente ativa: necessário porque "Sinal c/ Banco
+  // Direto" e "Parcelamento Morar" compartilham a mesma aba ('details'), então
+  // só o activeTab não basta para saber qual dos dois itens do menu destacar.
+  activeConditionKind?: ConditionKind;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
-  isCollapsed
+  isCollapsed,
+  activeConditionKind
 }) => {
-  const navItems = [
+  const navItems: { id: ActiveTab; label: string; icon: typeof Calculator; variant?: ConditionKind }[] = [
     {
       id: 'simulator' as ActiveTab,
       label: 'Simulador de Crédito',
@@ -22,12 +28,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'details' as ActiveTab,
       label: 'Sinal c/ Banco Direto',
-      icon: FileCheck2
+      icon: FileCheck2,
+      variant: 'banco-direto'
     },
     {
       id: 'ficha-morar' as ActiveTab,
       label: 'Sinal c/ Morar',
-      icon: FileCheck2
+      icon: FileCheck2,
+      variant: 'sinal-morar'
+    },
+    {
+      id: 'details' as ActiveTab,
+      label: 'Parcelamento Morar',
+      icon: Coins,
+      variant: 'parcelamento-morar'
     },
     {
       id: 'policies' as ActiveTab,
@@ -50,7 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const activeClass = "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-sky-50 text-sky-600 border border-sky-100 transition-all text-left cursor-pointer shadow-2xs";
 
   return (
-    <aside 
+    <aside
       className={`${
         isCollapsed ? 'w-16' : 'w-64'
       } bg-white border-r border-slate-200 flex-shrink-0 transition-all duration-300 ease-in-out z-20 flex flex-col p-4 shadow-xs`}
@@ -63,13 +77,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </span>
           )}
           <nav className="space-y-1">
-            {navItems.map((item) => {
+            {navItems.map((item, idx) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              // Itens com "variant" compartilham a aba 'details' com outro item
+              // (Sinal c/ Banco Direto x Parcelamento Morar) — só fica ativo o
+              // que também bate com a condição comercial selecionada no momento.
+              const isActive = item.variant
+                ? activeTab === item.id && activeConditionKind === item.variant
+                : activeTab === item.id;
               return (
                 <button
-                  key={item.id}
-                  onClick={() => onSelectTab(item.id)}
+                  key={`${item.id}-${item.variant || idx}`}
+                  onClick={() => onSelectTab(item.id, item.variant)}
                   className={isActive ? activeClass : inactiveClass}
                   title={item.label}
                 >
