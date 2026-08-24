@@ -180,7 +180,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
       if (document.fonts?.ready) {
         await document.fonts.ready;
       }
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       // Renderiza com escala nítida e suporte nativo a oklch / CSS Level 4.
       // foreignObjectRendering fica explicitamente desligado: o modo baseado
@@ -668,7 +668,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                           <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
                           <XAxis type="number" hide />
                           <YAxis dataKey="name" type="category" width={48} tick={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                          <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={13}>
+                          <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={13} isAnimationActive={false}>
                             {pmComprometimentoData.map((entry, idx) => (
                               <Cell key={`pm-comp-pdf-${idx}`} fill={entry.base === 'Renda' ? '#0284c7' : '#7c3aed'} />
                             ))}
