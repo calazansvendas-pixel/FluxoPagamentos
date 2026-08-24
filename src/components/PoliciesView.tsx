@@ -111,6 +111,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const [pmChavesMaxStr, setPmChavesMaxStr] = useState<string>('15,0');
   const [pmPosObraMaxStr, setPmPosObraMaxStr] = useState<string>('5,0');
   const [pmQtdParcelasPosObraStr, setPmQtdParcelasPosObraStr] = useState<string>('12');
+  const [pmParcelaMinMensalObra, setPmParcelaMinMensalObra] = useState<string>('R$ 200,00');
+  const [pmParcelaMinSemestral, setPmParcelaMinSemestral] = useState<string>('R$ 200,00');
+  const [pmParcelaMinPosObra, setPmParcelaMinPosObra] = useState<string>('R$ 200,00');
 
   // Estado das torres habilitadas para simulação nesta política
   const [torresHabilitadas, setTorresHabilitadas] = useState<string[]>([]);
@@ -294,6 +297,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const pmChaves = source.pmParcelaChavesMaxPct !== undefined ? source.pmParcelaChavesMaxPct : 15.0;
     const pmPosObra = source.pmRiscoProSolutoPosObraPct !== undefined ? source.pmRiscoProSolutoPosObraPct : 5.0;
     const pmQtdPosObra = source.pmQtdParcelasPosObra !== undefined ? source.pmQtdParcelasPosObra : 12;
+    const pmMinMensalObra = source.pmParcelaMinimaMensalObra !== undefined ? source.pmParcelaMinimaMensalObra : 200;
+    const pmMinSemestral = source.pmParcelaMinimaSemestral !== undefined ? source.pmParcelaMinimaSemestral : 200;
+    const pmMinPosObra = source.pmParcelaMinimaPosObra !== undefined ? source.pmParcelaMinimaPosObra : 200;
 
     const parsedSinal = parseCurrency(source.sinalMinimo);
     const formattedSinal = formatCurrency(parsedSinal > 0 ? parsedSinal : 2000);
@@ -338,6 +344,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setPmChavesMaxStr(formatDecimalBR(pmChaves, 1, 2));
     setPmPosObraMaxStr(formatDecimalBR(pmPosObra, 1, 2));
     setPmQtdParcelasPosObraStr(String(pmQtdPosObra));
+    setPmParcelaMinMensalObra(formatCurrency(pmMinMensalObra > 0 ? pmMinMensalObra : 200));
+    setPmParcelaMinSemestral(formatCurrency(pmMinSemestral > 0 ? pmMinSemestral : 200));
+    setPmParcelaMinPosObra(formatCurrency(pmMinPosObra > 0 ? pmMinPosObra : 200));
 
     setPolicyText(source.policy || '');
   };
@@ -382,6 +391,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const pmParcelaChavesMaxPct = parseDecimal(pmChavesMaxStr, 15.0);
   const pmRiscoProSolutoPosObraPct = parseDecimal(pmPosObraMaxStr, 5.0);
   const pmQtdParcelasPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
+  const pmParcelaMinimaMensalObraNum = (() => { const v = parseCurrency(pmParcelaMinMensalObra); return v > 0 ? v : 200; })();
+  const pmParcelaMinimaSemestralNum = (() => { const v = parseCurrency(pmParcelaMinSemestral); return v > 0 ? v : 200; })();
+  const pmParcelaMinimaPosObraNum = (() => { const v = parseCurrency(pmParcelaMinPosObra); return v > 0 ? v : 200; })();
 
   // Reúne os valores atualmente em edição no formulário como um objeto de
   // parâmetros de política de crédito — usado para gravar tanto na condição
@@ -423,6 +435,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       pmParcelaChavesMaxPct,
       pmRiscoProSolutoPosObraPct,
       pmQtdParcelasPosObra,
+      pmParcelaMinimaMensalObra: pmParcelaMinimaMensalObraNum,
+      pmParcelaMinimaSemestral: pmParcelaMinimaSemestralNum,
+      pmParcelaMinimaPosObra: pmParcelaMinimaPosObraNum,
       policy: policyText
     };
   };
@@ -633,6 +648,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedPmChaves = parseDecimal(pmChavesMaxStr, 15.0);
     const parsedPmPosObra = parseDecimal(pmPosObraMaxStr, 5.0);
     const parsedPmQtdPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
+    const parsedPmMinMensalObra = (() => { const v = parseCurrency(pmParcelaMinMensalObra); return v > 0 ? v : 200; })();
+    const parsedPmMinSemestral = (() => { const v = parseCurrency(pmParcelaMinSemestral); return v > 0 ? v : 200; })();
+    const parsedPmMinPosObra = (() => { const v = parseCurrency(pmParcelaMinPosObra); return v > 0 ? v : 200; })();
 
     // Atualiza a formatação visual dos inputs ao salvar
     setNumParcelasStr(String(isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas));
@@ -664,6 +682,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setPmChavesMaxStr(formatDecimalBR(parsedPmChaves, 1, 2));
     setPmPosObraMaxStr(formatDecimalBR(parsedPmPosObra, 1, 2));
     setPmQtdParcelasPosObraStr(String(parsedPmQtdPosObra));
+    setPmParcelaMinMensalObra(formatCurrency(parsedPmMinMensalObra));
+    setPmParcelaMinSemestral(formatCurrency(parsedPmMinSemestral));
+    setPmParcelaMinPosObra(formatCurrency(parsedPmMinPosObra));
 
     const savedParams: Partial<CommercialCondition> = {
       numParcelas: isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas,
@@ -696,6 +717,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       pmParcelaChavesMaxPct: parsedPmChaves,
       pmRiscoProSolutoPosObraPct: parsedPmPosObra,
       pmQtdParcelasPosObra: parsedPmQtdPosObra,
+      pmParcelaMinimaMensalObra: parsedPmMinMensalObra,
+      pmParcelaMinimaSemestral: parsedPmMinSemestral,
+      pmParcelaMinimaPosObra: parsedPmMinPosObra,
       policy: policyText
     };
     const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, savedParams, editingFase);
@@ -1600,8 +1624,71 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </div>
                 </div>
 
+                {/* PARCELA MÍNIMA DE CADA BLOCO RECORRENTE */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Abaixo deste valor, a parcela mensal de obra é considerada inviável (mas nunca é zerada — a Obra é sempre priorizada)">
+                        Parcela Mín. Mensal Obra
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: R$ 200,00</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={pmParcelaMinMensalObra}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setPmParcelaMinMensalObra(e.target.value)}
+                      onBlur={() => {
+                        const v = parseCurrency(pmParcelaMinMensalObra);
+                        setPmParcelaMinMensalObra(formatCurrency(v > 0 ? v : 200));
+                      }}
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Abaixo deste valor, o bloco de intermediárias semestrais é zerado e o saldo passa para a Obra">
+                        Parcela Mín. Semestral
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: R$ 200,00</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={pmParcelaMinSemestral}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setPmParcelaMinSemestral(e.target.value)}
+                      onBlur={() => {
+                        const v = parseCurrency(pmParcelaMinSemestral);
+                        setPmParcelaMinSemestral(formatCurrency(v > 0 ? v : 200));
+                      }}
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Abaixo deste valor, o bloco de pós-obra é zerado e o saldo passa para a Obra">
+                        Parcela Mín. Pós-Obra
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: R$ 200,00</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={pmParcelaMinPosObra}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setPmParcelaMinPosObra(e.target.value)}
+                      onBlur={() => {
+                        const v = parseCurrency(pmParcelaMinPosObra);
+                        setPmParcelaMinPosObra(formatCurrency(v > 0 ? v : 200));
+                      }}
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
+                    />
+                  </div>
+                </div>
+
                 <p className="text-[10px] text-slate-500 px-1 leading-relaxed">
-                  A quantidade de meses de obra (parcelas mensais lineares e intermediárias semestrais) é calculada automaticamente a partir da data de hoje e da previsão de entrega (habite-se) do empreendimento. A parcela intermediária final (chaves) vence 2 meses antes do habite-se.
+                  A quantidade de meses de obra (parcelas mensais lineares) é calculada automaticamente a partir da data de hoje e da previsão de entrega (habite-se) do empreendimento — assim como as intermediárias semestrais, sempre em Junho e Dezembro. A parcela intermediária final (chaves) vence, por padrão, 2 meses antes do habite-se. Todos esses valores e quantidades podem ser ajustados manualmente na ficha do cliente; esta política define apenas as sugestões iniciais e os pisos de parcela mínima.
                 </p>
               </div>
             ) : (

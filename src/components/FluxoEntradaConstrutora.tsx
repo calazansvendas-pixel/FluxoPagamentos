@@ -22,12 +22,14 @@ export interface FluxoEntradaConstrutoraProps {
   isAVistaActive?: boolean;
   onToggleAVista?: (ativo: boolean) => void;
 
-  // Card 2: ITBI no Ato
-  valAtoITBI: number;
-  valorTotalITBI: number;
-  isFirstHome: boolean;
-  onToggleFirstHome: () => void;
-  onITBIChange: (novoValor: number) => void;
+  // Card 2: ITBI no Ato (opcional — condições sem ITBI/registro, como o
+  // Parcelamento Morar, escondem este card e usam grade de 2 colunas)
+  hideITBI?: boolean;
+  valAtoITBI?: number;
+  valorTotalITBI?: number;
+  isFirstHome?: boolean;
+  onToggleFirstHome?: () => void;
+  onITBIChange?: (novoValor: number) => void;
 
   // Card 3: Ato Premiado (Desconto Comercial)
   descontoAto: number;
@@ -49,9 +51,10 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
   onShowToast,
   isAVistaActive = false,
   onToggleAVista,
-  valAtoITBI,
-  valorTotalITBI,
-  isFirstHome,
+  hideITBI = false,
+  valAtoITBI = 0,
+  valorTotalITBI = 0,
+  isFirstHome = true,
   onToggleFirstHome,
   onITBIChange,
   descontoAto,
@@ -140,13 +143,13 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
     const parsed = parseFlexible(rawText);
 
     if (rawText.trim() === '' || parsed <= 0) {
-      onITBIChange(0);
+      onITBIChange?.(0);
       setItbiInputText('');
       return;
     }
 
     if (valorTotalITBI > 0 && parsed > valorTotalITBI + 0.01) {
-      onITBIChange(valorTotalITBI);
+      onITBIChange?.(valorTotalITBI);
       setItbiInputText(formatCurrency(valorTotalITBI));
       if (onShowToast) {
         onShowToast(`O pagamento de ITBI no Ato não pode exceder o total de ${formatCurrency(valorTotalITBI)}.`);
@@ -154,7 +157,7 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
       return;
     }
 
-    onITBIChange(parsed);
+    onITBIChange?.(parsed);
     setItbiInputText(formatCurrency(parsed));
   };
 
@@ -197,9 +200,9 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
         </div>
       </div>
 
-      {/* GRADE DOS 3 CARDS PADRONIZADOS */}
+      {/* GRADE DOS CARDS PADRONIZADOS (3, OU 2 QUANDO O ITBI NÃO SE APLICA) */}
       <div className="space-y-2.5 text-xs">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div className={`grid grid-cols-1 ${hideITBI ? 'sm:grid-cols-2' : 'sm:grid-cols-3'} gap-2.5`}>
           {/* CARD 1: ATO (IMÓVEL) */}
           <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
             <div className="flex items-center justify-between mb-1">
@@ -243,46 +246,48 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
             />
           </div>
 
-          {/* CARD 2: ITBI NO ATO */}
-          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[10px] font-bold text-sky-800 uppercase whitespace-nowrap">
-                ITBI no Ato
-              </label>
-              <button
-                type="button"
-                onClick={onToggleFirstHome}
-                className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
-                  isFirstHome
-                    ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
-                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                }`}
-                title="Alternar entre Com Desconto e Sem Desconto no ITBI"
-              >
-                {isFirstHome ? 'Com Desc.' : 'Sem Desc.'}
-              </button>
+          {/* CARD 2: ITBI NO ATO (oculto quando esta condição não usa ITBI/registro) */}
+          {!hideITBI && (
+            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-sky-800 uppercase whitespace-nowrap">
+                  ITBI no Ato
+                </label>
+                <button
+                  type="button"
+                  onClick={onToggleFirstHome}
+                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                    isFirstHome
+                      ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
+                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                  }`}
+                  title="Alternar entre Com Desconto e Sem Desconto no ITBI"
+                >
+                  {isFirstHome ? 'Com Desc.' : 'Sem Desc.'}
+                </button>
+              </div>
+              <input
+                id="input-fluxo-itbi-ato"
+                type="text"
+                value={isEditingITBI ? itbiInputText : (valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '')}
+                onFocus={(e) => {
+                  setIsEditingITBI(true);
+                  setItbiInputText(valAtoITBI > 0 ? String(valAtoITBI) : '');
+                  e.target.select();
+                }}
+                onChange={(e) => setItbiInputText(e.target.value)}
+                onBlur={(e) => handleFinishITBIEdit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleFinishITBIEdit(itbiInputText);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder="R$ 0,00"
+                className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
+              />
             </div>
-            <input
-              id="input-fluxo-itbi-ato"
-              type="text"
-              value={isEditingITBI ? itbiInputText : (valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '')}
-              onFocus={(e) => {
-                setIsEditingITBI(true);
-                setItbiInputText(valAtoITBI > 0 ? String(valAtoITBI) : '');
-                e.target.select();
-              }}
-              onChange={(e) => setItbiInputText(e.target.value)}
-              onBlur={(e) => handleFinishITBIEdit(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleFinishITBIEdit(itbiInputText);
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-              placeholder="R$ 0,00"
-              className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
-            />
-          </div>
+          )}
 
           {/* CARD 3: ATO PREMIADO (DESTAQUE EM AMARELO SUAVE) */}
           <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/80 flex flex-col justify-between">
