@@ -2015,6 +2015,29 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </div>
             </div>
           </div>
+
+          {/* GRÁFICO: COMPROMETIMENTO POR SÉRIE (PARCELA / RENDA) */}
+          {hasUnitSelected && (
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-4 tracking-wide">Comprometimento por Série (Parcela / Renda)</h4>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={50} tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                    <RechartsTooltip content={<CustomBarTooltip />} cursor={{ fill: '#f1f5f9' }} />
+                    <Bar dataKey="percRendaRaw" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={24}>
+                      {barData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={['#312e81', '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8'][index % 6]} />
+                      ))}
+                      <LabelList dataKey="labelFormatado" fill="#FFFFFF" fontSize={11} fontWeight="bold" position="insideRight" offset={10} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ================= COLUNA DA DIREITA: FLUXO DE ENTRADA C/ CONSTRUTORA & FAIXAS MORAR ================= */}
@@ -2528,31 +2551,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         </div>
 
       </div>
-
-      {hasUnitSelected && (
-        <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-5 mt-4">
-          {/* Gráfico 3: BarChart Funil */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-4 tracking-wide">Comprometimento por Série (Parcela / Renda)</h4>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={50} tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                  <RechartsTooltip content={<CustomBarTooltip />} cursor={{ fill: '#f1f5f9' }} />
-                  <Bar dataKey="percRendaRaw" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={24}>
-                    {barData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={['#312e81', '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8'][index % 6]} />
-                    ))}
-                    <LabelList dataKey="labelFormatado" fill="#FFFFFF" fontSize={11} fontWeight="bold" position="insideRight" offset={10} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* MODAL DE EXPORTAÇÃO PDF ESPECÍFICO MORAR */}
       {isPdfModalOpen && (
