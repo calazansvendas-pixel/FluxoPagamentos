@@ -52,6 +52,7 @@ export interface CommercialCondition {
   pmSinalMinimoPct?: number; // % mínimo do Sinal (Ato) sobre o valor do imóvel (padrão 10%)
   pmParcelaSemestralMaxPct?: number; // % máximo do valor do imóvel por parcela intermediária semestral (padrão 4%)
   pmParcelaChavesMaxPct?: number; // % máximo do valor do imóvel para a parcela intermediária final/chaves (padrão 15%)
+  pmParcelaChavesMesesAntes?: number; // Quantidade de meses antes do habite-se em que a parcela de chaves vence (padrão 2)
   pmRiscoProSolutoPosObraPct?: number; // % máximo do valor do imóvel para o somatório das mensais pós-obra (padrão 5%)
   pmQtdParcelasPosObra?: number; // Quantidade de parcelas mensais pós-obra (padrão 12)
   // Parcela mínima (em R$) de cada campo recorrente: se o valor calculado ficar
