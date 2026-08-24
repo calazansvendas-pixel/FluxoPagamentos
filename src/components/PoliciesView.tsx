@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
-import { calculatePresentValue, ensureProductConditions, calculatePolicyRiskValues, decomposeMorarMonths } from '../utils/calculations';
+import { calculatePresentValue, ensureProductConditions, calculatePolicyRiskValues, decomposeMorarMonths, getConditionKind } from '../utils/calculations';
 
 interface PoliciesViewProps {
   products: Product[];
@@ -104,6 +104,13 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const [serie4MesesStr, setSerie4MesesStr] = useState<string>('12');
   const [serie5MesesStr, setSerie5MesesStr] = useState<string>('12');
   const [serie6MesesStr, setSerie6MesesStr] = useState<string>('12');
+
+  // Estados específicos para a condição "Parcelamento Morar"
+  const [pmSinalMinimoStr, setPmSinalMinimoStr] = useState<string>('10,0');
+  const [pmSemestralMaxStr, setPmSemestralMaxStr] = useState<string>('4,0');
+  const [pmChavesMaxStr, setPmChavesMaxStr] = useState<string>('15,0');
+  const [pmPosObraMaxStr, setPmPosObraMaxStr] = useState<string>('5,0');
+  const [pmQtdParcelasPosObraStr, setPmQtdParcelasPosObraStr] = useState<string>('12');
 
   // Estado das torres habilitadas para simulação nesta política
   const [torresHabilitadas, setTorresHabilitadas] = useState<string[]>([]);
@@ -251,9 +258,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     // qualquer campo não definido em fase2Params mantém o valor da 1ª Fase.
     const source: CommercialCondition = fase === '2' ? { ...cond, ...(cond.fase2Params || {}) } : cond;
 
+    const condKind = getConditionKind(cond.name);
+    const isMorar = condKind === 'sinal-morar';
+    const isParcelamentoMorar = condKind === 'parcelamento-morar';
     const numP = source.numParcelas || 72;
-    const rr = source.riscoRendaPct !== undefined ? source.riscoRendaPct : 30;
-    const isMorar = cond.name.toLowerCase().includes('morar');
+    const rr = source.riscoRendaPct !== undefined ? source.riscoRendaPct : (isParcelamentoMorar ? 40 : 30);
     const ri = source.percMaxProSolutoGlobal !== undefined
       ? source.percMaxProSolutoGlobal
       : (source.riscoImovelPct !== undefined ? source.riscoImovelPct : (isMorar ? 17 : 25));
@@ -279,6 +288,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const sm4 = source.serie4Meses !== undefined ? source.serie4Meses : 12;
     const sm5 = source.serie5Meses !== undefined ? source.serie5Meses : 12;
     const sm6 = source.serie6Meses !== undefined ? source.serie6Meses : 12;
+
+    const pmSinal = source.pmSinalMinimoPct !== undefined ? source.pmSinalMinimoPct : 10.0;
+    const pmSemestral = source.pmParcelaSemestralMaxPct !== undefined ? source.pmParcelaSemestralMaxPct : 4.0;
+    const pmChaves = source.pmParcelaChavesMaxPct !== undefined ? source.pmParcelaChavesMaxPct : 15.0;
+    const pmPosObra = source.pmRiscoProSolutoPosObraPct !== undefined ? source.pmRiscoProSolutoPosObraPct : 5.0;
+    const pmQtdPosObra = source.pmQtdParcelasPosObra !== undefined ? source.pmQtdParcelasPosObra : 12;
 
     const parsedSinal = parseCurrency(source.sinalMinimo);
     const formattedSinal = formatCurrency(parsedSinal > 0 ? parsedSinal : 2000);
@@ -318,6 +333,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setSerie5MesesStr(String(sm5));
     setSerie6MesesStr(String(sm6));
 
+    setPmSinalMinimoStr(formatDecimalBR(pmSinal, 1, 2));
+    setPmSemestralMaxStr(formatDecimalBR(pmSemestral, 1, 2));
+    setPmChavesMaxStr(formatDecimalBR(pmChaves, 1, 2));
+    setPmPosObraMaxStr(formatDecimalBR(pmPosObra, 1, 2));
+    setPmQtdParcelasPosObraStr(String(pmQtdPosObra));
+
     setPolicyText(source.policy || '');
   };
 
@@ -355,6 +376,13 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // Divisão dinâmica dos meses por séries usando a regra oficial Morar
   const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos, serieMesesCapacidades);
 
+  // Parâmetros da condição "Parcelamento Morar"
+  const pmSinalMinimoPct = parseDecimal(pmSinalMinimoStr, 10.0);
+  const pmParcelaSemestralMaxPct = parseDecimal(pmSemestralMaxStr, 4.0);
+  const pmParcelaChavesMaxPct = parseDecimal(pmChavesMaxStr, 15.0);
+  const pmRiscoProSolutoPosObraPct = parseDecimal(pmPosObraMaxStr, 5.0);
+  const pmQtdParcelasPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
+
   // Reúne os valores atualmente em edição no formulário como um objeto de
   // parâmetros de política de crédito — usado para gravar tanto na condição
   // base (1ª Fase) quanto em fase2Params (2ª Fase), já que o mesmo formulário
@@ -362,7 +390,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const buildCurrentParamsObject = (): Partial<CommercialCondition> => {
     const parsedCurrentSinal = parseCurrency(sinalMinimo);
     const formattedCurrentSinal = formatCurrency(parsedCurrentSinal > 0 ? parsedCurrentSinal : 2000);
-    const isCurrentMorar = activeCondObj ? activeCondObj.name.toLowerCase().includes('morar') : false;
+    const isCurrentMorar = activeCondObj ? getConditionKind(activeCondObj.name) === 'sinal-morar' : false;
 
     return {
       numParcelas: isCurrentMorar ? totalMesesMorar : numParcelas,
@@ -390,6 +418,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       serie4Meses,
       serie5Meses,
       serie6Meses,
+      pmSinalMinimoPct,
+      pmParcelaSemestralMaxPct,
+      pmParcelaChavesMaxPct,
+      pmRiscoProSolutoPosObraPct,
+      pmQtdParcelasPosObra,
       policy: policyText
     };
   };
@@ -495,12 +528,13 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     }
 
     const newCondId = `cond_${prodWithConds.id}_${Date.now()}`;
+    const isNewParcelamentoMorar = getConditionKind(trimmedName) === 'parcelamento-morar';
     const newCond: CommercialCondition = {
       id: newCondId,
       name: trimmedName,
       numParcelas: 72,
       sinalMinimo: 'R$ 2.000,00',
-      riscoRendaPct: 30,
+      riscoRendaPct: isNewParcelamentoMorar ? 40 : 30,
       riscoImovelPct: 25,
       mesesTabela1: 36,
       taxaJuros1: 0.0,
@@ -592,7 +626,13 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedSerie5Meses = Math.max(1, parseInt(serie5MesesStr, 10) || 12);
     const parsedSerie6Meses = Math.max(1, parseInt(serie6MesesStr, 10) || 12);
 
-    const isCurrentMorar = activeCondObj ? activeCondObj.name.toLowerCase().includes('morar') : false;
+    const isCurrentMorar = activeCondObj ? getConditionKind(activeCondObj.name) === 'sinal-morar' : false;
+
+    const parsedPmSinal = parseDecimal(pmSinalMinimoStr, 10.0);
+    const parsedPmSemestral = parseDecimal(pmSemestralMaxStr, 4.0);
+    const parsedPmChaves = parseDecimal(pmChavesMaxStr, 15.0);
+    const parsedPmPosObra = parseDecimal(pmPosObraMaxStr, 5.0);
+    const parsedPmQtdPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
 
     // Atualiza a formatação visual dos inputs ao salvar
     setNumParcelasStr(String(isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas));
@@ -619,6 +659,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setSerie4MesesStr(String(parsedSerie4Meses));
     setSerie5MesesStr(String(parsedSerie5Meses));
     setSerie6MesesStr(String(parsedSerie6Meses));
+    setPmSinalMinimoStr(formatDecimalBR(parsedPmSinal, 1, 2));
+    setPmSemestralMaxStr(formatDecimalBR(parsedPmSemestral, 1, 2));
+    setPmChavesMaxStr(formatDecimalBR(parsedPmChaves, 1, 2));
+    setPmPosObraMaxStr(formatDecimalBR(parsedPmPosObra, 1, 2));
+    setPmQtdParcelasPosObraStr(String(parsedPmQtdPosObra));
 
     const savedParams: Partial<CommercialCondition> = {
       numParcelas: isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas,
@@ -646,6 +691,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       serie4Meses: parsedSerie4Meses,
       serie5Meses: parsedSerie5Meses,
       serie6Meses: parsedSerie6Meses,
+      pmSinalMinimoPct: parsedPmSinal,
+      pmParcelaSemestralMaxPct: parsedPmSemestral,
+      pmParcelaChavesMaxPct: parsedPmChaves,
+      pmRiscoProSolutoPosObraPct: parsedPmPosObra,
+      pmQtdParcelasPosObra: parsedPmQtdPosObra,
       policy: policyText
     };
     const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, savedParams, editingFase);
@@ -713,8 +763,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     valorAtoPremiado = riskCalc.atoPremiado || 0;
   }
 
-  const isMorarCondition = activeCondObj 
-    ? activeCondObj.name.toLowerCase().includes('morar') 
+  const isMorarCondition = activeCondObj
+    ? getConditionKind(activeCondObj.name) === 'sinal-morar'
+    : false;
+  const isParcelamentoMorarCondition = activeCondObj
+    ? getConditionKind(activeCondObj.name) === 'parcelamento-morar'
     : false;
 
   const baseMaiorVendaAvaliacao = Math.max(propertyPrice, propertyEvaluation);
@@ -1111,6 +1164,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     Condição Sinal c/ Morar ({totalMesesMorar}x)
                   </span>
                 )}
+                {isParcelamentoMorarCondition && (
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Condição Parcelamento Morar
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1408,6 +1466,143 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </div>
 
                 </div>
+              </div>
+            ) : isParcelamentoMorarCondition ? (
+              /* ========================================================================= */
+              /* LAYOUT EXCLUSIVO PARA CONDIÇÃO: PARCELAMENTO MORAR                        */
+              /* ========================================================================= */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
+                  {/* SINAL MÍNIMO (% DO VALOR DO IMÓVEL) */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Sinal (Ato) mínimo, como percentual do valor do imóvel">
+                        Sinal Mínimo
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: 10,0%</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={pmSinalMinimoStr}
+                        onChange={(e) => setPmSinalMinimoStr(e.target.value)}
+                        onBlur={() => setPmSinalMinimoStr(formatDecimalBR(parseDecimal(pmSinalMinimoStr, 10.0), 1, 2))}
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-emerald-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
+                    </div>
+                  </div>
+
+                  {/* RISCO DE RENDA (TETO DA MENSAL DE OBRA) */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Teto da parcela mensal de obra sobre a renda bruta do cliente">
+                        Risco de Renda
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: 40,0%</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={riscoRendaStr}
+                        onChange={(e) => setRiscoRendaStr(e.target.value)}
+                        onBlur={() => setRiscoRendaStr(formatDecimalBR(parseDecimal(riscoRendaStr, 40.0), 1, 2))}
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-sky-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
+                    </div>
+                  </div>
+
+                  {/* QUANTIDADE DE PARCELAS PÓS-OBRA */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Quantidade de parcelas mensais lineares no pós-obra">
+                        Qtd. Parcelas Pós-Obra
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: 12x</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={pmQtdParcelasPosObraStr}
+                        onChange={(e) => setPmQtdParcelasPosObraStr(e.target.value)}
+                        onBlur={() => setPmQtdParcelasPosObraStr(String(Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 12)))}
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">X</span>
+                    </div>
+                  </div>
+
+                  {/* % MÁX. PARCELA SEMESTRAL */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Teto de cada parcela intermediária semestral, sobre o valor do imóvel">
+                        % Máx. Semestral
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: 4,0%</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={pmSemestralMaxStr}
+                        onChange={(e) => setPmSemestralMaxStr(e.target.value)}
+                        onBlur={() => setPmSemestralMaxStr(formatDecimalBR(parseDecimal(pmSemestralMaxStr, 4.0), 1, 2))}
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-indigo-700 text-center focus:outline-none focus:border-indigo-600 text-xs"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
+                    </div>
+                  </div>
+
+                  {/* % MÁX. PARCELA CHAVES */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Teto da parcela intermediária final (chaves), sobre o valor do imóvel">
+                        % Máx. Chaves
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: 15,0%</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={pmChavesMaxStr}
+                        onChange={(e) => setPmChavesMaxStr(e.target.value)}
+                        onBlur={() => setPmChavesMaxStr(formatDecimalBR(parseDecimal(pmChavesMaxStr, 15.0), 1, 2))}
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-amber-700 text-center focus:outline-none focus:border-amber-600 text-xs"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
+                    </div>
+                  </div>
+
+                  {/* % MÁX. PRÓ-SOLUTO PÓS-OBRA */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Teto do somatório das parcelas mensais pós-obra, sobre o valor do imóvel">
+                        % Máx. Pró-Soluto Pós-Obra
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: 5,0%</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={pmPosObraMaxStr}
+                        onChange={(e) => setPmPosObraMaxStr(e.target.value)}
+                        onBlur={() => setPmPosObraMaxStr(formatDecimalBR(parseDecimal(pmPosObraMaxStr, 5.0), 1, 2))}
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-purple-700 text-center focus:outline-none focus:border-purple-600 text-xs"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 px-1 leading-relaxed">
+                  A quantidade de meses de obra (parcelas mensais lineares e intermediárias semestrais) é calculada automaticamente a partir da data de hoje e da previsão de entrega (habite-se) do empreendimento. A parcela intermediária final (chaves) vence 2 meses antes do habite-se.
+                </p>
               </div>
             ) : (
               /* ========================================================================= */

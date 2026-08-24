@@ -43,6 +43,14 @@ export interface CommercialCondition {
   // condição (qualquer campo não definido em fase2Params mantém o valor da 1ª Fase).
   torresFase2?: string[]; // Lista de torres desta política que estão na 2ª Fase
   fase2Params?: Partial<CommercialCondition>; // Overrides de parâmetros para a 2ª Fase
+
+  // Campos específicos para a condição "Parcelamento Morar" (riscoRendaPct já
+  // existente é reaproveitado como o teto de renda de 40% desta condição).
+  pmSinalMinimoPct?: number; // % mínimo do Sinal (Ato) sobre o valor do imóvel (padrão 10%)
+  pmParcelaSemestralMaxPct?: number; // % máximo do valor do imóvel por parcela intermediária semestral (padrão 4%)
+  pmParcelaChavesMaxPct?: number; // % máximo do valor do imóvel para a parcela intermediária final/chaves (padrão 15%)
+  pmRiscoProSolutoPosObraPct?: number; // % máximo do valor do imóvel para o somatório das mensais pós-obra (padrão 5%)
+  pmQtdParcelasPosObra?: number; // Quantidade de parcelas mensais pós-obra (padrão 12)
 }
 
 export interface TableRow {

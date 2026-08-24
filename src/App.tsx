@@ -2,7 +2,7 @@ import React, { useState, Suspense, lazy } from 'react';
 import { ActiveTab, CommercialCondition, Product, SelectedUnit, SimulationData, TableInfo } from './types';
 import type { SavedSimulationRecord } from './components/SavedSimulationsView';
 import { INITIAL_PRODUCTS } from './data/initialProducts';
-import { ensureProductConditions } from './utils/calculations';
+import { ensureProductConditions, getConditionKind } from './utils/calculations';
 
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -285,10 +285,11 @@ export default function App() {
     showToast('Nova simulação iniciada. Todos os campos, cálculos e seleções foram redefinidos.');
   };
 
-  // Helper function to check if condition is of "Morar" type or "Banco Direto" type
+  // Helper function to check if condition routes to the Ficha Morar screen.
+  // "Parcelamento Morar" também tem "morar" no nome, mas usa a tela de
+  // "Sinal c/ Banco Direto" (getConditionKind já trata esse caso à parte).
   const isMorarCondition = (condName: string): boolean => {
-    const lower = condName.toLowerCase();
-    return lower.includes('morar') || lower.includes('incc') || lower.includes('obra') || lower.includes('ipca');
+    return getConditionKind(condName) === 'sinal-morar';
   };
 
   const handleSelectCondition = (productId: string, conditionId: string) => {
@@ -591,6 +592,7 @@ export default function App() {
               product={activeAnalysisProduct}
               condition={activeAnalysisCondition}
               products={products}
+              currentDate={currentDate}
               onSelectProduct={(prod, condId) => {
                 const prodWithConds = ensureProductConditions({ ...prod });
                 const cond = prodWithConds.conditions.find(c => c.id === condId) || prodWithConds.conditions[0];

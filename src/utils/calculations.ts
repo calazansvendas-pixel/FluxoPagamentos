@@ -70,17 +70,38 @@ export function calculatePricePMT(principal: number, ratePerMonthPct: number, nu
 }
 
 /**
+ * Tipo de tela/motor de cálculo de uma condição comercial, inferido do nome
+ * (mesma convenção usada em todo o app: sem um campo explícito de "tipo",
+ * o nome da condição é que decide qual tela e qual motor de cálculo se
+ * aplicam). "Parcelamento Morar" é verificado ANTES de "Sinal c/ Morar" —
+ * seu nome contém "morar", mas usa a tela/motor de "Sinal c/ Banco Direto"
+ * com o Bloco 3 substituído, não a tela da Ficha Morar.
+ */
+export type ConditionKind = 'sinal-morar' | 'parcelamento-morar' | 'banco-direto';
+
+export function getConditionKind(condName: string | undefined | null): ConditionKind {
+  const lower = (condName || '').toLowerCase();
+  if (lower.includes('parcelamento') && lower.includes('morar')) return 'parcelamento-morar';
+  if (lower.includes('morar') || lower.includes('incc') || lower.includes('obra') || lower.includes('ipca')) return 'sinal-morar';
+  return 'banco-direto';
+}
+
+export function isParcelamentoMorarCondition(condName: string | undefined | null): boolean {
+  return getConditionKind(condName) === 'parcelamento-morar';
+}
+
+/**
  * Garante que o produto possui a estrutura de condições comerciais necessárias
  */
 export function ensureProductConditions(prod: Product): Product {
   if (!prod) return prod;
   if (!prod.conditions || prod.conditions.length === 0) {
-    const opts = (prod.options && prod.options.length > 0) 
-      ? prod.options 
+    const opts = (prod.options && prod.options.length > 0)
+      ? prod.options
       : ['Sinal c/ Banco Direto', 'Sinal c/ Morar'];
-    
+
     prod.conditions = opts.map((optName, idx) => {
-      const isMorar = optName.toLowerCase().includes('morar');
+      const isMorar = getConditionKind(optName) === 'sinal-morar';
       return {
         id: `cond_${prod.id}_${idx + 1}`,
         name: optName,
@@ -807,7 +828,7 @@ export function calculatePolicyRiskValues(
 
   const sinalMinimoNum = cond.sinalMinimo ? parseCurrency(cond.sinalMinimo) : 2000;
 
-  const isMorar = cond.name ? cond.name.toLowerCase().includes('morar') : false;
+  const isMorar = getConditionKind(cond.name) === 'sinal-morar';
 
   if (isMorar) {
     const mesesObraParam = cond.mesesObra ?? 33;
@@ -949,5 +970,143 @@ export function calculatePolicyRiskValues(
     minRiskVal: simulacao.proSolutoMaximo || 0,
 
     simulacao
+  };
+}
+
+/**
+ * Diferença em meses de calendário entre duas datas no formato "YYYY-MM-DD"
+ * (o dia do mês é ignorado — só ano e mês contam, como nos demais campos de
+ * "meses até a entrega" já usados no app). Nunca retorna negativo.
+ */
+export function monthsBetweenDates(fromDateStr?: string, toDateStr?: string): number {
+  if (!fromDateStr || !toDateStr) return 0;
+  const from = fromDateStr.split('-').map(n => parseInt(n, 10));
+  const to = toDateStr.split('-').map(n => parseInt(n, 10));
+  if (from.length < 2 || to.length < 2 || from.some(isNaN) || to.some(isNaN)) return 0;
+  const diff = (to[0] - from[0]) * 12 + (to[1] - from[1]);
+  return Math.max(0, diff);
+}
+
+export interface ParcelamentoMorarParams {
+  price: number; // Valor do imóvel (VGV) — base de todos os percentuais desta condição
+  renda: number;
+  recursos: number; // Financiamento + Subsídio + FGTS já aprovados (normalmente 0 nesta condição)
+  mesesObra: number; // Meses da data de venda (referência) até a entrega (habite-se)
+  qtdParcelasPosObra: number;
+  pctSinalMinimo: number;
+  pctSemestralMax: number;
+  pctChavesMax: number;
+  pctPosObraMax: number;
+  pctRiscoRenda: number; // Teto da parcela mensal de obra como % da renda (referência 40%)
+  valAtoManual: number | null;
+  isAtoPremiadoEnabled: boolean;
+}
+
+export interface ParcelamentoMorarResult {
+  sinalMinimoCalculado: number;
+  atoEfetivo: number;
+  atoMaximoPossivel: number;
+  descontoAtoPremiado: number;
+  saldoAPagarDireto: number;
+  mesesObra: number;
+  nSemestrais: number;
+  valorSemestral: number;
+  totalSemestrais: number;
+  valorChaves: number;
+  qtdParcelasPosObra: number;
+  valorPosObraTotal: number;
+  valorPosObraParcela: number;
+  nMensaisObra: number;
+  valorMensalObraTotal: number;
+  valorMensalObra: number;
+  pctRendaMensalObra: number;
+  excedeRiscoRenda: boolean;
+  subtotalAteChaves: number;
+  pctSubtotalAteChaves: number;
+}
+
+/**
+ * Motor de cálculo da condição "Parcelamento Morar": Sinal (Ato) mínimo de
+ * X% do valor do imóvel, Ato Premiado pela mesma fórmula já usada nas demais
+ * condições, e o saldo restante dividido em parcelas mensais lineares
+ * (obra), intermediárias semestrais e uma parcela final (chaves) — todas
+ * limitadas a um percentual do valor do imóvel definido na política — e
+ * parcelas mensais pós-obra, limitadas ao teto de pró-soluto pós-obra da
+ * política. A ordem de reserva é Sinal → Pós-Obra → Chaves → Semestrais →
+ * Mensais de Obra (o que sobrar), pois é essa ordem que reproduz o exemplo
+ * numérico oficial da condição comercial.
+ */
+export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): ParcelamentoMorarResult {
+  const price = Math.max(0, p.price || 0);
+  const recursos = Math.max(0, p.recursos || 0);
+
+  const sinalMinimoCalculado = Math.round(price * ((p.pctSinalMinimo ?? 10) / 100) * 100) / 100;
+  const atoEfetivoBruto = (p.valAtoManual !== null && p.valAtoManual >= sinalMinimoCalculado)
+    ? p.valAtoManual
+    : sinalMinimoCalculado;
+
+  const descontoAtoPremiado = p.isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoEfetivoBruto) : 0;
+  const atoMaximoPossivel = Math.max(0, price - recursos - descontoAtoPremiado);
+  const atoEfetivo = Math.min(atoEfetivoBruto, atoMaximoPossivel);
+
+  const saldoAPagarDireto = Math.max(0, (price - descontoAtoPremiado) - recursos - atoEfetivo);
+
+  const mesesObra = Math.max(0, Math.round(p.mesesObra || 0));
+  const qtdParcelasPosObra = Math.max(0, Math.round(p.qtdParcelasPosObra || 0));
+
+  const valorPosObraTeto = Math.round(price * ((p.pctPosObraMax ?? 5) / 100) * 100) / 100;
+  const valorPosObraTotal = Math.min(valorPosObraTeto, saldoAPagarDireto);
+  const valorPosObraParcela = qtdParcelasPosObra > 0
+    ? Math.round((valorPosObraTotal / qtdParcelasPosObra) * 100) / 100
+    : 0;
+  const restanteAposPos = Math.max(0, saldoAPagarDireto - valorPosObraTotal);
+
+  const valorChavesTeto = Math.round(price * ((p.pctChavesMax ?? 15) / 100) * 100) / 100;
+  const valorChaves = Math.min(valorChavesTeto, restanteAposPos);
+  const restanteAposChaves = Math.max(0, restanteAposPos - valorChaves);
+
+  // Intermediárias semestrais: uma a cada 6 meses entre a venda e a parcela
+  // final (chaves), que por sua vez vence 2 meses antes do habite-se.
+  const mesesAteChavesFinal = Math.max(0, mesesObra - 2);
+  const nSemestrais = Math.floor(mesesAteChavesFinal / 6);
+  const valorSemestralTeto = Math.round(price * ((p.pctSemestralMax ?? 4) / 100) * 100) / 100;
+  const totalSemestraisTeto = Math.round(valorSemestralTeto * nSemestrais * 100) / 100;
+  const totalSemestrais = Math.min(totalSemestraisTeto, restanteAposChaves);
+  const valorSemestral = nSemestrais > 0 ? Math.round((totalSemestrais / nSemestrais) * 100) / 100 : 0;
+
+  const nMensaisObra = mesesObra;
+  const valorMensalObraTotal = Math.max(0, restanteAposChaves - totalSemestrais);
+  const valorMensalObra = nMensaisObra > 0
+    ? Math.round((valorMensalObraTotal / nMensaisObra) * 100) / 100
+    : 0;
+
+  const renda = Math.max(0, p.renda || 0);
+  const pctRendaMensalObra = renda > 0 ? (valorMensalObra / renda) * 100 : 0;
+  const excedeRiscoRenda = renda > 0 && valorMensalObra > renda * ((p.pctRiscoRenda ?? 40) / 100) + 0.01;
+
+  const subtotalAteChaves = atoEfetivo + valorMensalObraTotal + totalSemestrais + valorChaves;
+  const pctSubtotalAteChaves = price > 0 ? (subtotalAteChaves / price) * 100 : 0;
+
+  return {
+    sinalMinimoCalculado,
+    atoEfetivo,
+    atoMaximoPossivel,
+    descontoAtoPremiado,
+    saldoAPagarDireto,
+    mesesObra,
+    nSemestrais,
+    valorSemestral,
+    totalSemestrais,
+    valorChaves,
+    qtdParcelasPosObra,
+    valorPosObraTotal,
+    valorPosObraParcela,
+    nMensaisObra,
+    valorMensalObraTotal,
+    valorMensalObra,
+    pctRendaMensalObra,
+    excedeRiscoRenda,
+    subtotalAteChaves,
+    pctSubtotalAteChaves
   };
 }
