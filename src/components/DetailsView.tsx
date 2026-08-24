@@ -109,8 +109,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // são livremente editáveis nesta ficha — resetam ao trocar produto/condição
   // ou ao clicar em "Limpar" (null = usa a sugestão automática).
   const [pmMensalObraValorManual, setPmMensalObraValorManual] = useState<number | null>(null);
-  const [pmIntermediariasEnabled, setPmIntermediariasEnabled] = useState<boolean>(true);
+  // Qtd. Meses da Mensal de Obra: editável, mas só pode DIMINUIR em relação à
+  // sugestão automática (hoje -> habite-se) — nunca aumentar além dela.
+  const [pmMesesObraManual, setPmMesesObraManual] = useState<number | null>(null);
   const [pmChavesEnabled, setPmChavesEnabled] = useState<boolean>(true);
+  // Ligar/desligar cada intermediária semestral individualmente (índice ->
+  // usada ou não). Ausente no mapa = usada (padrão true).
+  const [pmSemestralIndividualEnabled, setPmSemestralIndividualEnabled] = useState<Record<number, boolean>>({});
   const [pmSemestralValorManual, setPmSemestralValorManual] = useState<number | null>(null);
   // Data de cada intermediária semestral, editável individualmente (índice ->
   // "YYYY-MM"). Quando não há override, usa a data sugerida automaticamente.
@@ -173,8 +178,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setQtdMensais(condNumParcelas);
     setIsAtoPremiadoEnabled(true);
     setPmMensalObraValorManual(null);
-    setPmIntermediariasEnabled(true);
+    setPmMesesObraManual(null);
     setPmChavesEnabled(true);
+    setPmSemestralIndividualEnabled({});
     setPmSemestralValorManual(null);
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
@@ -324,8 +330,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       setQtdMensais(condNumParcelas);
     }
     setPmMensalObraValorManual(null);
-    setPmIntermediariasEnabled(true);
+    setPmMesesObraManual(null);
     setPmChavesEnabled(true);
+    setPmSemestralIndividualEnabled({});
     setPmSemestralValorManual(null);
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
@@ -436,11 +443,16 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     : (currentProd?.deliveryDatePhase1 || currentProd?.deliveryDate || '');
   const hojeRef = currentDate || new Date().toISOString().split('T')[0];
   const pmMesesObraAuto = hasUnitSelected ? monthsBetweenDates(hojeRef, deliveryDateRaw) : 0;
-  // A quantidade de meses de obra não é editável na ficha — é sempre calculada
-  // a partir de hoje e da previsão de entrega (habite-se) cadastrada no
-  // empreendimento (Políticas & Empreendimentos é onde ela é, na prática,
-  // ajustada).
-  const pmMesesObraQtd = pmMesesObraAuto;
+  // Qtd. Meses da Mensal de Obra é editável, mas só para DIMINUIR em relação à
+  // sugestão automática (hoje -> habite-se) — nunca ultrapassá-la. O teto
+  // (máximo) é sempre pmMesesObraAuto; o input já garante isso via `maximo`.
+  const pmMesesObraQtd = pmMesesObraManual !== null
+    ? Math.min(Math.max(0, pmMesesObraManual), pmMesesObraAuto)
+    : pmMesesObraAuto;
+  // Se o corretor reduziu o prazo de obra em relação ao sugerido, entende-se
+  // que não haverá parcelamento pós-obra (quem paga a obra mais rápido está
+  // sinalizando que vai quitar tudo até as chaves) — zera automaticamente.
+  const pmObraReduzida = pmMesesObraManual !== null && pmMesesObraQtd < pmMesesObraAuto;
 
   // Vencimento da parcela intermediária final (chaves): quantidade de meses
   // antes do habite-se definida na política de crédito (não é editável na
@@ -450,15 +462,19 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const chavesVencimentoStr = pmChavesDataStr ? formatDateMonthYear(pmChavesDataStr) : '';
 
   // Intermediárias semestrais: sempre em Junho e Dezembro de cada ano, entre
-  // hoje e o vencimento das chaves.
+  // hoje e o vencimento das chaves. Cada uma pode ser ligada/desligada
+  // individualmente (padrão: todas ligadas) — permanecem disponíveis mesmo
+  // com o prazo de obra reduzido, junto com a Parcela de Chaves.
   const pmSemestraisQtdAuto = hasUnitSelected ? contarSemestraisJunhoDezembro(hojeRef, pmChavesDataStr) : 0;
-  const pmSemestraisQtd = pmIntermediariasEnabled ? pmSemestraisQtdAuto : 0;
-  const pmSemestraisDatasAuto = hasUnitSelected ? gerarDatasSemestrais(hojeRef, pmSemestraisQtd) : [];
+  const pmSemestraisDatasAuto = hasUnitSelected ? gerarDatasSemestrais(hojeRef, pmSemestraisQtdAuto) : [];
   const pmSemestraisDatas = pmSemestraisDatasAuto.map((dataAuto, idx) => (
     pmSemestralDatasManual[idx] ? `${pmSemestralDatasManual[idx]}-01` : dataAuto
   ));
+  const pmSemestraisQtdEfetiva = pmSemestraisDatasAuto.filter((_, idx) => pmSemestralIndividualEnabled[idx] !== false).length;
 
-  const pmPosObraQtd = pmQtdPosObraManual !== null ? pmQtdPosObraManual : (currentCond?.pmQtdParcelasPosObra ?? 12);
+  const pmPosObraQtd = pmObraReduzida
+    ? 0
+    : (pmQtdPosObraManual !== null ? pmQtdPosObraManual : (currentCond?.pmQtdParcelasPosObra ?? 12));
 
   // Datas de início: a 1ª mensal de obra vence no mês seguinte à venda; a 1ª
   // parcela pós-obra vence no mês seguinte à entrega (habite-se).
@@ -478,7 +494,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     pctSinalMinimo: pmSinalMinimoPct,
     pctRiscoRenda: currentCond?.riscoRendaPct ?? 40,
     mesesObraQtd: pmMesesObraQtd,
-    semestraisQtd: pmSemestraisQtd,
+    semestraisQtd: pmSemestraisQtdEfetiva,
     posObraQtd: pmPosObraQtd,
     pctSemestralMax: currentCond?.pmParcelaSemestralMaxPct ?? 4,
     pctChavesMax: currentCond?.pmParcelaChavesMaxPct ?? 15,
@@ -497,6 +513,22 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // valor do imóvel antes de descontar o Ato em si (Ato + este saldo = tudo
   // que precisa ser pago fora do Ato: mensais de obra + semestrais + chaves).
   const pmSinalTotal = pm.saldoAPagarDireto + pm.atoEfetivo;
+
+  // Valor de "Ato (Imóvel)" (opção "À Vista") que zera o saldo a parcelar
+  // (mensais de obra + semestrais + chaves + pós-obra), trazendo tudo para o
+  // Ato — mesmo mecanismo do Banco Direto: ponto fixo ato* = base -
+  // desconto(ato*), calculado sobre o financiamento bancário eventual
+  // (maxFinanc) já descontando as mensais 30d/60d (que continuam sendo pagas
+  // à parte e são somadas de volta ao final, mesma convenção de valAtoManual).
+  const pmMensaisAntecipadas = (valParc2 || 0) + (valParc3 || 0);
+  const pmBaseAVista = hasUnitSelected
+    ? Math.max(0, price - maxFinanc - pmMensaisAntecipadas)
+    : 0;
+  const pmAtoAposAntecipadasAVistaTarget = hasUnitSelected
+    ? resolverTetoAtoComDesconto(pmBaseAVista, isAtoPremiadoEnabled)
+    : 0;
+  const pmAtoAVistaTarget = pmAtoAposAntecipadasAVistaTarget + pmMensaisAntecipadas;
+  const pmIsAVistaActive = hasUnitSelected && valAtoManual !== null && Math.abs(valAtoManual - pmAtoAVistaTarget) < 0.01;
 
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
@@ -889,8 +921,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setQtdMensais(condNumParcelas);
     setIsAtoPremiadoEnabled(true);
     setPmMensalObraValorManual(null);
-    setPmIntermediariasEnabled(true);
+    setPmMesesObraManual(null);
     setPmChavesEnabled(true);
+    setPmSemestralIndividualEnabled({});
     setPmSemestralValorManual(null);
     setPmSemestralDatasManual({});
     setPmChavesValorManual(null);
@@ -1697,12 +1730,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             onToggleAtoPremiado={(ativo) => {
               setIsAtoPremiadoEnabled(ativo);
             }}
-            isAVistaActive={isParcelamentoMorar ? undefined : isAVistaActive}
-            onToggleAVista={isParcelamentoMorar ? undefined : (ativo) => {
+            isAVistaActive={isParcelamentoMorar ? pmIsAVistaActive : isAVistaActive}
+            onToggleAVista={(ativo) => {
               // Mesmo mecanismo de um Ato (Imóvel) digitado manualmente — só que o valor
-              // é calculado automaticamente para o ponto exato que zera o Pró-Soluto
-              // (Sinal Restante), ou desfeito para voltar ao fluxo parcelado normal.
-              setValAtoManual(ativo ? atoAVistaTarget : null);
+              // é calculado automaticamente para o ponto exato que zera o saldo a
+              // parcelar, ou desfeito para voltar ao fluxo parcelado normal.
+              setValAtoManual(ativo ? (isParcelamentoMorar ? pmAtoAVistaTarget : atoAVistaTarget) : null);
             }}
           >
             {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) — MESMO LAYOUT EM TODAS AS CONDIÇÕES */}
@@ -1839,15 +1872,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     )}
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">Qtd. Meses</label>
-                      <div className="relative flex items-center">
-                        <div className="w-full bg-slate-100 px-2 py-1.5 rounded-md border border-slate-200 font-bold text-slate-500 text-center text-xs">
-                          {pmMesesObraQtd}
-                        </div>
-                        <span className="absolute right-2 text-[10px] font-extrabold text-slate-400 pointer-events-none">X</span>
-                      </div>
-                    </div>
+                    <PmCampoEditavel
+                      label="Qtd. Meses"
+                      tipo="inteiro"
+                      suffix="X"
+                      maximo={pmMesesObraAuto}
+                      value={pmMesesObraQtd}
+                      onCommit={setPmMesesObraManual}
+                      onShowToast={onShowToast}
+                    />
                     <PmCampoEditavel
                       label="Valor da Parcela"
                       tipo="moeda"
@@ -1875,52 +1908,64 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       <span>Abaixo da parcela mínima configurada na política.</span>
                     </div>
                   )}
+                  {pmObraReduzida && (
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-sky-700 bg-sky-50 p-1 rounded border border-sky-200">
+                      <AlertTriangle className="w-3 h-3 text-sky-600 shrink-0" />
+                      <span>Prazo reduzido do sugerido ({pmMesesObraAuto} meses) — Pós-Obra zerado automaticamente.</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* INTERMEDIÁRIAS SEMESTRAIS: LIGAR/DESLIGAR, QUANTIDADE SEMPRE AUTOMÁTICA, DEPOIS UM QUADRO POR SEMESTRAL */}
+                {/* INTERMEDIÁRIAS SEMESTRAIS: CADA UMA LIGADA/DESLIGADA INDIVIDUALMENTE */}
                 <div className="flex items-center justify-between gap-2 px-1">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={pmIntermediariasEnabled}
-                      onChange={(e) => setPmIntermediariasEnabled(e.target.checked)}
-                      className="rounded text-sky-600 focus:ring-sky-600 cursor-pointer"
-                    />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Intermediárias Semestrais (Jun/Dez)</span>
-                  </label>
-                  {pmIntermediariasEnabled && (
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Intermediárias Semestrais (Jun/Dez)</span>
+                  {pmSemestraisDatasAuto.length > 0 && (
                     <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
-                      {pm.nSemestrais}X
+                      {pmSemestraisQtdEfetiva}/{pmSemestraisDatasAuto.length}X
                     </span>
                   )}
                 </div>
 
-                {pmIntermediariasEnabled && pmSemestraisDatas.map((dataStr, idx) => (
-                  <div key={idx} className="p-2.5 rounded-lg border bg-slate-50 border-slate-200/80 flex items-center justify-between gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Semestral {idx + 1}</label>
-                      <input
-                        type="month"
-                        value={dataStr.slice(0, 7)}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setPmSemestralDatasManual(prev => ({ ...prev, [idx]: val }));
-                        }}
-                        className="bg-white px-2 py-1 rounded-md border border-slate-200 font-semibold text-slate-700 text-xs focus:outline-none focus:border-sky-600"
-                      />
+                {pmSemestraisDatas.map((dataStr, idx) => {
+                  const semestralAtiva = pmSemestralIndividualEnabled[idx] !== false;
+                  return (
+                    <div key={idx} className={`p-2.5 rounded-lg border flex items-center justify-between gap-3 ${semestralAtiva ? 'bg-slate-50 border-slate-200/80' : 'bg-slate-50/60 border-slate-200/60 opacity-60'}`}>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={semestralAtiva}
+                          onChange={(e) => setPmSemestralIndividualEnabled(prev => ({ ...prev, [idx]: e.target.checked }))}
+                          className="rounded text-sky-600 focus:ring-sky-600 cursor-pointer"
+                        />
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Semestral {idx + 1}</span>
+                          <input
+                            type="month"
+                            disabled={!semestralAtiva}
+                            value={dataStr.slice(0, 7)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setPmSemestralDatasManual(prev => ({ ...prev, [idx]: val }));
+                            }}
+                            className="bg-white px-2 py-1 rounded-md border border-slate-200 font-semibold text-slate-700 text-xs focus:outline-none focus:border-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                        </div>
+                      </label>
+                      {semestralAtiva && (
+                        <div className="w-32">
+                          <PmCampoEditavel
+                            label="Valor"
+                            tipo="moeda"
+                            minimo={currentCond?.pmParcelaMinimaSemestral ?? 200}
+                            value={pm.valorSemestral}
+                            onCommit={setPmSemestralValorManual}
+                            onShowToast={onShowToast}
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div className="w-32">
-                      <PmCampoEditavel
-                        label="Valor"
-                        tipo="moeda"
-                        minimo={currentCond?.pmParcelaMinimaSemestral ?? 200}
-                        value={pm.valorSemestral}
-                        onCommit={setPmSemestralValorManual}
-                        onShowToast={onShowToast}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {/* PARCELA FINAL (CHAVES) — LIGAR/DESLIGAR; O VENCIMENTO VEM DA POLÍTICA, NÃO É EDITÁVEL AQUI */}
                 <div className={`p-2.5 rounded-lg border flex items-center justify-between gap-3 ${pmChavesEnabled ? 'bg-amber-50 border-amber-200/80' : 'bg-slate-50 border-slate-200/80'}`}>
@@ -1952,38 +1997,44 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   )}
                 </div>
 
-                {/* PARCELAMENTO PÓS-OBRA */}
-                <div className="p-2.5 rounded-lg border bg-slate-50 border-slate-200/80">
+                {/* PARCELAMENTO PÓS-OBRA — ZERADO AUTOMATICAMENTE SE O PRAZO DE OBRA FOI REDUZIDO */}
+                <div className={`p-2.5 rounded-lg border ${pmObraReduzida ? 'bg-slate-50/60 border-slate-200/60 opacity-60' : 'bg-slate-50 border-slate-200/80'}`}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] font-bold text-slate-500 uppercase">Pós-Obra</span>
-                    {pmPosObraDataInicio && (
+                    {!pmObraReduzida && pmPosObraDataInicio && (
                       <span className="text-[9.5px] text-slate-400 font-semibold">A partir de {pmPosObraDataInicio}</span>
                     )}
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <PmCampoEditavel
-                      label="Qtd. Meses"
-                      tipo="inteiro"
-                      suffix="X"
-                      value={pmPosObraQtd}
-                      onCommit={setPmQtdPosObraManual}
-                      onShowToast={onShowToast}
-                    />
-                    <PmCampoEditavel
-                      label="Valor da Parcela"
-                      tipo="moeda"
-                      minimo={currentCond?.pmParcelaMinimaPosObra ?? 200}
-                      value={pm.valorPosObraParcela}
-                      onCommit={setPmPosObraValorManual}
-                      onShowToast={onShowToast}
-                    />
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">Valor Total</label>
-                      <div className="w-full bg-white px-2 py-1.5 rounded-md border border-slate-200 font-bold text-slate-900 text-center text-xs">
-                        {formatCurrency(pm.valorPosObraTotal)}
+                  {pmObraReduzida ? (
+                    <div className="text-[10px] text-slate-500 font-semibold text-center py-2">
+                      Não utilizado — prazo de obra reduzido do sugerido.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <PmCampoEditavel
+                        label="Qtd. Meses"
+                        tipo="inteiro"
+                        suffix="X"
+                        value={pmPosObraQtd}
+                        onCommit={setPmQtdPosObraManual}
+                        onShowToast={onShowToast}
+                      />
+                      <PmCampoEditavel
+                        label="Valor da Parcela"
+                        tipo="moeda"
+                        minimo={currentCond?.pmParcelaMinimaPosObra ?? 200}
+                        value={pm.valorPosObraParcela}
+                        onCommit={setPmPosObraValorManual}
+                        onShowToast={onShowToast}
+                      />
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 whitespace-nowrap">Valor Total</label>
+                        <div className="w-full bg-white px-2 py-1.5 rounded-md border border-slate-200 font-bold text-slate-900 text-center text-xs">
+                          {formatCurrency(pm.valorPosObraTotal)}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
