@@ -1092,6 +1092,11 @@ export interface ParcelamentoMorarParams {
   parcelaMinimaMensalObra: number;
   parcelaMinimaSemestral: number;
   parcelaMinimaPosObra: number;
+
+  // 1ª Mensal (30 dias) + 2ª Mensal (60 dias): mesmo mecanismo já usado nas
+  // demais condições comerciais — abatem primeiro do Ato (até o piso mínimo
+  // de X% do imóvel), e o que sobrar reduz o saldo a parcelar diretamente.
+  mensaisAntecipadas?: number;
 }
 
 export interface ParcelamentoMorarResult {
@@ -1140,11 +1145,21 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     ? p.valAtoManual
     : sinalMinimoCalculado;
 
-  const descontoAtoPremiado = p.isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoEfetivoBruto) : 0;
-  const atoMaximoPossivel = Math.max(0, price - recursos - descontoAtoPremiado);
-  const atoEfetivo = Math.min(atoEfetivoBruto, atoMaximoPossivel);
+  // 1ª/2ª Mensal (30/60 dias): abatem primeiro do Ato, até o piso mínimo
+  // (sinalMinimoCalculado) — só o que sobrar depois disso reduz o saldo a
+  // parcelar diretamente. O desconto do Ato Premiado é calculado sobre o Ato
+  // JÁ com esse abatimento aplicado (mesma ordem usada nas demais condições).
+  const mensaisAntecipadas = Math.max(0, p.mensaisAntecipadas || 0);
+  const disponivelAbatimentoAto = Math.max(0, atoEfetivoBruto - sinalMinimoCalculado);
+  const atoAbsorvidoAntecipadas = Math.min(disponivelAbatimentoAto, mensaisAntecipadas);
+  const atoAposAntecipadas = atoEfetivoBruto - atoAbsorvidoAntecipadas;
+  const antecipadasRestante = mensaisAntecipadas - atoAbsorvidoAntecipadas;
 
-  const saldoAPagarDireto = Math.max(0, (price - descontoAtoPremiado) - recursos - atoEfetivo);
+  const descontoAtoPremiado = p.isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoAposAntecipadas) : 0;
+  const atoMaximoPossivel = Math.max(0, price - recursos - descontoAtoPremiado);
+  const atoEfetivo = Math.min(atoAposAntecipadas, atoMaximoPossivel);
+
+  const saldoAPagarDireto = Math.max(0, (price - descontoAtoPremiado) - recursos - atoEfetivo - antecipadasRestante);
 
   const qtdParcelasPosObra = Math.max(0, Math.round(p.posObraQtd || 0));
   const nSemestrais = Math.max(0, Math.round(p.semestraisQtd || 0));
