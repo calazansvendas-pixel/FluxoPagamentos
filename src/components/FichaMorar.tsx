@@ -605,6 +605,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const sinalImovelInicial = hasUnitSelected ? Math.max(0, Math.round((price - (maxFinanc + subsidy + fgts)) * 100) / 100) : 0;
   const sinalLiquidoImovelNecessario = hasUnitSelected ? Math.max(0, Math.round((sinalImovelInicial - descontoAto) * 100) / 100) : 0;
 
+  // Valor de Ato (Imóvel) que zera exatamente o Pró-Soluto (opção "À Vista"), sem
+  // tocar em Financiamento/FGTS — ponto fixo ato* = sinalImovelInicial - desconto(ato*),
+  // mesma equação de resolverTetoAtoComDesconto, mas com base no Sinal necessário
+  // (antes de abater financiamento/FGTS) em vez de price - subsidy (que é o teto
+  // absoluto, usado quando o excedente pode avançar até o FGTS).
+  const atoAVistaTarget = hasUnitSelected
+    ? resolverTetoAtoComDesconto(sinalImovelInicial, isAtoPremiadoEnabled)
+    : 0;
+  const isAVistaActive = hasUnitSelected && valAtoManual !== null && Math.abs(valAtoManual - atoAVistaTarget) < 0.01;
+
   // 1ª Etapa: Verificação do Pró-Soluto da Construtora e Excedente
   const saldoProSolutoRestante = hasUnitSelected 
     ? Math.max(0, Math.round((sinalLiquidoImovelNecessario - valorAtoEfetivo) * 100) / 100)
@@ -1973,6 +1983,23 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               setValAtoManual(null);
               setIsManualObra(false);
               setIsManualPos(false);
+            }}
+            isAVistaActive={isAVistaActive}
+            onToggleAVista={(ativo) => {
+              if (ativo) {
+                // Traz o Pró-Soluto inteiro para o Ato (Imóvel), zerando as parcelas —
+                // mesmo mecanismo de um Ato manual, só que calculado automaticamente
+                // para o valor exato que zera o Pró-Soluto (sem tocar Financiamento/FGTS),
+                // já considerando o desconto do Ato Premiado quando ativo.
+                setValAtoManual(atoAVistaTarget);
+                setAtoInputText(formatCurrency(atoAVistaTarget));
+                recalcularSeriesParaAtoManual(atoAVistaTarget);
+              } else {
+                // Volta para o fluxo parcelado normal (Ato automático/sugerido).
+                setValAtoManual(null);
+                setAtoInputText(formatCurrency(atoSugeridoResidual));
+                aplicarDistribuicaoOficialMorar();
+              }
             }}
           />
 

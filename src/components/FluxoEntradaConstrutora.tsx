@@ -17,6 +17,10 @@ export interface FluxoEntradaConstrutoraProps {
   valorAtoMaximo?: number;
   onAtoChange: (novoValor: number | null) => void;
   onShowToast?: (msg: string) => void;
+  // Alternância Parcelado / À Vista (opcional — só usada no fluxo Sinal c/ Morar,
+  // onde existe Pró-Soluto parcelado a ser trazido inteiro para o Ato).
+  isAVistaActive?: boolean;
+  onToggleAVista?: (ativo: boolean) => void;
 
   // Card 2: ITBI no Ato
   valAtoITBI: number;
@@ -43,6 +47,8 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
   valorAtoMaximo = 0,
   onAtoChange,
   onShowToast,
+  isAVistaActive = false,
+  onToggleAVista,
   valAtoITBI,
   valorTotalITBI,
   isFirstHome,
@@ -194,12 +200,26 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
       {/* GRADE DOS 3 CARDS PADRONIZADOS */}
       <div className="space-y-2.5 text-xs">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          {/* CARD 1: ATO (IMÓVEL) - SEM O BOTÃO 'ZERAR ATO' */}
+          {/* CARD 1: ATO (IMÓVEL) */}
           <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
             <div className="flex items-center justify-between mb-1">
               <label className="block text-[10px] font-bold text-slate-600 uppercase whitespace-nowrap">
                 Ato (Imóvel)
               </label>
+              {onToggleAVista && (
+                <button
+                  type="button"
+                  onClick={() => onToggleAVista(!isAVistaActive)}
+                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                    isAVistaActive
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200'
+                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                  }`}
+                  title={isAVistaActive ? 'Voltar para o fluxo parcelado' : 'Quitar o Pró-Soluto à vista, trazendo o saldo para o Ato (Imóvel)'}
+                >
+                  {isAVistaActive ? 'À Vista' : 'Parcelado'}
+                </button>
+              )}
             </div>
             <input
               id="input-fluxo-ato-imovel"
