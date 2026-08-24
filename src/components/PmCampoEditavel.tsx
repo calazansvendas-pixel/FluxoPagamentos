@@ -7,6 +7,7 @@ interface PmCampoEditavelProps {
   onCommit: (novoValor: number | null) => void; // null = limpa o override e volta pra sugestão
   tipo?: 'moeda' | 'inteiro';
   minimo?: number; // piso — só se aplica a campos do tipo "moeda"
+  maximo?: number; // teto — só se aplica a campos do tipo "inteiro"
   suffix?: string; // ex: "meses", "x" — só para o tipo "inteiro"
   disabled?: boolean;
   onShowToast?: (msg: string) => void;
@@ -25,6 +26,7 @@ export const PmCampoEditavel: React.FC<PmCampoEditavelProps> = ({
   onCommit,
   tipo = 'moeda',
   minimo = 0,
+  maximo,
   suffix,
   disabled = false,
   onShowToast,
@@ -62,6 +64,12 @@ export const PmCampoEditavel: React.FC<PmCampoEditavelProps> = ({
       const parsed = parseInt(raw.replace(/[^\d-]/g, ''), 10);
       if (isNaN(parsed) || parsed < 0) {
         onCommit(null);
+        return;
+      }
+      if (maximo !== undefined && parsed > maximo) {
+        onCommit(maximo);
+        setInputText(String(maximo));
+        onShowToast?.(`Não é possível ultrapassar a quantidade sugerida de ${maximo}. Valor ajustado.`);
         return;
       }
       onCommit(parsed);
