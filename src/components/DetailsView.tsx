@@ -1038,8 +1038,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             textAnchor="middle"
             dominantBaseline="central"
             fill={primaryTextColor}
-            fontSize="10"
-            fontWeight="bold"
+            fontSize="9"
+            fontWeight="normal"
           >
             100.0%
           </text>
@@ -1060,8 +1060,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             textAnchor="middle"
             dominantBaseline="central"
             fill={secondaryTextColor}
-            fontSize="10"
-            fontWeight="bold"
+            fontSize="9"
+            fontWeight="normal"
           >
             0.0%
           </text>
@@ -1118,8 +1118,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             textAnchor="middle"
             dominantBaseline="central"
             fill={primaryTextColor}
-            fontSize="10"
-            fontWeight="bold"
+            fontSize="9"
+            fontWeight="normal"
           >
             {formatPct(clampedPct)}%
           </text>
@@ -1140,8 +1140,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               textAnchor="middle"
               dominantBaseline="central"
               fill="#ffffff"
-              fontSize="8"
-              fontWeight="bold"
+              fontSize="7"
+              fontWeight="normal"
             >
               {formatPct(clampedPct)}%
             </text>
@@ -1156,8 +1156,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             textAnchor="middle"
             dominantBaseline="central"
             fill={secondaryTextColor}
-            fontSize="10"
-            fontWeight="bold"
+            fontSize="9"
+            fontWeight="normal"
           >
             {restPct.toFixed(1)}%
           </text>
@@ -1684,7 +1684,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between space-y-1">
                 <div className="border-b border-slate-200/60 pb-1 text-center">
                   <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-violet-600 shrink-0" />
                     {isParcelamentoMorar ? 'Subtotal Até as Chaves' : 'Risco Pró-Soluto Total'}
                   </h4>
                   <p className="text-[9.5px] text-slate-500 mt-0.5">
@@ -1693,13 +1693,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 </div>
 
                 <div className="py-1 flex items-center justify-center overflow-visible">
-                  {renderSolidPie(displayPctRiscoProSoluto, '#4f46e5', '#cbd5e1')}
+                  {renderSolidPie(displayPctRiscoProSoluto, '#7c3aed', '#cbd5e1')}
                 </div>
 
                 <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
                   <div className="flex items-center justify-between px-1 text-[10px]">
                     <span className="text-slate-500 font-medium">Comprometimento:</span>
-                    <strong className="text-indigo-700 font-bold">
+                    <strong className="text-violet-700 font-bold">
                       {displayPctRiscoProSoluto < 10 ? displayPctRiscoProSoluto.toFixed(2) : displayPctRiscoProSoluto.toFixed(1)}%
                     </strong>
                   </div>
