@@ -129,8 +129,13 @@ export default function App() {
 
           // Mescla com o estado atual em vez de substituir: preserva empreendimentos que
           // só existem localmente (ex.: recém-criados e ainda não sincronizados no Supabase).
+          // Mas um id com formato UUID É rastreável no Supabase — se ele não aparece mais em
+          // dbEmps, foi excluído por alguém (não apenas "ainda não sincronizado"), então não
+          // deve ser preservado, senão um empreendimento apagado "voltaria" para sempre em
+          // qualquer navegador que já tivesse essa cópia salva localmente.
           const dbIds = new Set(updatedFromDb.map(p => p.id));
-          const localOnly = productsRef.current.filter(p => !dbIds.has(p.id));
+          const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+          const localOnly = productsRef.current.filter(p => !dbIds.has(p.id) && !isUUID(p.id));
           setProducts([...updatedFromDb, ...localOnly]);
         }
       } catch (err) {
