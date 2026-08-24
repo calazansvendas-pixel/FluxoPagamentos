@@ -53,6 +53,18 @@
     print-color-adjust: exact !important;
   }
 
+  /* Reforça em cada elemento (não só via herança de html/body) que cores de
+     fundo e bordas coloridas devem ser preservadas na impressão — cobre o
+     fallback de window.print() para quando a captura via html2canvas falha,
+     já que a herança desta propriedade é inconsistente entre navegadores. */
+  #pdf-content-area,
+  #pdf-content-area-morar,
+  #pdf-content-area *,
+  #pdf-content-area-morar * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   body * {
     visibility: hidden;
   }

@@ -173,12 +173,28 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
     try {
       const filename = getFileName();
 
+      // Garante que as fontes web (Inter) já terminaram de carregar antes de
+      // capturar — do contrário o html2canvas pode capturar com a fonte de
+      // fallback do sistema ou, em navegadores mais lentos, falhar a
+      // renderizar o layout a tempo, o que aciona o fallback de impressão
+      // nativa (sem os estilos/cores do Tailwind) mais abaixo.
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // foreignObjectRendering fica explicitamente desligado: o modo baseado
+      // em SVG <foreignObject> é bem menos compatível entre navegadores e,
+      // quando falha, costuma falhar silenciosamente com um canvas em
+      // branco/incompleto em vez de lançar um erro — o clone-e-desenha
+      // (padrão quando desligado) é o caminho mais testado da biblioteca.
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
         windowWidth: 1200,
+        foreignObjectRendering: false,
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
