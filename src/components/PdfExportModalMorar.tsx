@@ -281,7 +281,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
             <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-3">
               <div>
                 <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
-                  Ficha de Análise Comercial
+                  Simulação Comercial
                 </h1>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
                   <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
