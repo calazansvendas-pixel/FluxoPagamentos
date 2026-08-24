@@ -1026,6 +1026,37 @@ export function contarSemestraisJunhoDezembro(hojeStr?: string, chavesDataStr?: 
   return count;
 }
 
+/**
+ * Gera as datas ("YYYY-MM-01") de `quantidade` intermediárias semestrais, uma
+ * a cada Junho/Dezembro, começando no primeiro desses meses estritamente
+ * depois de `hojeStr`. Usada tanto para a quantidade sugerida (calculada via
+ * contarSemestraisJunhoDezembro) quanto para uma quantidade editada
+ * manualmente — nos dois casos o resultado é sempre uma sequência de datas em
+ * Junho/Dezembro, só muda quantas.
+ */
+export function gerarDatasSemestrais(hojeStr?: string, quantidade: number = 0): string[] {
+  if (!hojeStr || quantidade <= 0) return [];
+  const h = hojeStr.split('-').map(n => parseInt(n, 10));
+  if (h.length < 2 || h.some(isNaN)) return [];
+  const hojeIdx = h[0] * 12 + (h[1] - 1);
+
+  // Primeiro Junho ou Dezembro estritamente após hoje
+  let ano = h[0];
+  let mesesCandidatos = [6, 12];
+  const datas: string[] = [];
+  outer: while (datas.length < quantidade) {
+    for (const mes of mesesCandidatos) {
+      const idx = ano * 12 + (mes - 1);
+      if (idx > hojeIdx) {
+        datas.push(`${ano}-${String(mes).padStart(2, '0')}-01`);
+        if (datas.length >= quantidade) break outer;
+      }
+    }
+    ano++;
+  }
+  return datas;
+}
+
 export interface ParcelamentoMorarParams {
   price: number; // Valor do imóvel (VGV) — base de todos os percentuais desta condição
   renda: number;

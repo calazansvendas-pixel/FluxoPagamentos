@@ -109,6 +109,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const [pmSinalMinimoStr, setPmSinalMinimoStr] = useState<string>('10,0');
   const [pmSemestralMaxStr, setPmSemestralMaxStr] = useState<string>('4,0');
   const [pmChavesMaxStr, setPmChavesMaxStr] = useState<string>('15,0');
+  const [pmChavesMesesAntesStr, setPmChavesMesesAntesStr] = useState<string>('2');
   const [pmPosObraMaxStr, setPmPosObraMaxStr] = useState<string>('5,0');
   const [pmQtdParcelasPosObraStr, setPmQtdParcelasPosObraStr] = useState<string>('12');
   const [pmParcelaMinMensalObra, setPmParcelaMinMensalObra] = useState<string>('R$ 200,00');
@@ -295,6 +296,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const pmSinal = source.pmSinalMinimoPct !== undefined ? source.pmSinalMinimoPct : 10.0;
     const pmSemestral = source.pmParcelaSemestralMaxPct !== undefined ? source.pmParcelaSemestralMaxPct : 4.0;
     const pmChaves = source.pmParcelaChavesMaxPct !== undefined ? source.pmParcelaChavesMaxPct : 15.0;
+    const pmChavesMesesAntes = source.pmParcelaChavesMesesAntes !== undefined ? source.pmParcelaChavesMesesAntes : 2;
     const pmPosObra = source.pmRiscoProSolutoPosObraPct !== undefined ? source.pmRiscoProSolutoPosObraPct : 5.0;
     const pmQtdPosObra = source.pmQtdParcelasPosObra !== undefined ? source.pmQtdParcelasPosObra : 12;
     const pmMinMensalObra = source.pmParcelaMinimaMensalObra !== undefined ? source.pmParcelaMinimaMensalObra : 200;
@@ -342,6 +344,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setPmSinalMinimoStr(formatDecimalBR(pmSinal, 1, 2));
     setPmSemestralMaxStr(formatDecimalBR(pmSemestral, 1, 2));
     setPmChavesMaxStr(formatDecimalBR(pmChaves, 1, 2));
+    setPmChavesMesesAntesStr(String(pmChavesMesesAntes));
     setPmPosObraMaxStr(formatDecimalBR(pmPosObra, 1, 2));
     setPmQtdParcelasPosObraStr(String(pmQtdPosObra));
     setPmParcelaMinMensalObra(formatCurrency(pmMinMensalObra > 0 ? pmMinMensalObra : 200));
@@ -389,6 +392,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const pmSinalMinimoPct = parseDecimal(pmSinalMinimoStr, 10.0);
   const pmParcelaSemestralMaxPct = parseDecimal(pmSemestralMaxStr, 4.0);
   const pmParcelaChavesMaxPct = parseDecimal(pmChavesMaxStr, 15.0);
+  const pmParcelaChavesMesesAntes = Math.max(0, parseInt(pmChavesMesesAntesStr, 10) || 0);
   const pmRiscoProSolutoPosObraPct = parseDecimal(pmPosObraMaxStr, 5.0);
   const pmQtdParcelasPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
   const pmParcelaMinimaMensalObraNum = (() => { const v = parseCurrency(pmParcelaMinMensalObra); return v > 0 ? v : 200; })();
@@ -433,6 +437,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       pmSinalMinimoPct,
       pmParcelaSemestralMaxPct,
       pmParcelaChavesMaxPct,
+      pmParcelaChavesMesesAntes,
       pmRiscoProSolutoPosObraPct,
       pmQtdParcelasPosObra,
       pmParcelaMinimaMensalObra: pmParcelaMinimaMensalObraNum,
@@ -646,6 +651,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedPmSinal = parseDecimal(pmSinalMinimoStr, 10.0);
     const parsedPmSemestral = parseDecimal(pmSemestralMaxStr, 4.0);
     const parsedPmChaves = parseDecimal(pmChavesMaxStr, 15.0);
+    const parsedPmChavesMesesAntes = Math.max(0, parseInt(pmChavesMesesAntesStr, 10) || 0);
     const parsedPmPosObra = parseDecimal(pmPosObraMaxStr, 5.0);
     const parsedPmQtdPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
     const parsedPmMinMensalObra = (() => { const v = parseCurrency(pmParcelaMinMensalObra); return v > 0 ? v : 200; })();
@@ -680,6 +686,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setPmSinalMinimoStr(formatDecimalBR(parsedPmSinal, 1, 2));
     setPmSemestralMaxStr(formatDecimalBR(parsedPmSemestral, 1, 2));
     setPmChavesMaxStr(formatDecimalBR(parsedPmChaves, 1, 2));
+    setPmChavesMesesAntesStr(String(parsedPmChavesMesesAntes));
     setPmPosObraMaxStr(formatDecimalBR(parsedPmPosObra, 1, 2));
     setPmQtdParcelasPosObraStr(String(parsedPmQtdPosObra));
     setPmParcelaMinMensalObra(formatCurrency(parsedPmMinMensalObra));
@@ -715,6 +722,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       pmSinalMinimoPct: parsedPmSinal,
       pmParcelaSemestralMaxPct: parsedPmSemestral,
       pmParcelaChavesMaxPct: parsedPmChaves,
+      pmParcelaChavesMesesAntes: parsedPmChavesMesesAntes,
       pmRiscoProSolutoPosObraPct: parsedPmPosObra,
       pmQtdParcelasPosObra: parsedPmQtdPosObra,
       pmParcelaMinimaMensalObra: parsedPmMinMensalObra,
@@ -1602,6 +1610,27 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     </div>
                   </div>
 
+                  {/* MESES ANTES DO HABITE-SE (VENCIMENTO DAS CHAVES) */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block font-bold text-slate-800 text-xs truncate" title="Quantos meses antes do habite-se a parcela de chaves vence">
+                        Chaves: Meses Antes
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-bold">Padrão: 2</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={pmChavesMesesAntesStr}
+                        onChange={(e) => setPmChavesMesesAntesStr(e.target.value)}
+                        onBlur={() => setPmChavesMesesAntesStr(String(Math.max(0, parseInt(pmChavesMesesAntesStr, 10) || 2)))}
+                        className="w-full pl-3 pr-9 py-2 bg-white border border-slate-300 rounded-xl font-bold text-amber-700 text-center focus:outline-none focus:border-amber-600 text-xs"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">M</span>
+                    </div>
+                  </div>
+
                   {/* % MÁX. PRÓ-SOLUTO PÓS-OBRA */}
                   <div>
                     <div className="flex justify-between items-center mb-1">
@@ -1688,7 +1717,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 </div>
 
                 <p className="text-[10px] text-slate-500 px-1 leading-relaxed">
-                  A quantidade de meses de obra (parcelas mensais lineares) é calculada automaticamente a partir da data de hoje e da previsão de entrega (habite-se) do empreendimento — assim como as intermediárias semestrais, sempre em Junho e Dezembro. A parcela intermediária final (chaves) vence, por padrão, 2 meses antes do habite-se. Todos esses valores e quantidades podem ser ajustados manualmente na ficha do cliente; esta política define apenas as sugestões iniciais e os pisos de parcela mínima.
+                  A quantidade de meses de obra (parcelas mensais lineares) é calculada automaticamente a partir da data de hoje e da previsão de entrega (habite-se) do empreendimento — assim como as intermediárias semestrais, sempre em Junho e Dezembro. Os valores e quantidades podem ser ajustados manualmente na ficha do cliente; esta política define apenas as sugestões iniciais, os pisos de parcela mínima e o vencimento da parcela de chaves.
                 </p>
               </div>
             ) : (
