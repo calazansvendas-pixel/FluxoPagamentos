@@ -225,7 +225,8 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
       pdf.save(filename);
     } catch (err: any) {
       console.error('Erro ao gerar PDF Morar:', err);
-      setErrorMessage('Ocorreu um problema ao gerar o download direto. Tentando abrir caixa de impressão...');
+      const detalhe = err?.message ? ` (${err.message})` : '';
+      setErrorMessage(`Ocorreu um problema ao gerar o download direto${detalhe}. Tentando abrir caixa de impressão...`);
       setTimeout(() => {
         window.print();
       }, 300);
@@ -235,7 +236,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[rgba(15,23,42,0.6)] backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[96vh] animate-in fade-in zoom-in-95 duration-150">
         
         {/* CABEÇALHO DO MODAL */}
@@ -328,7 +329,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
             </div>
 
             {/* BARRA DE CLIENTE E IMOBILIÁRIA */}
-            <div className="bg-slate-50/90 px-3.5 py-2 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between text-xs gap-2">
+            <div className="bg-[rgba(248,250,252,0.9)] px-3.5 py-2 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between text-xs gap-2">
               <div className="flex items-center justify-between w-full flex-wrap gap-2">
                 <span className="text-slate-600 font-medium">
                   Cliente: <strong className="text-slate-900 font-bold">{simulationData.clientName || 'Cliente Não Informado'}</strong>
@@ -344,7 +345,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
               
               {/* LINHA 1 (Torre, Unidade, Fase, Tipologia) */}
               <div className="grid grid-cols-12 gap-2 text-xs w-full">
-                <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+                <div className="col-span-2 bg-[rgba(240,249,255,0.6)] p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
                   <span className="block text-[9px] text-sky-700 font-bold uppercase mb-0.5 whitespace-nowrap">
                     Torre
                   </span>
@@ -353,7 +354,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </strong>
                 </div>
 
-                <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+                <div className="col-span-2 bg-[rgba(240,249,255,0.6)] p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
                   <span className="block text-[9px] text-sky-700 font-bold uppercase mb-0.5 whitespace-nowrap">
                     Unidade
                   </span>
@@ -362,7 +363,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </strong>
                 </div>
 
-                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
                   <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
                     Fase
                   </span>
@@ -371,7 +372,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </strong>
                 </div>
 
-                <div className="col-span-6 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                <div className="col-span-6 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
                   <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
                     Tipologia
                   </span>
@@ -383,7 +384,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
 
               {/* LINHA 2 (Área Priv, Quintal, Preço Tab, Avaliação) */}
               <div className="grid grid-cols-12 gap-2 text-xs w-full">
-                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
                   <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
                     Área Privativa
                   </span>
@@ -392,7 +393,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </strong>
                 </div>
 
-                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
                   <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
                     Quintal
                   </span>
@@ -401,7 +402,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </strong>
                 </div>
 
-                <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
                   <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
                     Preço de Tabela
                   </span>
@@ -410,7 +411,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </strong>
                 </div>
 
-                <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+                <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
                   <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">
                     Avaliação Bancária
                   </span>
@@ -522,7 +523,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg border border-slate-200/70 text-xs">
+                  <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg border border-[rgba(226,232,240,0.7)] text-xs">
                     <span className="font-bold text-slate-700">Ato:</span>
                     <strong className="text-slate-900 font-black text-xs sm:text-sm">{formatCurrency(valorAto)}</strong>
                   </div>
@@ -546,7 +547,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
 
                   <div className="space-y-1.5 text-xs">
                     {faixasObra.filter(f => (f.qtd > 0 && ((f.valor || 0) > 0 || (itbiObraValor || 0) > 0))).map((f, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-slate-50/80 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                      <div key={idx} className="flex justify-between items-center bg-[rgba(248,250,252,0.8)] px-2.5 py-1.5 rounded-lg border border-slate-100">
                         <span className="text-slate-600 font-semibold text-[11px]">{f.qtd}X de:</span>
                         <strong className="text-slate-900 font-bold text-xs">{formatCurrency(f.valor)}</strong>
                       </div>
@@ -573,7 +574,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
 
                     <div className="space-y-1.5 text-xs">
                       {faixasPos.filter(f => (f.qtd > 0 && ((f.valor || 0) > 0 || (itbiPosValor || 0) > 0))).map((f, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-slate-50/80 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                        <div key={idx} className="flex justify-between items-center bg-[rgba(248,250,252,0.8)] px-2.5 py-1.5 rounded-lg border border-slate-100">
                           <span className="text-slate-600 font-semibold text-[11px]">{f.qtd}X de:</span>
                           <strong className="text-slate-900 font-bold text-xs">{formatCurrency(f.valor)}</strong>
                         </div>
@@ -595,7 +596,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </div>
 
                   <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between items-center bg-emerald-50/50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                    <div className="flex justify-between items-center bg-[rgba(236,253,245,0.5)] px-2.5 py-1 rounded-lg border border-emerald-100">
                       <span className="text-emerald-900 font-semibold text-[11px]">ITBI / Registro Total:</span>
                       <strong className="text-emerald-800 font-bold">{formatCurrency(valorITBI)}</strong>
                     </div>
@@ -661,7 +662,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-center gap-3 text-[10px] font-medium text-slate-500 flex-wrap pt-1 border-t border-slate-200/60">
+              <div className="flex items-center justify-center gap-3 text-[10px] font-medium text-slate-500 flex-wrap pt-1 border-t border-[rgba(226,232,240,0.6)]">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#0284C7]" />Total Obra</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#7C3AED]" />Total Pós-Obra</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#059669]" />Total Pró-Soluto</span>
