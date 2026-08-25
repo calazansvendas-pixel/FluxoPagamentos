@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Calendar, Download, Loader2, AlertCircle, Building2 } from 'lucide-react';
 import { CommercialCondition, Product, SimulationData } from '../types';
 import { formatCurrency, formatDateBr } from '../utils/formatters';
+import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets, getPdfExportSettingsForKind } from '../utils/pdfExport';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
@@ -132,6 +133,11 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
 
   if (!isOpen) return null;
 
+  // Configuração de exportação de PDF definida na página "Configurar
+  // Exportação de PDF" para a condição "Sinal c/ Morar".
+  const pdfSettings = getPdfExportSettingsForKind('sinal-morar');
+  const fmt = (val: number) => (pdfSettings.mostrarValores ? formatCurrency(val) : '—');
+
   const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, payload }: any) => {
     if (payload.value <= 0) return null;
     const RADIAN = Math.PI / 180;
@@ -181,21 +187,27 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
       if (document.fonts?.ready) {
         await document.fonts.ready;
       }
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // Espera pelo menos dois frames de animação e confirma que o CSS já
+      // está de fato aplicado antes de capturar (ver waitForStyledPaint) —
+      // em conexões lentas, um atraso fixo não era suficiente e o
+      // html2canvas podia capturar o conteúdo sem nenhuma formatação, sem
+      // lançar erro.
+      await waitForStyledPaint(element);
 
       // foreignObjectRendering fica explicitamente desligado: o modo baseado
       // em SVG <foreignObject> é bem menos compatível entre navegadores e,
       // quando falha, costuma falhar silenciosamente com um canvas em
       // branco/incompleto em vez de lançar um erro — o clone-e-desenha
       // (padrão quando desligado) é o caminho mais testado da biblioteca.
-      const canvas = await html2canvas(element, {
+      const canvas = await captureStyledCanvas(element, () => html2canvas(element, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
         windowWidth: 1200,
         foreignObjectRendering: false,
-      });
+        onclone: inlineLiveStylesheets,
+      }));
 
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
 
@@ -322,23 +334,31 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
               </div>
 
               {/* DATA DA SIMULAÇÃO */}
-              <div className="bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap shadow-2xs shrink-0 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                <span>Data da Simulação: {formatDateBr()}</span>
-              </div>
+              {pdfSettings.mostrarDataSimulacao && (
+                <div className="bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap shadow-2xs shrink-0 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                  <span>Data da Simulação: {formatDateBr()}</span>
+                </div>
+              )}
             </div>
 
             {/* BARRA DE CLIENTE E IMOBILIÁRIA */}
-            <div className="bg-[rgba(248,250,252,0.9)] px-3.5 py-2 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between text-xs gap-2">
-              <div className="flex items-center justify-between w-full flex-wrap gap-2">
-                <span className="text-slate-600 font-medium">
-                  Cliente: <strong className="text-slate-900 font-bold">{simulationData.clientName || 'Cliente Não Informado'}</strong>
-                </span>
-                <span className="text-slate-600 font-medium">
-                  Imobiliária: <strong className="text-slate-900 font-bold">{simulationData.agency?.trim() || 'Imobiliária Não Informada'}</strong>
-                </span>
+            {(pdfSettings.mostrarCliente || pdfSettings.mostrarImobiliaria) && (
+              <div className="bg-[rgba(248,250,252,0.9)] px-3.5 py-2 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between text-xs gap-2">
+                <div className="flex items-center justify-between w-full flex-wrap gap-2">
+                  {pdfSettings.mostrarCliente && (
+                    <span className="text-slate-600 font-medium">
+                      Cliente: <strong className="text-slate-900 font-bold">{simulationData.clientName || 'Cliente Não Informado'}</strong>
+                    </span>
+                  )}
+                  {pdfSettings.mostrarImobiliaria && (
+                    <span className="text-slate-600 font-medium">
+                      Imobiliária: <strong className="text-slate-900 font-bold">{simulationData.agency?.trim() || 'Imobiliária Não Informada'}</strong>
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* 2. RESUMO DA UNIDADE */}
             <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 overflow-hidden w-full">
@@ -407,7 +427,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                     Preço de Tabela
                   </span>
                   <strong className="text-slate-900 font-bold text-xs whitespace-nowrap truncate w-full">
-                    {formatCurrency(price)}
+                    {fmt(price)}
                   </strong>
                 </div>
 
@@ -416,7 +436,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                     Avaliação Bancária
                   </span>
                   <strong className="text-emerald-600 font-bold text-xs whitespace-nowrap truncate w-full">
-                    {formatCurrency(evaluation)}
+                    {fmt(evaluation)}
                   </strong>
                 </div>
               </div>
@@ -427,6 +447,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
               
               {/* ================= COLUNA DA ESQUERDA: DADOS DA APROVAÇÃO DE CRÉDITO ================= */}
               <div className="space-y-3">
+                {pdfSettings.mostrarBloco1 && (
                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
@@ -436,55 +457,57 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   <div className="space-y-1.5 text-[11px]">
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
                       <span className="text-slate-600 font-medium">Renda:</span>
-                      <strong className="text-slate-900 font-semibold">{formatCurrency(income)}</strong>
+                      <strong className="text-slate-900 font-semibold">{fmt(income)}</strong>
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
                       <span className="text-slate-600 font-medium">Subsídio:</span>
-                      <strong className="text-emerald-600 font-semibold">{formatCurrency(subsidy)}</strong>
+                      <strong className="text-emerald-600 font-semibold">{fmt(subsidy)}</strong>
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
                       <span className="text-slate-600 font-medium">FGTS:</span>
-                      <strong className="text-sky-600 font-semibold">{formatCurrency(fgts)}</strong>
+                      <strong className="text-sky-600 font-semibold">{fmt(fgts)}</strong>
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
                       <span className="text-slate-600 font-medium">
                         Ato Premiado: <strong className={isAtoPremiadoEnabled ? 'text-emerald-700' : 'text-slate-500'}>{isAtoPremiadoEnabled ? 'Ativo' : 'Não Utilizado'}</strong>
                       </span>
-                      <strong className="text-emerald-600 font-semibold">{formatCurrency(desconto)}</strong>
+                      <strong className="text-emerald-600 font-semibold">{fmt(desconto)}</strong>
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
                       <span className="text-slate-600 font-medium">Max Financ:</span>
-                      <strong className="text-sky-700 font-bold">{formatCurrency(maxFinanc)}</strong>
+                      <strong className="text-sky-700 font-bold">{fmt(maxFinanc)}</strong>
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
                       <span className="text-slate-600 font-medium">Total Negoc:</span>
-                      <strong className="text-slate-900 font-bold">{formatCurrency(totalNegoc)}</strong>
+                      <strong className="text-slate-900 font-bold">{fmt(totalNegoc)}</strong>
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
                       <span className="text-slate-600 font-medium">Sinal Total (s/ ITBI):</span>
-                      <strong className="text-amber-700 font-bold">{formatCurrency(sinalTotal)}</strong>
+                      <strong className="text-amber-700 font-bold">{fmt(sinalTotal)}</strong>
                     </div>
 
                     <div className="flex justify-between items-center py-1 border-b border-slate-100 px-1">
                       <span className="text-slate-600 font-medium">Com ITBI:</span>
-                      <strong className="text-emerald-700 font-bold">{formatCurrency(comITBI)}</strong>
+                      <strong className="text-emerald-700 font-bold">{fmt(comITBI)}</strong>
                     </div>
 
                     {/* DESTAQUE TOTAL DISTRIBUÍDO */}
                     <div className="flex justify-between items-center py-1.5 bg-sky-50 px-2.5 rounded-lg border border-sky-100 mt-2">
                       <span className="text-xs font-bold text-slate-800">Distribuído:</span>
-                      <strong className="text-xs sm:text-sm font-black text-sky-700">{formatCurrency(distribuido)}</strong>
+                      <strong className="text-xs sm:text-sm font-black text-sky-700">{fmt(distribuido)}</strong>
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* GRÁFICO: COMPROMETIMENTO POR SÉRIE (PARCELA / RENDA) */}
+                {pdfSettings.mostrarBloco2 && (
                 <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
@@ -506,11 +529,12 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                     </ResponsiveContainer>
                   </div>
                 </div>
+                )}
               </div>
 
               {/* ================= COLUNA DA DIREITA: BLOCOS DE PAGAMENTO MORAR ================= */}
               <div className="space-y-3">
-                
+                {pdfSettings.mostrarBloco3 && (<>
                 {/* CARD 1: PERÍODO DE PAGAMENTOS (ATO) */}
                 <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
@@ -525,7 +549,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
 
                   <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg border border-[rgba(226,232,240,0.7)] text-xs">
                     <span className="font-bold text-slate-700">Ato:</span>
-                    <strong className="text-slate-900 font-black text-xs sm:text-sm">{formatCurrency(valorAto)}</strong>
+                    <strong className="text-slate-900 font-black text-xs sm:text-sm">{fmt(valorAto)}</strong>
                   </div>
                 </div>
 
@@ -549,7 +573,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                     {faixasObra.filter(f => (f.qtd > 0 && ((f.valor || 0) > 0 || (itbiObraValor || 0) > 0))).map((f, idx) => (
                       <div key={idx} className="flex justify-between items-center bg-[rgba(248,250,252,0.8)] px-2.5 py-1.5 rounded-lg border border-slate-100">
                         <span className="text-slate-600 font-semibold text-[11px]">{f.qtd}X de:</span>
-                        <strong className="text-slate-900 font-bold text-xs">{formatCurrency(f.valor)}</strong>
+                        <strong className="text-slate-900 font-bold text-xs">{fmt(f.valor)}</strong>
                       </div>
                     ))}
                   </div>
@@ -576,7 +600,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                       {faixasPos.filter(f => (f.qtd > 0 && ((f.valor || 0) > 0 || (itbiPosValor || 0) > 0))).map((f, idx) => (
                         <div key={idx} className="flex justify-between items-center bg-[rgba(248,250,252,0.8)] px-2.5 py-1.5 rounded-lg border border-slate-100">
                           <span className="text-slate-600 font-semibold text-[11px]">{f.qtd}X de:</span>
-                          <strong className="text-slate-900 font-bold text-xs">{formatCurrency(f.valor)}</strong>
+                          <strong className="text-slate-900 font-bold text-xs">{fmt(f.valor)}</strong>
                         </div>
                       ))}
                     </div>
@@ -598,29 +622,31 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between items-center bg-[rgba(236,253,245,0.5)] px-2.5 py-1 rounded-lg border border-emerald-100">
                       <span className="text-emerald-900 font-semibold text-[11px]">ITBI / Registro Total:</span>
-                      <strong className="text-emerald-800 font-bold">{formatCurrency(valorITBI)}</strong>
+                      <strong className="text-emerald-800 font-bold">{fmt(valorITBI)}</strong>
                     </div>
 
                     <div className={`grid ${itbiPosQtd > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 text-[11px]`}>
                       <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
                         <span className="text-slate-500 font-medium block text-[10px]">Obra ({itbiObraQtd}X)</span>
-                        <strong className="text-slate-900 font-bold block">{formatCurrency(itbiObraValor)}</strong>
+                        <strong className="text-slate-900 font-bold block">{fmt(itbiObraValor)}</strong>
                       </div>
                       {itbiPosQtd > 0 && (
                         <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
                           <span className="text-slate-500 font-medium block text-[10px]">Pós Obra ({itbiPosQtd}X)</span>
-                          <strong className="text-slate-900 font-bold block">{formatCurrency(itbiPosValor)}</strong>
+                          <strong className="text-slate-900 font-bold block">{fmt(itbiPosValor)}</strong>
                         </div>
                       )}
                     </div>
                   </div>
                 </div>
+                </>)}
 
               </div>
 
             </div>
 
             {/* 3. INDICADORES DE RISCO / COMPROMETIMENTO (GRÁFICOS) */}
+            {pdfSettings.mostrarBloco4 && (
             <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-1.5 gap-1">
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -628,9 +654,9 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   Indicadores de Risco / Comprometimento
                 </h3>
                 <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium">
-                  <span>Base Líq. c/ ITBI: <strong className="text-slate-800">{formatCurrency(baseLiquidaComITBI)}</strong></span>
+                  <span>Base Líq. c/ ITBI: <strong className="text-slate-800">{fmt(baseLiquidaComITBI)}</strong></span>
                   <span>•</span>
-                  <span>Base Renda: <strong className="text-slate-800">{formatCurrency(baseRendaInformada)}</strong></span>
+                  <span>Base Renda: <strong className="text-slate-800">{fmt(baseRendaInformada)}</strong></span>
                 </div>
               </div>
 
@@ -672,7 +698,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                 <div className="bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100 space-y-0.5">
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium">1ª Parcela:</span>
-                    <strong className="text-slate-900 font-bold">{formatCurrency(valorRiscoParcela)}</strong>
+                    <strong className="text-slate-900 font-bold">{fmt(valorRiscoParcela)}</strong>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium">Comprometimento da Renda:</span>
@@ -684,7 +710,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                 <div className="bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100 space-y-0.5">
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium">Pró-Soluto Total (R$):</span>
-                    <strong className="text-slate-900 font-bold">{formatCurrency(valorRiscoProSoluto)}</strong>
+                    <strong className="text-slate-900 font-bold">{fmt(valorRiscoProSoluto)}</strong>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium">Pró-Soluto Total (%):</span>
@@ -695,6 +721,7 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                 </div>
               </div>
             </div>
+            )}
 
             {/* RODAPÉ OFICIAL MORAR / CAIXA */}
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-[10.5px] text-slate-600 leading-relaxed text-justify mt-3 shadow-2xs">

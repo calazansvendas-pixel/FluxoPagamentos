@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins } from 'lucide-react';
+import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins, FileOutput } from 'lucide-react';
 import { ActiveTab } from '../types';
 import { ConditionKind } from '../utils/calculations';
 
@@ -47,6 +47,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'policies' as ActiveTab,
       label: 'Políticas & Empreendimentos',
       icon: Building2
+    },
+    {
+      id: 'pdf-settings' as ActiveTab,
+      label: 'Configurar Exportação PDF',
+      icon: FileOutput
     },
     {
       id: 'import-table' as ActiveTab,
