@@ -119,4 +119,22 @@ export interface SelectedUnit {
   unidade: string;
 }
 
-export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table' | 'saved-simulations';
+export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table' | 'saved-simulations' | 'pdf-settings';
+
+// Configuração do que cada ficha em PDF exportada deve conter e apresentar,
+// uma por tipo de condição comercial (Sinal c/ Banco Direto, Sinal c/ Morar,
+// Parcelamento Morar — cada uma guarda suas próprias opções).
+export type PdfConditionKind = 'banco-direto' | 'sinal-morar' | 'parcelamento-morar';
+
+export interface PdfExportSettings {
+  mostrarValores: boolean; // Mostra os valores em R$, ou os oculta (ficha "sem valores")
+  mostrarCliente: boolean;
+  mostrarImobiliaria: boolean;
+  mostrarDataSimulacao: boolean;
+  mostrarBloco1: boolean; // Dados da Aprovação de Crédito
+  mostrarBloco2: boolean; // Fluxo de Entrada c/ Construtora
+  mostrarBloco3: boolean; // Parcelamento (nome varia por condição)
+  mostrarBloco4: boolean; // Gráfico / Indicadores de Risco (nome varia por condição)
+}
+
+export type PdfExportSettingsByKind = Record<PdfConditionKind, PdfExportSettings>;

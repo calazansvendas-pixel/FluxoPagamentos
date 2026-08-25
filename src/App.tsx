@@ -18,6 +18,7 @@ const PoliciesView = lazy(() => import('./components/PoliciesView').then(m => ({
 const ImportTableView = lazy(() => import('./components/ImportTableView').then(m => ({ default: m.ImportTableView })));
 const NewProductModal = lazy(() => import('./components/NewProductModal').then(m => ({ default: m.NewProductModal })));
 const SavedSimulationsView = lazy(() => import('./components/SavedSimulationsView').then(m => ({ default: m.SavedSimulationsView })));
+const PdfExportSettingsView = lazy(() => import('./components/PdfExportSettingsView').then(m => ({ default: m.PdfExportSettingsView })));
 
 const ViewLoadingFallback = () => (
   <div className="flex items-center justify-center py-24 text-sm text-slate-400">
@@ -660,6 +661,10 @@ export default function App() {
               simulationData={simulationData}
               selectedUnits={selectedUnits}
             />
+          )}
+
+          {activeTab === 'pdf-settings' && (
+            <PdfExportSettingsView />
           )}
 
           {activeTab === 'import-table' && (
