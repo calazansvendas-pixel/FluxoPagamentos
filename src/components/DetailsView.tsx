@@ -2165,17 +2165,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                         const rawVal = e.target.value;
                         if (rawVal === '') {
                           setQtdMensais(0);
-                          setValAtoManual(null);
-                          setAtoInputText('');
-                          setIsEditingAto(false);
                           return;
                         }
                         const val = parseInt(rawVal, 10);
                         if (isNaN(val)) return;
 
-                        setValAtoManual(null);
-                        setAtoInputText('');
-                        setIsEditingAto(false);
                         if (val > limiteMaximoParcelas) {
                           setQtdMensais(limiteMaximoParcelas);
                           alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
@@ -2188,9 +2182,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                         setQtdMensais(val);
                       }}
                       onBlur={() => {
-                        setValAtoManual(null);
-                        setAtoInputText('');
-                        setIsEditingAto(false);
                         if (!qtdMensais || qtdMensais < 1) {
                           setQtdMensais(1);
                         } else if (qtdMensais > limiteMaximoParcelas) {
