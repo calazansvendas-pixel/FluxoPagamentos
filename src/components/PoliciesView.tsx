@@ -46,6 +46,26 @@ const parseDecimal = (val: string | number | undefined, defaultVal = 0): number 
   return isNaN(parsed) ? defaultVal : parsed;
 };
 
+// Mesma tolerância do parseDecimal, mas para inteiros — o padrão (defaultVal)
+// só é usado quando o campo está vazio/indefinido ou não é um número válido.
+// Diferente de "parseInt(val, 10) || defaultVal", um 0 digitado explicitamente
+// pelo usuário é preservado (0 é um valor legítimo para vários campos da
+// política de crédito, ex.: piso de sinal, meses de uma faixa/balde etc.).
+const parseIntFlexible = (val: string | number | undefined, defaultVal = 0): number => {
+  if (val === undefined || val === null) return defaultVal;
+  if (typeof val === 'number') return isNaN(val) ? defaultVal : Math.trunc(val);
+  const trimmed = String(val).trim();
+  if (trimmed === '') return defaultVal;
+  const parsed = parseInt(trimmed, 10);
+  return isNaN(parsed) ? defaultVal : parsed;
+};
+
+// Mesma ideia para o Sinal Mínimo (campo de moeda): só cai no padrão quando o
+// texto está vazio — "R$ 0,00" digitado explicitamente é um piso válido.
+const resolveSinalMinimo = (raw: string, defaultVal = 2000): number => {
+  return raw.trim() === '' ? defaultVal : parseCurrency(raw);
+};
+
 const formatDecimalBR = (num: number, minDec = 1, maxDec = 2): string => {
   if (isNaN(num)) return '0';
   return num.toLocaleString('pt-BR', { minimumFractionDigits: minDec, maximumFractionDigits: maxDec });
@@ -265,7 +285,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const condKind = getConditionKind(cond.name);
     const isMorar = condKind === 'sinal-morar';
     const isParcelamentoMorar = condKind === 'parcelamento-morar';
-    const numP = source.numParcelas || 72;
+    const numP = source.numParcelas !== undefined ? source.numParcelas : 72;
     const rr = source.riscoRendaPct !== undefined ? source.riscoRendaPct : (isParcelamentoMorar ? 40 : 30);
     const ri = source.percMaxProSolutoGlobal !== undefined
       ? source.percMaxProSolutoGlobal
@@ -303,8 +323,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const pmMinSemestral = source.pmParcelaMinimaSemestral !== undefined ? source.pmParcelaMinimaSemestral : 200;
     const pmMinPosObra = source.pmParcelaMinimaPosObra !== undefined ? source.pmParcelaMinimaPosObra : 200;
 
-    const parsedSinal = parseCurrency(source.sinalMinimo);
-    const formattedSinal = formatCurrency(parsedSinal > 0 ? parsedSinal : 2000);
+    const parsedSinal = source.sinalMinimo !== undefined ? parseCurrency(source.sinalMinimo) : 2000;
+    const formattedSinal = formatCurrency(parsedSinal);
 
     const rows = prodWithConds?.tableInfo?.rows || [];
     const prodsTorres = Array.from(new Set(rows.map(r => String(r[1] || '').trim()).filter(t => t !== '')));
@@ -347,26 +367,26 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setPmChavesMesesAntesStr(String(pmChavesMesesAntes));
     setPmPosObraMaxStr(formatDecimalBR(pmPosObra, 1, 2));
     setPmQtdParcelasPosObraStr(String(pmQtdPosObra));
-    setPmParcelaMinMensalObra(formatCurrency(pmMinMensalObra > 0 ? pmMinMensalObra : 200));
-    setPmParcelaMinSemestral(formatCurrency(pmMinSemestral > 0 ? pmMinSemestral : 200));
-    setPmParcelaMinPosObra(formatCurrency(pmMinPosObra > 0 ? pmMinPosObra : 200));
+    setPmParcelaMinMensalObra(formatCurrency(pmMinMensalObra));
+    setPmParcelaMinSemestral(formatCurrency(pmMinSemestral));
+    setPmParcelaMinPosObra(formatCurrency(pmMinPosObra));
 
     setPolicyText(source.policy || '');
   };
 
   // Dynamic parsed numeric values for live calculations
-  const numParcelas = parseInt(numParcelasStr, 10) || 1;
+  const numParcelas = parseIntFlexible(numParcelasStr, 1);
   const riscoRendaPct = parseDecimal(riscoRendaStr, 30);
   const riscoImovelPct = parseDecimal(riscoImovelStr, 25);
   const riscoPosPct = parseDecimal(riscoPosStr, 8);
-  const mesesTabela1 = parseInt(mesesTabela1Str, 10) || 1;
+  const mesesTabela1 = parseIntFlexible(mesesTabela1Str, 1);
   const taxaJuros1 = parseDecimal(taxaJuros1Str, 0);
-  const mesesTabela2 = parseInt(mesesTabela2Str, 10) || 1;
+  const mesesTabela2 = parseIntFlexible(mesesTabela2Str, 1);
   const taxaJuros2 = parseDecimal(taxaJuros2Str, 1);
 
   // Parâmetros Morar calculados dinamicamente
-  const mesesObra = Math.max(0, parseInt(mesesObraStr, 10) || 0);
-  const mesesPos = Math.max(0, parseInt(mesesPosStr, 10) || 0);
+  const mesesObra = Math.max(0, parseIntFlexible(mesesObraStr, 0));
+  const mesesPos = Math.max(0, parseIntFlexible(mesesPosStr, 0));
   const totalMesesMorar = mesesObra + mesesPos;
 
   const globalSerie1Pct = parseDecimal(globalSerie1Str, 30.0);
@@ -377,12 +397,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const globalSerie6Pct = parseDecimal(globalSerie6Str, 5.0);
 
   // Quantidade de meses de cada balde (independente do percentual acima)
-  const serie1Meses = Math.max(1, parseInt(serie1MesesStr, 10) || 12);
-  const serie2Meses = Math.max(1, parseInt(serie2MesesStr, 10) || 12);
-  const serie3Meses = Math.max(1, parseInt(serie3MesesStr, 10) || 12);
-  const serie4Meses = Math.max(1, parseInt(serie4MesesStr, 10) || 12);
-  const serie5Meses = Math.max(1, parseInt(serie5MesesStr, 10) || 12);
-  const serie6Meses = Math.max(1, parseInt(serie6MesesStr, 10) || 12);
+  const serie1Meses = Math.max(0, parseIntFlexible(serie1MesesStr, 12));
+  const serie2Meses = Math.max(0, parseIntFlexible(serie2MesesStr, 12));
+  const serie3Meses = Math.max(0, parseIntFlexible(serie3MesesStr, 12));
+  const serie4Meses = Math.max(0, parseIntFlexible(serie4MesesStr, 12));
+  const serie5Meses = Math.max(0, parseIntFlexible(serie5MesesStr, 12));
+  const serie6Meses = Math.max(0, parseIntFlexible(serie6MesesStr, 12));
   const serieMesesCapacidades = [serie1Meses, serie2Meses, serie3Meses, serie4Meses, serie5Meses, serie6Meses];
 
   // Divisão dinâmica dos meses por séries usando a regra oficial Morar
@@ -392,9 +412,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const pmSinalMinimoPct = parseDecimal(pmSinalMinimoStr, 10.0);
   const pmParcelaSemestralMaxPct = parseDecimal(pmSemestralMaxStr, 4.0);
   const pmParcelaChavesMaxPct = parseDecimal(pmChavesMaxStr, 15.0);
-  const pmParcelaChavesMesesAntes = Math.max(0, parseInt(pmChavesMesesAntesStr, 10) || 0);
+  const pmParcelaChavesMesesAntes = Math.max(0, parseIntFlexible(pmChavesMesesAntesStr, 0));
   const pmRiscoProSolutoPosObraPct = parseDecimal(pmPosObraMaxStr, 5.0);
-  const pmQtdParcelasPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
+  const pmQtdParcelasPosObra = Math.max(0, parseIntFlexible(pmQtdParcelasPosObraStr, 0));
   // Piso 0 é um valor válido (indica que o bloco nunca é zerado por parcela
   // mínima) — não cai de volta para 200 como um valor "inválido".
   const pmParcelaMinimaMensalObraNum = Math.max(0, parseCurrency(pmParcelaMinMensalObra));
@@ -406,8 +426,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // base (1ª Fase) quanto em fase2Params (2ª Fase), já que o mesmo formulário
   // é reaproveitado para editar as duas fases.
   const buildCurrentParamsObject = (): Partial<CommercialCondition> => {
-    const parsedCurrentSinal = parseCurrency(sinalMinimo);
-    const formattedCurrentSinal = formatCurrency(parsedCurrentSinal > 0 ? parsedCurrentSinal : 2000);
+    const parsedCurrentSinal = resolveSinalMinimo(sinalMinimo);
+    const formattedCurrentSinal = formatCurrency(parsedCurrentSinal);
     const isCurrentMorar = activeCondObj ? getConditionKind(activeCondObj.name) === 'sinal-morar' : false;
 
     return {
@@ -622,18 +642,18 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     }
 
     // Coleta o estado completo e normaliza os inputs decimais e inteiros
-    const parsedNumParcelas = Math.max(1, parseInt(numParcelasStr, 10) || 72);
-    const parsedSinalMinimoNum = parseCurrency(sinalMinimo);
-    const formattedSinalMinimo = formatCurrency(parsedSinalMinimoNum > 0 ? parsedSinalMinimoNum : 2000);
+    const parsedNumParcelas = Math.max(0, parseIntFlexible(numParcelasStr, 72));
+    const parsedSinalMinimoNum = resolveSinalMinimo(sinalMinimo);
+    const formattedSinalMinimo = formatCurrency(parsedSinalMinimoNum);
     const parsedRiscoRenda = parseDecimal(riscoRendaStr, 30);
     const parsedRiscoImovel = parseDecimal(riscoImovelStr, 25);
-    const parsedMeses1 = Math.max(1, parseInt(mesesTabela1Str, 10) || 36);
+    const parsedMeses1 = Math.max(0, parseIntFlexible(mesesTabela1Str, 36));
     const parsedTaxa1 = parseDecimal(taxaJuros1Str, 0);
-    const parsedMeses2 = Math.max(1, parseInt(mesesTabela2Str, 10) || 72);
+    const parsedMeses2 = Math.max(0, parseIntFlexible(mesesTabela2Str, 72));
     const parsedTaxa2 = parseDecimal(taxaJuros2Str, 1);
 
-    const parsedMesesObra = Math.max(1, parseInt(mesesObraStr, 10) || 33);
-    const parsedMesesPos = Math.max(1, parseInt(mesesPosStr, 10) || 27);
+    const parsedMesesObra = Math.max(0, parseIntFlexible(mesesObraStr, 33));
+    const parsedMesesPos = Math.max(0, parseIntFlexible(mesesPosStr, 27));
     const parsedRiscoPos = parseDecimal(riscoPosStr, 8.0);
     const parsedGlobal1 = parseDecimal(globalSerie1Str, 30.0);
     const parsedGlobal2 = parseDecimal(globalSerie2Str, 25.0);
@@ -641,21 +661,21 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedGlobal4 = parseDecimal(globalSerie4Str, 15.0);
     const parsedGlobal5 = parseDecimal(globalSerie5Str, 10.0);
     const parsedGlobal6 = parseDecimal(globalSerie6Str, 5.0);
-    const parsedSerie1Meses = Math.max(1, parseInt(serie1MesesStr, 10) || 12);
-    const parsedSerie2Meses = Math.max(1, parseInt(serie2MesesStr, 10) || 12);
-    const parsedSerie3Meses = Math.max(1, parseInt(serie3MesesStr, 10) || 12);
-    const parsedSerie4Meses = Math.max(1, parseInt(serie4MesesStr, 10) || 12);
-    const parsedSerie5Meses = Math.max(1, parseInt(serie5MesesStr, 10) || 12);
-    const parsedSerie6Meses = Math.max(1, parseInt(serie6MesesStr, 10) || 12);
+    const parsedSerie1Meses = Math.max(0, parseIntFlexible(serie1MesesStr, 12));
+    const parsedSerie2Meses = Math.max(0, parseIntFlexible(serie2MesesStr, 12));
+    const parsedSerie3Meses = Math.max(0, parseIntFlexible(serie3MesesStr, 12));
+    const parsedSerie4Meses = Math.max(0, parseIntFlexible(serie4MesesStr, 12));
+    const parsedSerie5Meses = Math.max(0, parseIntFlexible(serie5MesesStr, 12));
+    const parsedSerie6Meses = Math.max(0, parseIntFlexible(serie6MesesStr, 12));
 
     const isCurrentMorar = activeCondObj ? getConditionKind(activeCondObj.name) === 'sinal-morar' : false;
 
     const parsedPmSinal = parseDecimal(pmSinalMinimoStr, 10.0);
     const parsedPmSemestral = parseDecimal(pmSemestralMaxStr, 4.0);
     const parsedPmChaves = parseDecimal(pmChavesMaxStr, 15.0);
-    const parsedPmChavesMesesAntes = Math.max(0, parseInt(pmChavesMesesAntesStr, 10) || 0);
+    const parsedPmChavesMesesAntes = Math.max(0, parseIntFlexible(pmChavesMesesAntesStr, 0));
     const parsedPmPosObra = parseDecimal(pmPosObraMaxStr, 5.0);
-    const parsedPmQtdPosObra = Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 0);
+    const parsedPmQtdPosObra = Math.max(0, parseIntFlexible(pmQtdParcelasPosObraStr, 0));
     // Piso 0 é um valor válido (indica que o bloco nunca é zerado por parcela
     // mínima) — não cai de volta para 200 como um valor "inválido".
     const parsedPmMinMensalObra = Math.max(0, parseCurrency(pmParcelaMinMensalObra));
@@ -1233,8 +1253,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => setSinalMinimo(e.target.value)}
                       onBlur={() => {
-                        const parsed = parseCurrency(sinalMinimo);
-                        setSinalMinimo(formatCurrency(parsed > 0 ? parsed : 2000));
+                        setSinalMinimo(formatCurrency(resolveSinalMinimo(sinalMinimo)));
                       }}
                       placeholder="Ex: R$ 2.000,00"
                       className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-emerald-600 focus:outline-none focus:border-sky-600 text-xs"
@@ -1253,7 +1272,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         value={mesesObraStr}
                         onChange={(e) => setMesesObraStr(e.target.value)}
                         onBlur={() => {
-                          const val = Math.max(1, parseInt(mesesObraStr, 10) || 33);
+                          const val = Math.max(0, parseIntFlexible(mesesObraStr, 33));
                           setMesesObraStr(String(val));
                         }}
                         className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
@@ -1274,7 +1293,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         value={mesesPosStr}
                         onChange={(e) => setMesesPosStr(e.target.value)}
                         onBlur={() => {
-                          const val = Math.max(1, parseInt(mesesPosStr, 10) || 27);
+                          const val = Math.max(0, parseIntFlexible(mesesPosStr, 27));
                           setMesesPosStr(String(val));
                         }}
                         className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
@@ -1409,7 +1428,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                               value={serie.mesesVal}
                               onChange={(e) => serie.mesesSet(e.target.value)}
                               onBlur={() => {
-                                const parsed = Math.max(1, parseInt(serie.mesesVal, 10) || 12);
+                                const parsed = Math.max(0, parseIntFlexible(serie.mesesVal, 12));
                                 serie.mesesSet(String(parsed));
                               }}
                               title="Quantidade de meses do balde"
@@ -1565,7 +1584,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         inputMode="numeric"
                         value={pmQtdParcelasPosObraStr}
                         onChange={(e) => setPmQtdParcelasPosObraStr(e.target.value)}
-                        onBlur={() => setPmQtdParcelasPosObraStr(String(Math.max(0, parseInt(pmQtdParcelasPosObraStr, 10) || 12)))}
+                        onBlur={() => setPmQtdParcelasPosObraStr(String(Math.max(0, parseIntFlexible(pmQtdParcelasPosObraStr, 12))))}
                         className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">X</span>
@@ -1628,7 +1647,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         inputMode="numeric"
                         value={pmChavesMesesAntesStr}
                         onChange={(e) => setPmChavesMesesAntesStr(e.target.value)}
-                        onBlur={() => setPmChavesMesesAntesStr(String(Math.max(0, parseInt(pmChavesMesesAntesStr, 10) || 2)))}
+                        onBlur={() => setPmChavesMesesAntesStr(String(Math.max(0, parseIntFlexible(pmChavesMesesAntesStr, 2))))}
                         className="w-full pl-3 pr-9 py-2 bg-white border border-slate-300 rounded-xl font-bold text-amber-700 text-center focus:outline-none focus:border-amber-600 text-xs"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">M</span>
@@ -1744,7 +1763,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         value={numParcelasStr}
                         onChange={(e) => setNumParcelasStr(e.target.value)}
                         onBlur={() => {
-                          const val = Math.max(1, parseInt(numParcelasStr, 10) || 72);
+                          const val = Math.max(0, parseIntFlexible(numParcelasStr, 72));
                           setNumParcelasStr(String(val));
                         }}
                         className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
@@ -1764,8 +1783,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => setSinalMinimo(e.target.value)}
                       onBlur={() => {
-                        const parsed = parseCurrency(sinalMinimo);
-                        setSinalMinimo(formatCurrency(parsed > 0 ? parsed : 2000));
+                        setSinalMinimo(formatCurrency(resolveSinalMinimo(sinalMinimo)));
                       }}
                       placeholder="Ex: 5000, 5000,00 ou R$ 5.000,00"
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold text-emerald-600 focus:outline-none focus:border-sky-600"
@@ -1857,7 +1875,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           value={mesesTabela1Str}
                           onChange={(e) => setMesesTabela1Str(e.target.value)}
                           onBlur={() => {
-                            const val = Math.max(1, parseInt(mesesTabela1Str, 10) || 36);
+                            const val = Math.max(0, parseIntFlexible(mesesTabela1Str, 36));
                             setMesesTabela1Str(String(val));
                           }}
                           className="w-full pl-2 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
@@ -1899,7 +1917,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           value={mesesTabela2Str}
                           onChange={(e) => setMesesTabela2Str(e.target.value)}
                           onBlur={() => {
-                            const val = Math.max(1, parseInt(mesesTabela2Str, 10) || 72);
+                            const val = Math.max(0, parseIntFlexible(mesesTabela2Str, 72));
                             setMesesTabela2Str(String(val));
                           }}
                           className="w-full pl-2 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"

@@ -67,7 +67,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   ), [baseCond, selectedTorre]);
 
   // LÓGICA DE DEFINIÇÃO DO PRAZO PADRÃO (HERDADO DINAMICAMENTE DA POLÍTICA DE CRÉDITO)
-  const condNumParcelas = Number(currentCond?.numParcelas) || Number(currentProd?.numParcelas) || 60;
+  const condNumParcelas = currentCond?.numParcelas !== undefined
+    ? Number(currentCond.numParcelas)
+    : (currentProd?.numParcelas !== undefined ? Number(currentProd.numParcelas) : 60);
 
   // Carrega os valores de Prazo Faixa 1 e Prazo Faixa 2 do produto/condição selecionado
   const prazoFaixa1 = Number(currentCond?.mesesTabela1) || 0;
@@ -369,9 +371,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const sinalMinimoPolicy = isParcelamentoMorar
     ? (hasUnitSelected ? Math.round(price * (pmSinalMinimoPct / 100) * 100) / 100 : 0)
     : (currentCond?.sinalMinimo ? parseCurrency(currentCond.sinalMinimo) : 2000);
-  const sinalMinimoVal = isParcelamentoMorar
-    ? sinalMinimoPolicy
-    : (sinalMinimoPolicy > 0 ? sinalMinimoPolicy : 2000);
+  // sinalMinimoPolicy já resolve o piso correto em ambos os ramos acima
+  // (inclusive um Sinal Mínimo de R$ 0,00 configurado explicitamente na
+  // política) — não há necessidade de um segundo fallback aqui.
+  const sinalMinimoVal = sinalMinimoPolicy;
 
   // Nunca "inventamos" um valor de financiamento: só usamos exatamente o que
   // foi digitado em "Financiamento Estimado" no Simulador (capado pelo teto
@@ -1022,7 +1025,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   };
 
   // Taxa de juros da política de crédito (a.m.)
-  const meses1 = currentCond?.mesesTabela1 || 36;
+  const meses1 = currentCond?.mesesTabela1 !== undefined ? currentCond.mesesTabela1 : 36;
   const taxa1 = currentCond?.taxaJuros1 !== undefined ? currentCond.taxaJuros1 : 0;
   const taxa2 = currentCond?.taxaJuros2 !== undefined ? currentCond.taxaJuros2 : 1.9;
   const appliedRatePct = (qtdMensais <= meses1) ? taxa1 : taxa2;

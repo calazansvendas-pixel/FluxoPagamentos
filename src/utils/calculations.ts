@@ -805,12 +805,14 @@ export function calculatePolicyRiskValues(
   fgts: number = 0,
   ltvMaximo: number = 0.80
 ) {
-  const numParcelas = overrideNumParcelas || cond.numParcelas || 60;
-  
+  const numParcelas = overrideNumParcelas !== undefined
+    ? overrideNumParcelas
+    : (cond.numParcelas !== undefined ? cond.numParcelas : 60);
+
   const riscoRendaPct = cond.riscoRendaPct !== undefined ? cond.riscoRendaPct : 35;
   const percentualPolitica = cond.riscoImovelPct !== undefined ? cond.riscoImovelPct : 20;
 
-  const meses1 = cond.mesesTabela1 || 36;
+  const meses1 = cond.mesesTabela1 !== undefined ? cond.mesesTabela1 : 36;
   const taxa1 = cond.taxaJuros1 !== undefined ? cond.taxaJuros1 : 0.0;
   const taxa2 = cond.taxaJuros2 !== undefined ? cond.taxaJuros2 : 1.9;
   const appliedRatePct = (numParcelas <= meses1) ? taxa1 : taxa2;

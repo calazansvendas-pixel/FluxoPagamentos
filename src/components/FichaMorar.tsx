@@ -487,8 +487,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const percent = simulationData.finPercent;
   const maxAllowed = (hasUnitSelected && evaluation > 0) ? (evaluation * percent) : 0;
 
-  const sinalMinimoPolicy = currentCond?.sinalMinimo ? parseCurrency(currentCond.sinalMinimo) : 2000;
-  const sinalMinimoVal = sinalMinimoPolicy > 0 ? sinalMinimoPolicy : 2000;
+  // Um Sinal Mínimo de R$ 0,00 configurado explicitamente na política é um
+  // piso válido — só cai no padrão de R$ 2.000,00 quando o campo não foi
+  // definido (string vazia/undefined).
+  const sinalMinimoVal = currentCond?.sinalMinimo ? parseCurrency(currentCond.sinalMinimo) : 2000;
 
   // 1. VALOR BASE: Maior entre Preço de Tabela e Avaliação Bancária
   const valorBase = hasUnitSelected ? Math.max(price, evaluation) : 0;
