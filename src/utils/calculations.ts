@@ -410,24 +410,24 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   let baseCalculoComITBI = 0;
   let totalProSolutoMaximo = 0;
 
-  if (params.atoManual !== undefined && params.atoManual > 0) {
-    atoResidual = params.atoManual;
-    descontoAto = (!isAtoZerado && isAtoPremiadoEnabled) ? calcularDescontoAtoPremiado(atoResidual) : 0;
-    baseCalculoComITBI = Math.max(0, Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100);
-    totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
-  } else if (params.atoManual === 0 || isAtoZerado) {
-    atoResidual = 0;
-    descontoAto = 0;
-    baseCalculoComITBI = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
-    totalProSolutoMaximo = sinalComITBI;
-  } else if (!isAtoPremiadoEnabled) {
-    descontoAto = 0;
-    baseCalculoComITBI = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
-    totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
-    const atoCalc = (sinalSemITBI + itbiRegistro) - totalProSolutoMaximo;
-    const sinalMinimoFloorSemPremio = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
-    atoResidual = Math.max(sinalMinimoFloorSemPremio, Math.round(atoCalc * 100) / 100);
-  } else {
+  // Ato mínimo que a política de crédito exige para este preço/renda/recursos —
+  // o mesmo valor que o motor sugeriria automaticamente (sem nenhum Ato manual).
+  // Pró-Soluto decresce monotonicamente conforme o Ato sobe, então este é
+  // exatamente o ponto em que o risco fica right at the cap (17% por padrão):
+  // qualquer Ato maior mantém o risco dentro da política; qualquer Ato menor
+  // ultrapassa o limite. Serve de PISO para um Ato digitado manualmente — nunca
+  // de teto, o usuário pode sempre pagar mais do que o mínimo exigido.
+  const calcularAtoMinimoDaPolitica = (): { atoResidual: number; descontoAto: number; baseCalculoComITBI: number; totalProSolutoMaximo: number } => {
+    if (!isAtoPremiadoEnabled) {
+      const descontoAtoCalc = 0;
+      const baseCalc = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
+      const proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
+      const atoCalc = (sinalSemITBI + itbiRegistro) - proSolutoMax;
+      const sinalMinimoFloorSemPremio = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
+      const atoCalcFinal = Math.max(sinalMinimoFloorSemPremio, Math.round(atoCalc * 100) / 100);
+      return { atoResidual: atoCalcFinal, descontoAto: descontoAtoCalc, baseCalculoComITBI: baseCalc, totalProSolutoMaximo: proSolutoMax };
+    }
+
     // Resolução Circular / Iterativa Exata do Excel da Morar:
     // Base Líquida com ITBI = (Preço Tabela - Desconto Ato) + ITBI Total
     // Total Pró-Soluto = Base Líquida * 17%
@@ -440,41 +440,73 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     const sinalMinimoFloor = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
 
     if (atoCom5k >= 50000) {
-      descontoAto = 5000;
-      atoResidual = Math.max(sinalMinimoFloor, Math.round(atoCom5k * 100) / 100);
-      baseCalculoComITBI = Math.round(baseCom5k * 100) / 100;
-      totalProSolutoMaximo = proSoluto5k;
-    } else {
-      // Hipótese 2: Ato >= 5.000 e < 50.000 -> Desconto de 10% sobre o Ato
-      // Fórmula analítica: ato = [(Sinal + ITBI) - (Preço Tabela + ITBI) * pctMaxProSoluto] / (1 + 0.10 - (0.10 * pctMaxProSoluto))
-      const denom = 1 + 0.10 - (0.10 * pctMaxProSoluto);
-      const num = (sinalSemITBI + itbiRegistro) - ((precoTabela + itbiRegistro) * pctMaxProSoluto);
-      const atoAnalitico = denom > 0 ? num / denom : 0;
-
-      if (atoAnalitico >= 5000 && atoAnalitico < 50000) {
-        atoResidual = Math.round(atoAnalitico * 100) / 100;
-        descontoAto = Math.round(atoResidual * 0.10 * 100) / 100;
-        baseCalculoComITBI = Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100;
-        totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
-
-        // Ajuste de centavos fino para convergência perfeita
-        atoResidual = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - totalProSolutoMaximo - descontoAto) * 100) / 100);
-        descontoAto = Math.round(atoResidual * 0.10 * 100) / 100;
-        baseCalculoComITBI = Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100;
-        totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
-        atoResidual = Math.max(sinalMinimoFloor, Math.round(((sinalSemITBI + itbiRegistro) - totalProSolutoMaximo - descontoAto) * 100) / 100);
-      } else {
-        // Hipótese 3: Ato < 5.000 -> Desconto de R$ 0,00 (Ex: Unidade B-603)
-        // Base Líquida com ITBI = (Preço Tabela - 0) + ITBI Total
-        // Total Pró-Soluto (17,00%) = Base Líquida * 0.17
-        // Ato Imóvel = (Sinal Total + ITBI Total) - Total Pró-Soluto - Desconto Ato
-        descontoAto = 0;
-        baseCalculoComITBI = Math.round((precoTabela + itbiRegistro) * 100) / 100;
-        totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
-        const atoCalc = (sinalSemITBI + itbiRegistro) - totalProSolutoMaximo;
-        atoResidual = Math.max(sinalMinimoFloor, Math.round(atoCalc * 100) / 100);
-      }
+      return {
+        descontoAto: 5000,
+        atoResidual: Math.max(sinalMinimoFloor, Math.round(atoCom5k * 100) / 100),
+        baseCalculoComITBI: Math.round(baseCom5k * 100) / 100,
+        totalProSolutoMaximo: proSoluto5k
+      };
     }
+
+    // Hipótese 2: Ato >= 5.000 e < 50.000 -> Desconto de 10% sobre o Ato
+    // Fórmula analítica: ato = [(Sinal + ITBI) - (Preço Tabela + ITBI) * pctMaxProSoluto] / (1 + 0.10 - (0.10 * pctMaxProSoluto))
+    const denom = 1 + 0.10 - (0.10 * pctMaxProSoluto);
+    const num = (sinalSemITBI + itbiRegistro) - ((precoTabela + itbiRegistro) * pctMaxProSoluto);
+    const atoAnalitico = denom > 0 ? num / denom : 0;
+
+    if (atoAnalitico >= 5000 && atoAnalitico < 50000) {
+      let atoResidualCalc = Math.round(atoAnalitico * 100) / 100;
+      let descontoAtoCalc = Math.round(atoResidualCalc * 0.10 * 100) / 100;
+      let baseCalc = Math.round(((precoTabela - descontoAtoCalc) + itbiRegistro) * 100) / 100;
+      let proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
+
+      // Ajuste de centavos fino para convergência perfeita
+      atoResidualCalc = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - proSolutoMax - descontoAtoCalc) * 100) / 100);
+      descontoAtoCalc = Math.round(atoResidualCalc * 0.10 * 100) / 100;
+      baseCalc = Math.round(((precoTabela - descontoAtoCalc) + itbiRegistro) * 100) / 100;
+      proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
+      atoResidualCalc = Math.max(sinalMinimoFloor, Math.round(((sinalSemITBI + itbiRegistro) - proSolutoMax - descontoAtoCalc) * 100) / 100);
+
+      return { atoResidual: atoResidualCalc, descontoAto: descontoAtoCalc, baseCalculoComITBI: baseCalc, totalProSolutoMaximo: proSolutoMax };
+    }
+
+    // Hipótese 3: Ato < 5.000 -> Desconto de R$ 0,00 (Ex: Unidade B-603)
+    // Base Líquida com ITBI = (Preço Tabela - 0) + ITBI Total
+    // Total Pró-Soluto (17,00%) = Base Líquida * 0.17
+    // Ato Imóvel = (Sinal Total + ITBI Total) - Total Pró-Soluto - Desconto Ato
+    const baseCalc = Math.round((precoTabela + itbiRegistro) * 100) / 100;
+    const proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
+    const atoCalc = (sinalSemITBI + itbiRegistro) - proSolutoMax;
+    return {
+      descontoAto: 0,
+      baseCalculoComITBI: baseCalc,
+      totalProSolutoMaximo: proSolutoMax,
+      atoResidual: Math.max(sinalMinimoFloor, Math.round(atoCalc * 100) / 100)
+    };
+  };
+
+  if (params.atoManual !== undefined && params.atoManual > 0) {
+    // Um Ato digitado/mantido manualmente é respeitado, mas nunca abaixo do
+    // mínimo exigido pela política de crédito — se o Ato informado deixaria o
+    // Pró-Soluto acima do risco máximo permitido, ele é elevado exatamente até
+    // o ponto em que o risco volta a obedecer a política (nunca reduzido: o
+    // usuário sempre pode optar por pagar mais do que o mínimo exigido).
+    const atoMinimo = calcularAtoMinimoDaPolitica();
+    atoResidual = Math.max(params.atoManual, atoMinimo.atoResidual);
+    descontoAto = (!isAtoZerado && isAtoPremiadoEnabled) ? calcularDescontoAtoPremiado(atoResidual) : 0;
+    baseCalculoComITBI = Math.max(0, Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100);
+    totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
+  } else if (params.atoManual === 0 || isAtoZerado) {
+    atoResidual = 0;
+    descontoAto = 0;
+    baseCalculoComITBI = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
+    totalProSolutoMaximo = sinalComITBI;
+  } else {
+    const sugerido = calcularAtoMinimoDaPolitica();
+    atoResidual = sugerido.atoResidual;
+    descontoAto = sugerido.descontoAto;
+    baseCalculoComITBI = sugerido.baseCalculoComITBI;
+    totalProSolutoMaximo = sugerido.totalProSolutoMaximo;
   }
 
   // Fluxo Pró-Soluto Efetivo com ITBI:
