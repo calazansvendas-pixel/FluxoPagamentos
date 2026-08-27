@@ -922,8 +922,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // que `fluxoProSolutoComITBI` (o que efetivamente sobra para ratear entre as séries)
   // já saia reduzido pelo excedente do Ato sobre o sugerido — sem isso, as parcelas
   // ficavam "travadas" no valor cheio até o Pró-Soluto zerar de uma vez.
-  const recalcularSeriesParaAtoManual = (atoValor: number) => {
+  // `atoPremiadoOverride` existe porque quem chama logo após um setIsAtoPremiadoEnabled
+  // ainda enxerga o valor ANTIGO de isAtoPremiadoEnabled no closure (o state do React só
+  // é atualizado no próximo render). Nesses casos o novo valor é passado explicitamente.
+  const recalcularSeriesParaAtoManual = (atoValor: number, atoPremiadoOverride?: boolean) => {
     if (!hasUnitSelected) return;
+    const atoPremiadoAtivo = atoPremiadoOverride !== undefined ? atoPremiadoOverride : isAtoPremiadoEnabled;
 
     const mesesObraPadrao = currentCond?.mesesObra ?? 33;
     const mesesObraParam = totalParcObra > 0 ? totalParcObra : mesesObraPadrao;
@@ -957,7 +961,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
-      isAtoPremiadoEnabled,
+      isAtoPremiadoEnabled: atoPremiadoAtivo,
       atoManual: atoValor
     });
 
@@ -974,6 +978,38 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiPosQtd(mesesPosParam === 0 ? 0 : mPosArr.reduce((a, b) => a + b.qtd, 0));
     setIsManualObra(false);
     setIsManualPos(false);
+  };
+
+  // Ligar/desligar o Ato Premiado ("Aplicar" / "Zerar") muda o quanto o cliente
+  // deve à construtora (com o desconto ativo ele deve preço - desconto), então
+  // todo o resto do fluxo precisa ser refeito. O Ato (Imóvel) em si, porém, é
+  // uma decisão do usuário: se ele lançou um sinal maior, é porque quer a conta
+  // feita com aquele sinal — antes o toggle descartava o Ato (setValAtoManual(null))
+  // e voltava para o sugerido, o que impedia comparar o MESMO sinal com e sem o
+  // Ato Premiado.
+  //
+  // Então o Ato é preservado e só as demais contas são refeitas. A única
+  // correção aplicada ao próprio Ato é o teto: ao LIGAR o Ato Premiado o cliente
+  // passa a dever menos, e um Ato que antes cabia pode ultrapassar o novo saldo
+  // devido — nesse caso ele é limitado ao teto (mesmo ponto fixo usado pelo campo),
+  // para o usuário nunca pagar mais do que realmente deve.
+  const handleToggleAtoPremiado = (ativo: boolean) => {
+    setIsAtoPremiadoEnabled(ativo);
+
+    if (valAtoManual === null) {
+      // Nenhum Ato fixado: mantém o comportamento de sempre — o efeito de
+      // recálculo automático remonta as séries já com o novo estado do desconto.
+      setIsManualObra(false);
+      setIsManualPos(false);
+      return;
+    }
+
+    const novoTetoAto = resolverTetoAtoComDesconto(Math.max(0, price - subsidy), ativo);
+    const atoPreservado = Math.min(valAtoManual, novoTetoAto);
+
+    setValAtoManual(atoPreservado);
+    setAtoInputText(formatCurrency(atoPreservado));
+    recalcularSeriesParaAtoManual(atoPreservado, ativo);
   };
 
   // Inicialização inteligente e automática quando a unidade é selecionada ou o sinal líquido é atualizado
@@ -2123,12 +2159,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             }}
             descontoAto={descontoAto}
             isAtoPremiadoActive={isAtoPremiadoEnabled}
-            onToggleAtoPremiado={(ativo) => {
-              setIsAtoPremiadoEnabled(ativo);
-              setValAtoManual(null);
-              setIsManualObra(false);
-              setIsManualPos(false);
-            }}
+            onToggleAtoPremiado={handleToggleAtoPremiado}
             isAVistaActive={isAVistaActive}
             onToggleAVista={(ativo) => {
               if (ativo) {
