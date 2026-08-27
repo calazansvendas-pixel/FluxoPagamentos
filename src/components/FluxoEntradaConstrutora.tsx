@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Building, RotateCcw, Sliders } from 'lucide-react';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
+import { formatCurrency, parseCurrency, formatForEdit } from '../utils/formatters';
 
 export interface FluxoEntradaConstrutoraProps {
   title?: string;
@@ -230,7 +230,7 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
               value={isEditingAto ? atoInputText : (valorAto > 0 ? formatCurrency(valorAto) : '')}
               onFocus={(e) => {
                 setIsEditingAto(true);
-                setAtoInputText(valorAto > 0 ? String(valorAto) : '');
+                setAtoInputText(valorAto > 0 ? formatForEdit(valorAto) : '');
                 e.target.select();
               }}
               onChange={(e) => setAtoInputText(e.target.value)}
@@ -272,7 +272,7 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
                 value={isEditingITBI ? itbiInputText : (valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '')}
                 onFocus={(e) => {
                   setIsEditingITBI(true);
-                  setItbiInputText(valAtoITBI > 0 ? String(valAtoITBI) : '');
+                  setItbiInputText(valAtoITBI > 0 ? formatForEdit(valAtoITBI) : '');
                   e.target.select();
                 }}
                 onChange={(e) => setItbiInputText(e.target.value)}

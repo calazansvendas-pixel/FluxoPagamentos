@@ -11,7 +11,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { Product, SimulationData } from '../types';
-import { formatCurrency, formatDeliveryText, parseCurrency } from '../utils/formatters';
+import { formatCurrency, formatDeliveryText, parseCurrency, formatForEdit } from '../utils/formatters';
 import { ensureProductConditions } from '../utils/calculations';
 
 interface SimulatorViewProps {
@@ -58,7 +58,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
     setEditingField(field);
     const currentVal = safeSimulationData[field];
     const initialText = (currentVal !== null && currentVal !== undefined && !isNaN(Number(currentVal)))
-      ? String(currentVal)
+      ? formatForEdit(Number(currentVal))
       : '';
     setFieldTexts(prev => ({ ...prev, [field]: initialText }));
     e.target.select();

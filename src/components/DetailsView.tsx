@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
-import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText } from '../utils/formatters';
+import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
 import { PdfExportModal } from './PdfExportModal';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
@@ -1834,7 +1834,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   value={isEditingParc2 ? parc2InputText : (valParc2 > 0 ? formatCurrency(valParc2) : '')}
                   onFocus={(e) => {
                     setIsEditingParc2(true);
-                    setParc2InputText(valParc2 > 0 ? String(valParc2) : '');
+                    setParc2InputText(valParc2 > 0 ? formatForEdit(valParc2) : '');
                     e.target.select();
                   }}
                   onChange={(e) => {
@@ -1885,7 +1885,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   value={isEditingParc3 ? parc3InputText : (valParc3 > 0 ? formatCurrency(valParc3) : '')}
                   onFocus={(e) => {
                     setIsEditingParc3(true);
-                    setParc3InputText(valParc3 > 0 ? String(valParc3) : '');
+                    setParc3InputText(valParc3 > 0 ? formatForEdit(valParc3) : '');
                     e.target.select();
                   }}
                   onChange={(e) => {
