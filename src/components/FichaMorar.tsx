@@ -18,7 +18,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
-import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText } from '../utils/formatters';
+import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre } from '../utils/calculations';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
@@ -2433,7 +2433,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     value={isEditingITBITotal ? itbiInputText : (despCartoriasEfetivas > 0 ? formatCurrency(despCartoriasEfetivas) : '')}
                     onFocus={(e) => {
                       setIsEditingITBITotal(true);
-                      setItbiInputText(despCartoriasEfetivas > 0 ? String(despCartoriasEfetivas) : '');
+                      setItbiInputText(despCartoriasEfetivas > 0 ? formatForEdit(despCartoriasEfetivas) : '');
                       e.target.select();
                     }}
                     onChange={(e) => setItbiInputText(e.target.value)}
@@ -2495,7 +2495,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                       value={isEditingItbiObraVal ? itbiObraValText : (itbiParcelaObraValor > 0 ? formatCurrency(itbiParcelaObraValor) : 'R$ 0,00')}
                       onFocus={(e) => {
                         setIsEditingItbiObraVal(true);
-                        setItbiObraValText(itbiParcelaObraValor > 0 ? String(itbiParcelaObraValor) : '');
+                        setItbiObraValText(itbiParcelaObraValor > 0 ? formatForEdit(itbiParcelaObraValor) : '');
                         e.target.select();
                       }}
                       onChange={(e) => setItbiObraValText(e.target.value)}
@@ -2538,7 +2538,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                       value={isEditingItbiPosVal ? itbiPosValText : (itbiParcelaPosValor > 0 ? formatCurrency(itbiParcelaPosValor) : 'R$ 0,00')}
                       onFocus={(e) => {
                         setIsEditingItbiPosVal(true);
-                        setItbiPosValText(itbiParcelaPosValor > 0 ? String(itbiParcelaPosValor) : '');
+                        setItbiPosValText(itbiParcelaPosValor > 0 ? formatForEdit(itbiParcelaPosValor) : '');
                         e.target.select();
                       }}
                       onChange={(e) => setItbiPosValText(e.target.value)}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
+import { formatCurrency, parseCurrency, formatForEdit } from '../utils/formatters';
 
 interface PmCampoEditavelProps {
   label: string;
@@ -89,7 +89,7 @@ export const PmCampoEditavel: React.FC<PmCampoEditavelProps> = ({
           value={isEditing ? inputText : (tipo === 'moeda' ? (value > 0 ? formatCurrency(value) : '') : (value > 0 ? String(value) : '0'))}
           onFocus={(e) => {
             setIsEditing(true);
-            setInputText(value > 0 ? String(value) : '');
+            setInputText(value > 0 ? formatForEdit(value) : '');
             e.target.select();
           }}
           onChange={(e) => setInputText(e.target.value)}

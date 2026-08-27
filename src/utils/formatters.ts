@@ -45,6 +45,34 @@ export function formatCurrency(val: number): string {
   });
 }
 
+/**
+ * Texto exibido em um campo numérico enquanto a pessoa o edita (ao clicar/focar).
+ *
+ * Os valores calculados pelo app são floats de ponto flutuante e podem carregar
+ * muitas casas decimais (ex.: 12455.358127065). Mostrar esse número cru no campo
+ * durante a digitação fica visualmente ruim, então aqui ele é arredondado para
+ * centavos, sem separador de milhar e sem casas decimais supérfluas
+ * ("12455,36", "8000", "3200,5"). O separador é a vírgula, que é o que
+ * parseCurrency/parseFlexibleCurrency já leem — o valor digitado continua sendo
+ * interpretado exatamente como antes.
+ *
+ * Não aplica política de campo vazio: 0 vira "0". Cada campo mantém a própria
+ * regra de quando mostrar texto vazio.
+ */
+export function formatForEdit(val: number | null | undefined): string {
+  if (val === null || val === undefined) return '';
+  const num = Number(val);
+  if (!isFinite(num)) return '';
+
+  let txt = (Math.round(num * 100) / 100).toFixed(2);
+  if (txt.endsWith('.00')) {
+    txt = txt.slice(0, -3);
+  } else if (txt.endsWith('0')) {
+    txt = txt.slice(0, -1);
+  }
+  return txt.replace('.', ',');
+}
+
 export const formatArea = (val: number | string | undefined | null): string => {
   if (val === null || val === undefined || val === '') return '0,00 m²';
   let num = typeof val === 'string' 
