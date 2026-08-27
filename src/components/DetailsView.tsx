@@ -735,9 +735,20 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const atoAVistaTarget = atoAposMensaisAVistaTarget + somaMensais;
   const isAVistaActive = hasUnitSelected && valAtoManual !== null && Math.abs(valAtoManual - atoAVistaTarget) < 0.01;
 
-  // Teto Máximo do Ato Imóvel: O valor máximo possível é o saldo que quita integralmente a unidade
-  // atoMaximoPossivel = precoTabela - subsidio - descontoAto (usamos atoPremiadoAtual já calculado)
-  const atoMaximoPossivel = hasUnitSelected ? Math.max(0, price - subsidy - atoPremiadoAtual) : 0;
+  // Teto Máximo do Ato Imóvel: o maior Ato que quita integralmente a unidade, ou
+  // seja, o ponto fixo ato* = (preço - subsídio) - desconto(ato*). Precisa ser
+  // resolvido como ponto fixo porque o Ato Premiado depende do próprio valor do
+  // Ato — não dá para subtrair um desconto já conhecido de antemão.
+  //
+  // Usar aqui o "atoPremiadoAtual" (o desconto do Ato SUGERIDO) dava um teto
+  // errado sempre que o Ato sugerido caía no piso da política (trava do ato
+  // mínimo, que zera atoPremiadoAtual): o teto virava o preço cheio e o cliente
+  // conseguia lançar no Ato o valor do Ato Premiado A MAIS do que realmente
+  // devia — o Pró-Soluto era clampado em R$ 0,00 e a diferença sumia da tela.
+  // Mesma abordagem já usada na ficha "Sinal c/ Morar" (FichaMorar.tsx).
+  const atoMaximoPossivel = hasUnitSelected
+    ? resolverTetoAtoComDesconto(Math.max(0, price - subsidy), isAtoPremiadoEnabled)
+    : 0;
 
   const atoImovelDigitadoBruto = (valAtoManual !== null && valAtoManual >= atoMinimoCalculado)
     ? valAtoManual
@@ -893,7 +904,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const handleFinishAtoEdit = (rawText: string) => {
     setIsEditingAto(false);
     const inputVal = parseFlexibleCurrency(rawText);
-    const maxAtoPermitido = price > 0 ? Math.max(0, price - descontoAto) : 0;
+    // Mesmo teto aplicado no cálculo (atoMaximoPossivel), para que o valor
+    // ajustado e a mensagem do toast batam exatamente com o que a tela mostra.
+    const maxAtoPermitido = atoMaximoPossivel;
 
     if (rawText.trim() === '' || inputVal === 0) {
       setValAtoManual(null);
@@ -1778,7 +1791,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             onLimpar={limparFluxoPagamento}
             valorAto={isParcelamentoMorar ? pm.atoEfetivo : atoAposMensais}
             valorAtoMinimo={isParcelamentoMorar ? pm.sinalMinimoCalculado : atoMinimoCalculado}
-            valorAtoMaximo={isParcelamentoMorar ? pm.atoMaximoPossivel : (price > 0 ? Math.max(0, price - subsidy - atoPremiadoAtual) : 0)}
+            valorAtoMaximo={isParcelamentoMorar ? pm.atoMaximoPossivel : atoMaximoPossivel}
             onAtoChange={(novoVal) => {
               setValAtoManual(novoVal);
             }}
