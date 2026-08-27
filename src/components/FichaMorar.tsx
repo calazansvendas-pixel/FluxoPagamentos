@@ -978,6 +978,19 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiPosQtd(mesesPosParam === 0 ? 0 : mPosArr.reduce((a, b) => a + b.qtd, 0));
     setIsManualObra(false);
     setIsManualPos(false);
+
+    // O motor eleva um Ato manual que ficaria ABAIXO do mínimo exigido pela
+    // política de crédito (o Pró-Soluto resultante estouraria o risco máximo).
+    // Quando isso acontece o campo precisa passar a mostrar o valor efetivamente
+    // usado — o mais próximo do informado que ainda obedece a política —, senão
+    // o Ato exibido não fecha com o restante do fluxo já recalculado.
+    if (engineResult.atoResidual > atoValor + 0.005) {
+      setValAtoManual(engineResult.atoResidual);
+      setAtoInputText(formatCurrency(engineResult.atoResidual));
+      if (onShowToast) {
+        onShowToast(`Ato (Imóvel) ajustado para ${formatCurrency(engineResult.atoResidual)}: com ${formatCurrency(atoValor)} o Pró-Soluto ultrapassaria o risco máximo da política de crédito.`);
+      }
+    }
   };
 
   // Ligar/desligar o Ato Premiado ("Aplicar" / "Zerar") muda o quanto o cliente
@@ -996,14 +1009,29 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const handleToggleAtoPremiado = (ativo: boolean) => {
     setIsAtoPremiadoEnabled(ativo);
 
-    if (valAtoManual === null) {
-      // Nenhum Ato fixado: mantém o comportamento de sempre — o efeito de
-      // recálculo automático remonta as séries já com o novo estado do desconto.
+    // O Ato exibido pode ser (a) a nossa própria sugestão — o app grava o Ato
+    // sugerido em `valAtoManual` assim que a unidade é escolhida, então "não
+    // digitado" NÃO é o mesmo que `valAtoManual === null` — ou (b) um sinal que
+    // o usuário lançou por conta própria. Só o caso (b) é uma decisão dele.
+    const atoAindaEhASugestao = valAtoManual === null
+      || Math.abs(valAtoManual - atoSugeridoResidual) < 0.01;
+
+    if (atoAindaEhASugestao) {
+      // O usuário não lançou nenhum sinal diferente do que sugerimos: o Ato
+      // Premiado é abatido diretamente do Ato (Imóvel), então o próprio Ato tem
+      // de ser re-sugerido com o novo estado do prêmio. Preservar o número
+      // antigo deixava o Ato defasado do restante do fluxo — era o que fazia o
+      // Ato ficar abaixo do exigido (e o risco estourar) ao "Zerar" o prêmio.
+      setValAtoManual(null);
+      setAtoInputText('');
       setIsManualObra(false);
       setIsManualPos(false);
       return;
     }
 
+    // Sinal lançado pelo usuário: é preservado, limitado ao novo teto (nunca
+    // pagar mais do que o devido) e elevado ao piso da política de crédito
+    // dentro de `recalcularSeriesParaAtoManual` quando o risco exigir.
     const novoTetoAto = resolverTetoAtoComDesconto(Math.max(0, price - subsidy), ativo);
     const atoPreservado = Math.min(valAtoManual, novoTetoAto);
 
