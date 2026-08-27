@@ -343,6 +343,34 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         : Number(matchingRow.itbi_segundo_imovel || matchingRow.itbi_total || matchingRow.itbi_primeiro_imovel || 0))
     : 0;
 
+  // Alternar "Com Desconto" / "Sem Desconto" troca o ITBI/Registro lido da tabela
+  // (1º x 2º imóvel), que entra tanto na base de risco quanto nas parcelas das
+  // séries (o "+ ITBI" de cada mês) e nos totais do fluxo.
+  //
+  // Sem refazer o fluxo, só a base de risco reagia ao novo ITBI: as parcelas, o
+  // "Total com ITBI" e o "Distribuído" continuavam presos ao ITBI anterior,
+  // porque os valores de ITBI ficam "travados" em itbiObraValorManual /
+  // itbiPosValorManual (cache da última vez que a série foi montada) e porque o
+  // efeito de recálculo automático das séries só dispara com valAtoManual ===
+  // null e sem override manual de obra/pós.
+  //
+  // Por isso aqui é aplicado o MESMO reset já usado ao trocar de torre/unidade:
+  // é o que o app entende por "refazer todo o cálculo".
+  const handleToggleFirstHome = () => {
+    setIsFirstHomeLocal(prev => !prev);
+    setValAtoManual(null);
+    setAtoInputText('');
+    setIsEditingAto(false);
+    setValAtoITBI(0);
+    setItbiAtoInputText('');
+    setIsEditingAtoITBI(false);
+    setIsManualObra(false);
+    setIsManualPos(false);
+    setItbiTotalManual(null);
+    setItbiObraValorManual(null);
+    setItbiPosValorManual(null);
+  };
+
   const handleTorreChange = (torre: string) => {
     setSelectedTorre(torre);
     setSelectedUnidade('');
@@ -2083,7 +2111,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             valAtoITBI={valAtoITBI}
             valorTotalITBI={valorTotalITBI}
             isFirstHome={isFirstHomeLocal}
-            onToggleFirstHome={() => setIsFirstHomeLocal(prev => !prev)}
+            onToggleFirstHome={handleToggleFirstHome}
             onITBIChange={(novoVal) => {
               setValAtoITBI(novoVal);
               // Zera os valores "travados" da parcela de ITBI (obra/pós) para que
@@ -2398,7 +2426,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsFirstHomeLocal(prev => !prev)}
+                  onClick={handleToggleFirstHome}
                   className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors cursor-pointer ${
                     isFirstHomeLocal
                       ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
