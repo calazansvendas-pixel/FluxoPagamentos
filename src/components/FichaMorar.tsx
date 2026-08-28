@@ -1108,16 +1108,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setIsPagamentoAVistaEnabled(ativo);
 
     if (!ativo) {
-      // Volta ao fluxo parcelado normal: preço, ITBI, financiamento/subsídio/
-      // FGTS e Ato Premiado (que fica desligado até o usuário religar)
-      // retornam ao normal no próximo render; o Ato volta a ser sugerido
-      // automaticamente.
+      // Volta ao fluxo parcelado normal: preço, ITBI e financiamento/subsídio/
+      // FGTS retornam ao normal no próximo render; o Ato Premiado é religado
+      // (mesmo padrão usado ao selecionar uma unidade ou limpar o fluxo) e o
+      // Ato volta a ser sugerido automaticamente.
+      setIsAtoPremiadoEnabled(true);
       setValAtoManual(null);
       setAtoInputText('');
       setIsManualObra(false);
       setIsManualPos(false);
       if (onShowToast) {
-        onShowToast('Pagamento à vista desativado. Preço de Tabela, ITBI, Financiamento, Subsídio e FGTS voltam ao normal.');
+        onShowToast('Pagamento à vista desativado. Preço de Tabela, ITBI, Financiamento, Subsídio, FGTS e Ato Premiado voltam ao normal.');
       }
       return;
     }
