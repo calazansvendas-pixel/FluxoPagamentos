@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building, RotateCcw, Sliders } from 'lucide-react';
+import { Building, RotateCcw, Sliders, Wallet } from 'lucide-react';
 import { formatCurrency, parseCurrency, formatForEdit } from '../utils/formatters';
 
 export interface FluxoEntradaConstrutoraProps {
@@ -36,6 +36,11 @@ export interface FluxoEntradaConstrutoraProps {
   isAtoPremiadoActive: boolean;
   onToggleAtoPremiado: (ativo: boolean) => void;
 
+  // Botão de cabeçalho "Pgtº à vista" (opcional — só usado no fluxo Sinal c/
+  // Morar, onde existe uma política de Desconto à Vista configurável)
+  isPagamentoAVistaActive?: boolean;
+  onTogglePagamentoAVista?: (ativo: boolean) => void;
+
   // Conteúdo adicional (ex: linhas de mensais específicas)
   children?: React.ReactNode;
 }
@@ -60,6 +65,8 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
   descontoAto,
   isAtoPremiadoActive,
   onToggleAtoPremiado,
+  isPagamentoAVistaActive = false,
+  onTogglePagamentoAVista,
   children
 }) => {
   // Estado de edição do Ato (Imóvel)
@@ -174,8 +181,24 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
           </h3>
         </div>
 
-        {/* BOTÕES DE AÇÃO: POLÍTICA + LIMPAR */}
+        {/* BOTÕES DE AÇÃO: PGTº À VISTA + POLÍTICA + LIMPAR */}
         <div className="flex items-center gap-1.5">
+          {onTogglePagamentoAVista && (
+            <button
+              type="button"
+              onClick={() => onTogglePagamentoAVista(!isPagamentoAVistaActive)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                isPagamentoAVistaActive
+                  ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200/80'
+              }`}
+              title={isPagamentoAVistaActive ? 'Desativar o pagamento à vista e voltar ao fluxo parcelado' : 'Aplicar o desconto à vista da política, zerar o ITBI e quitar o Pró-Soluto no Ato'}
+            >
+              <Wallet className="w-3 h-3" />
+              <span>{isPagamentoAVistaActive ? 'À Vista Ativo' : 'Pgtº à vista'}</span>
+            </button>
+          )}
+
           {policyAction && (
             <button
               type="button"
@@ -297,13 +320,16 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
               </label>
               <button
                 type="button"
+                disabled={isPagamentoAVistaActive}
                 onClick={() => onToggleAtoPremiado(!isAtoPremiadoActive)}
-                className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
-                  isAtoPremiadoActive
-                    ? 'bg-amber-200 text-amber-900 hover:bg-amber-300'
-                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${
+                  isPagamentoAVistaActive
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : isAtoPremiadoActive
+                      ? 'bg-amber-200 text-amber-900 hover:bg-amber-300 cursor-pointer'
+                      : 'bg-slate-200 text-slate-600 hover:bg-slate-300 cursor-pointer'
                 }`}
-                title={isAtoPremiadoActive ? 'Zerar o Desconto do Ato Premiado' : 'Aplicar o Desconto do Ato Premiado'}
+                title={isPagamentoAVistaActive ? 'Indisponível durante o Pgtº à vista' : (isAtoPremiadoActive ? 'Zerar o Desconto do Ato Premiado' : 'Aplicar o Desconto do Ato Premiado')}
               >
                 {isAtoPremiadoActive ? 'Zerar' : 'Aplicar'}
               </button>

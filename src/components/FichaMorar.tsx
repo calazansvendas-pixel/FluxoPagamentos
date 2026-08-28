@@ -107,6 +107,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const [itbiAtoInputText, setItbiAtoInputText] = useState<string>('');
   const [isEditingAtoITBI, setIsEditingAtoITBI] = useState<boolean>(false);
   const [isAtoPremiadoEnabled, setIsAtoPremiadoEnabled] = useState<boolean>(true);
+  // Pagamento à vista: aplica o % de Desconto à Vista da política sobre o
+  // Preço de Tabela (antes de qualquer outro cálculo), zera o ITBI (que passa
+  // a ser responsabilidade do cliente após o Habite-se) e traz o Sinal
+  // necessário inteiro para o Ato (Imóvel), zerando o Pró-Soluto.
+  const [isPagamentoAVistaEnabled, setIsPagamentoAVistaEnabled] = useState<boolean>(false);
 
   // Faixas de Obra (INCC) - Padrão Morar: 12x, 12x, 9x, 0x (Total 33 meses)
   const [dataObra, setDataObra] = useState<string>('setembro, 2026');
@@ -218,6 +223,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiAtoInputText('');
     setIsEditingAtoITBI(false);
     setIsAtoPremiadoEnabled(true);
+    setIsPagamentoAVistaEnabled(false);
     setIsManualObra(false);
     setIsManualPos(false);
     setItbiTotalManual(null);
@@ -334,8 +340,18 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const areaPriv = matchingRow ? formatArea(matchingRow.area_privativa) : '0,00 m²';
   const areaQuintal = matchingRow ? formatArea(matchingRow.quintal) : '0,00 m²';
 
-  const price = hasUnitSelected && matchingRow ? Number(matchingRow.preco_tabela || 0) : 0;
+  const precoTabelaOriginal = hasUnitSelected && matchingRow ? Number(matchingRow.preco_tabela || 0) : 0;
   const evaluation = hasUnitSelected && matchingRow ? Number(matchingRow.avaliacao_bancaria || 0) : 0;
+
+  // Desconto à Vista: aplicado sobre o Preço de Tabela ANTES de qualquer outro
+  // cálculo do fluxo, então `price` — usado em todo o restante deste
+  // componente (motor de cálculo, sinal necessário, teto do Ato etc.) — já sai
+  // com o desconto embutido quando o pagamento à vista está ativo.
+  const descontoAVistaPctPolitica = currentCond?.descontoAVistaPct ?? 0;
+  const valorDescontoAVista = isPagamentoAVistaEnabled && precoTabelaOriginal > 0
+    ? Math.round(precoTabelaOriginal * (descontoAVistaPctPolitica / 100) * 100) / 100
+    : 0;
+  const price = Math.max(0, Math.round((precoTabelaOriginal - valorDescontoAVista) * 100) / 100);
 
   const itbiValTabela = (hasUnitSelected && matchingRow) 
     ? (isFirstHomeLocal 
@@ -422,6 +438,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiAtoInputText('');
     setIsEditingAtoITBI(false);
     setIsAtoPremiadoEnabled(true);
+    setIsPagamentoAVistaEnabled(false);
     setIsManualObra(false);
     setIsManualPos(false);
     setItbiTotalManual(null);
@@ -453,6 +470,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiAtoInputText('');
     setIsEditingAtoITBI(false);
     setIsAtoPremiadoEnabled(true);
+    setIsPagamentoAVistaEnabled(false);
     setIsManualObra(false);
     setIsManualPos(false);
     setItbiTotalManual(null);
@@ -577,7 +595,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     ? (itbiValTabela > 0 ? itbiValTabela : (price * 0.0441))
     : 0;
 
-  const valorTotalITBI = itbiTotalManual !== null ? itbiTotalManual : despCartoriasCalculadas;
+  // No pagamento à vista o ITBI não entra na conta: fica zerado e passa a ser
+  // responsabilidade do cliente, a partir da obtenção do Habite-se pelo empreendimento.
+  const valorTotalITBI = isPagamentoAVistaEnabled
+    ? 0
+    : (itbiTotalManual !== null ? itbiTotalManual : despCartoriasCalculadas);
   const atoITBIValidado = Math.min(valAtoITBI, valorTotalITBI);
   const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
   const despCartoriasEfetivas = valorTotalITBI;
@@ -925,9 +947,19 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // `atoPremiadoOverride` existe porque quem chama logo após um setIsAtoPremiadoEnabled
   // ainda enxerga o valor ANTIGO de isAtoPremiadoEnabled no closure (o state do React só
   // é atualizado no próximo render). Nesses casos o novo valor é passado explicitamente.
-  const recalcularSeriesParaAtoManual = (atoValor: number, atoPremiadoOverride?: boolean) => {
+  // `overrides` serve ao mesmo propósito para o Preço/ITBI — usado pelo toggle de
+  // Pagamento à Vista, que precisa recalcular tudo já com o preço descontado e o
+  // ITBI zerado antes que esses states sejam commitados.
+  const recalcularSeriesParaAtoManual = (
+    atoValor: number,
+    atoPremiadoOverride?: boolean,
+    overrides?: { precoTabela?: number; itbiRegistro?: number; atoITBI?: number }
+  ) => {
     if (!hasUnitSelected) return;
     const atoPremiadoAtivo = atoPremiadoOverride !== undefined ? atoPremiadoOverride : isAtoPremiadoEnabled;
+    const precoParam = overrides?.precoTabela !== undefined ? overrides.precoTabela : price;
+    const itbiRegistroParam = overrides?.itbiRegistro !== undefined ? overrides.itbiRegistro : despCartoriasEfetivas;
+    const atoITBIParam = overrides?.atoITBI !== undefined ? overrides.atoITBI : atoITBIValidado;
 
     const mesesObraPadrao = currentCond?.mesesObra ?? 33;
     const mesesObraParam = totalParcObra > 0 ? totalParcObra : mesesObraPadrao;
@@ -946,9 +978,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     const posObraGlobalParam = currentCond?.percMaxPosObra ?? currentCond?.riscoPosPct ?? 8.0;
 
     const engineResult = calculateMorarFlowEngine({
-      precoTabela: price,
+      precoTabela: precoParam,
       avaliacaoBanco: evaluation,
-      itbiRegistro: despCartoriasEfetivas,
+      itbiRegistro: itbiRegistroParam,
       renda: income,
       financiamento: maxFinanc,
       subsidio: subsidy,
@@ -960,7 +992,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       globalSeriesPct: globalPct,
       serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
-      atoITBI: atoITBIValidado,
+      atoITBI: atoITBIParam,
       isAtoPremiadoEnabled: atoPremiadoAtivo,
       atoManual: atoValor
     });
@@ -1038,6 +1070,64 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setValAtoManual(atoPreservado);
     setAtoInputText(formatCurrency(atoPreservado));
     recalcularSeriesParaAtoManual(atoPreservado, ativo);
+  };
+
+  // Botão "Pgtº à vista": aplica o % de Desconto à Vista da política sobre o
+  // Preço de Tabela (antes de qualquer outro cálculo), zera o ITBI — que passa
+  // a ser responsabilidade do cliente a partir do Habite-se — e traz o Sinal
+  // necessário inteiro para o Ato (Imóvel), quitando o Pró-Soluto.
+  //
+  // O Ato Premiado é desligado automaticamente enquanto o pagamento à vista
+  // está ativo, para não empilhar os dois descontos sem uma regra definida
+  // para isso; ele volta a ficar disponível normalmente ao desligar.
+  //
+  // O preço descontado, o ITBI zerado e o Ato Premiado desligado ainda não
+  // estão commitados nos states do React neste mesmo evento — por isso o
+  // cálculo é feito aqui com os valores corretos "na mão" e passado via
+  // `overrides` para `recalcularSeriesParaAtoManual`, em vez de depender de
+  // `price`/`despCartoriasEfetivas`/`isAtoPremiadoEnabled` (que só refletem o
+  // novo estado no próximo render).
+  const handleTogglePagamentoAVista = (ativo: boolean) => {
+    setIsPagamentoAVistaEnabled(ativo);
+
+    if (!ativo) {
+      // Volta ao fluxo parcelado normal: preço, ITBI e Ato Premiado (que fica
+      // desligado até o usuário religar) retornam ao normal no próximo render;
+      // o Ato volta a ser sugerido automaticamente.
+      setValAtoManual(null);
+      setAtoInputText('');
+      setIsManualObra(false);
+      setIsManualPos(false);
+      if (onShowToast) {
+        onShowToast('Pagamento à vista desativado. Preço de Tabela e ITBI voltam ao normal.');
+      }
+      return;
+    }
+
+    if (!hasUnitSelected || precoTabelaOriginal <= 0) return;
+
+    const descontoPct = currentCond?.descontoAVistaPct ?? 0;
+    const precoComDesconto = Math.max(0, Math.round(precoTabelaOriginal * (1 - descontoPct / 100) * 100) / 100);
+    const valorDesconto = Math.round((precoTabelaOriginal - precoComDesconto) * 100) / 100;
+    const sinalNecessarioAVista = Math.max(0, Math.round((precoComDesconto - (maxFinanc + subsidy + fgts)) * 100) / 100);
+
+    setIsAtoPremiadoEnabled(false);
+    setValAtoITBI(0);
+    setItbiAtoInputText('');
+    setValAtoManual(sinalNecessarioAVista);
+    setAtoInputText(formatCurrency(sinalNecessarioAVista));
+    recalcularSeriesParaAtoManual(sinalNecessarioAVista, false, {
+      precoTabela: precoComDesconto,
+      itbiRegistro: 0,
+      atoITBI: 0
+    });
+
+    if (onShowToast) {
+      const mensagemDesconto = descontoPct > 0
+        ? `Desconto à vista de ${formatCurrency(valorDesconto)} (${descontoPct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%) aplicado sobre o Preço de Tabela.`
+        : 'Nenhum % de Desconto à Vista configurado na política desta condição.';
+      onShowToast(`${mensagemDesconto} O ITBI foi zerado — é de responsabilidade do cliente a partir da obtenção do Habite-se pelo empreendimento.`);
+    }
   };
 
   // Inicialização inteligente e automática quando a unidade é selecionada ou o sinal líquido é atualizado
@@ -1811,7 +1901,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Preço de Tabela</span>
             <input
               type="text"
-              value={formatCurrency(price)}
+              value={formatCurrency(precoTabelaOriginal)}
               readOnly
               className="w-full bg-transparent font-bold text-slate-900 text-center focus:outline-none cursor-not-allowed text-xs whitespace-nowrap"
             />
@@ -1869,6 +1959,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">FGTS:</span>
                     <strong className="text-sky-600 font-semibold">{formatCurrency(fgtsEfetivo)}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                    <span className="text-slate-600">Desconto à Vista:</span>
+                    <strong className="text-amber-700 font-semibold">{formatCurrency(valorDescontoAVista)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 mt-1">
                     <span className="text-slate-600">Desconto Ato:</span>
@@ -2188,6 +2282,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             descontoAto={descontoAto}
             isAtoPremiadoActive={isAtoPremiadoEnabled}
             onToggleAtoPremiado={handleToggleAtoPremiado}
+            isPagamentoAVistaActive={isPagamentoAVistaEnabled}
+            onTogglePagamentoAVista={handleTogglePagamentoAVista}
             isAVistaActive={isAVistaActive}
             onToggleAVista={(ativo) => {
               if (ativo) {
