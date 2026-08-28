@@ -547,7 +547,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     // Ato para existir.
     posObraValorManual: pmIsAVistaActive ? 0 : pmPosObraValorManual,
     chavesValorManual: pmIsAVistaActive ? 0 : pmChavesValorManual,
-    semestraisValoresManuais: pmIsAVistaActive ? [] : pmSemestraisValoresManuais,
+    // Um array vazio NÃO zera as semestrais: o motor só reconhece um override
+    // quando `semestraisValoresManuais[idx]` está definido (`!== null/undefined`)
+    // — com `[]`, todo índice cai em `undefined` e volta a usar o valor
+    // sugerido automático. Precisa de um 0 explícito em cada posição.
+    semestraisValoresManuais: pmIsAVistaActive ? Array(pmSemestraisQtdEfetiva).fill(0) : pmSemestraisValoresManuais,
     mensalObraValorManual: pmIsAVistaActive ? 0 : pmMensalObraValorManual,
     parcelaMinimaMensalObra: currentCond?.pmParcelaMinimaMensalObra ?? 200,
     parcelaMinimaSemestral: currentCond?.pmParcelaMinimaSemestral ?? 200,
@@ -1813,6 +1817,16 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               // é calculado automaticamente para o ponto exato que zera o saldo a
               // parcelar, ou desfeito para voltar ao fluxo parcelado normal.
               setValAtoManual(ativo ? (isParcelamentoMorar ? pmAtoAVistaTarget : atoAVistaTarget) : null);
+              if (!ativo && isParcelamentoMorar) {
+                // Ao voltar para o fluxo parcelado, qualquer valor manual digitado
+                // antes de ativar o "À Vista" (Mensal de Obra, Semestrais, Chaves,
+                // Pós-Obra) é descartado — os blocos voltam a usar o valor sugerido
+                // automático, em vez de reaparecer com o número antigo.
+                setPmMensalObraValorManual(null);
+                setPmSemestralValorManual({});
+                setPmChavesValorManual(null);
+                setPmPosObraValorManual(null);
+              }
             }}
           >
             {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) — MESMO LAYOUT EM TODAS AS CONDIÇÕES */}
