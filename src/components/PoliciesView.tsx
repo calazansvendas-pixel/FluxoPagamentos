@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Calendar,
   CalendarClock,
-  AlertTriangle
+  AlertTriangle,
+  Percent
 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
@@ -105,6 +106,11 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const [mesesTabela2Str, setMesesTabela2Str] = useState<string>('72');
   const [taxaJuros2Str, setTaxaJuros2Str] = useState<string>('1,00');
   const [policyText, setPolicyText] = useState<string>('');
+  // % de Desconto à Vista: comum a todas as condições comerciais de todos os
+  // produtos (não é exclusivo de Sinal c/ Morar ou Parcelamento Morar) —
+  // cadastro de base para uma futura regra de desconto, ainda sem uso no
+  // cálculo do simulador.
+  const [descontoAVistaStr, setDescontoAVistaStr] = useState<string>('0,0');
 
   // Estados específicos para a condição "Sinal c/ Morar"
   const [mesesObraStr, setMesesObraStr] = useState<string>('33');
@@ -325,6 +331,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     const parsedSinal = source.sinalMinimo !== undefined ? parseCurrency(source.sinalMinimo) : 2000;
     const formattedSinal = formatCurrency(parsedSinal);
+    const descontoAVista = source.descontoAVistaPct !== undefined ? source.descontoAVistaPct : 0;
 
     const rows = prodWithConds?.tableInfo?.rows || [];
     const prodsTorres = Array.from(new Set(rows.map(r => String(r[1] || '').trim()).filter(t => t !== '')));
@@ -370,6 +377,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setPmParcelaMinMensalObra(formatCurrency(pmMinMensalObra));
     setPmParcelaMinSemestral(formatCurrency(pmMinSemestral));
     setPmParcelaMinPosObra(formatCurrency(pmMinPosObra));
+    setDescontoAVistaStr(formatDecimalBR(descontoAVista, 1, 2));
 
     setPolicyText(source.policy || '');
   };
@@ -465,6 +473,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       pmParcelaMinimaMensalObra: pmParcelaMinimaMensalObraNum,
       pmParcelaMinimaSemestral: pmParcelaMinimaSemestralNum,
       pmParcelaMinimaPosObra: pmParcelaMinimaPosObraNum,
+      descontoAVistaPct: parseDecimal(descontoAVistaStr, 0),
       policy: policyText
     };
   };
@@ -681,6 +690,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedPmMinMensalObra = Math.max(0, parseCurrency(pmParcelaMinMensalObra));
     const parsedPmMinSemestral = Math.max(0, parseCurrency(pmParcelaMinSemestral));
     const parsedPmMinPosObra = Math.max(0, parseCurrency(pmParcelaMinPosObra));
+    const parsedDescontoAVista = parseDecimal(descontoAVistaStr, 0);
 
     // Atualiza a formatação visual dos inputs ao salvar
     setNumParcelasStr(String(isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas));
@@ -716,6 +726,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setPmParcelaMinMensalObra(formatCurrency(parsedPmMinMensalObra));
     setPmParcelaMinSemestral(formatCurrency(parsedPmMinSemestral));
     setPmParcelaMinPosObra(formatCurrency(parsedPmMinPosObra));
+    setDescontoAVistaStr(formatDecimalBR(parsedDescontoAVista, 1, 2));
 
     const savedParams: Partial<CommercialCondition> = {
       numParcelas: isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas,
@@ -752,6 +763,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       pmParcelaMinimaMensalObra: parsedPmMinMensalObra,
       pmParcelaMinimaSemestral: parsedPmMinSemestral,
       pmParcelaMinimaPosObra: parsedPmMinPosObra,
+      descontoAVistaPct: parsedDescontoAVista,
       policy: policyText
     };
     const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, savedParams, editingFase);
@@ -1234,6 +1246,40 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 <span>Você está editando os parâmetros da <strong>2ª Fase</strong>. Campos não alterados aqui herdam automaticamente o valor da 1ª Fase.</span>
               </div>
             )}
+
+            {/* CAMPO COMUM A TODAS AS CONDIÇÕES COMERCIAIS: DESCONTO À VISTA */}
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+                <div className="lg:col-span-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1 rounded-md bg-amber-50 text-amber-700">
+                      <Percent className="w-3.5 h-3.5" />
+                    </div>
+                    <label className="block font-bold text-slate-800 text-xs truncate" title="Percentual base para uma futura regra de desconto por pagamento à vista">
+                      Desconto à Vista (%)
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
+                    Cadastro do percentual que servirá de base para um futuro desconto à vista. Ainda não é aplicado em nenhum cálculo do simulador.
+                  </p>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={descontoAVistaStr}
+                      onChange={(e) => setDescontoAVistaStr(e.target.value)}
+                      onBlur={() => {
+                        const val = parseDecimal(descontoAVistaStr, 0);
+                        setDescontoAVistaStr(formatDecimalBR(val, 1, 2));
+                      }}
+                      placeholder="0,0"
+                      className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-amber-700 text-center focus:outline-none focus:border-amber-600 text-xs"
+                    />
+                    <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {isMorarCondition ? (
               /* ========================================================================= */
