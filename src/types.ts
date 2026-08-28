@@ -10,6 +10,10 @@ export interface CommercialCondition {
   mesesTabela2: number;
   taxaJuros2: number;
   policy: string;
+  // % de Desconto à Vista: ainda não é aplicado em nenhum cálculo do simulador,
+  // é apenas cadastrado aqui como base para uma futura regra de desconto por
+  // pagamento à vista (padrão 0%, ou seja, sem desconto).
+  descontoAVistaPct?: number;
 
   // Campos específicos para a condição "Sinal c/ Morar"
   mesesObra?: number;
