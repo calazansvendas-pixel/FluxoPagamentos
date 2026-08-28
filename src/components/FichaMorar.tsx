@@ -571,6 +571,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   let fgts = rawFGTS;
   let subsidy = rawSubsidy;
 
+  // Pagamento à vista = 100% recurso próprio do cliente: nenhum financiamento
+  // bancário, subsídio ou FGTS é considerado (mesmo que tenha sido digitado no
+  // Simulador) — o Ato (Imóvel) absorve o preço com desconto inteiro, e Max
+  // Financ./Subsídio/FGTS/Total Negoc. ficam todos em R$ 0,00.
+  if (isPagamentoAVistaEnabled) {
+    maxFinanc = 0;
+    fgts = 0;
+    subsidy = 0;
+  }
+
   if (hasUnitSelected && somaRecursos > tetoMaximo) {
     let excesso = somaRecursos - tetoMaximo;
     const abateFinanc = Math.min(maxFinanc, excesso);
@@ -953,13 +963,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const recalcularSeriesParaAtoManual = (
     atoValor: number,
     atoPremiadoOverride?: boolean,
-    overrides?: { precoTabela?: number; itbiRegistro?: number; atoITBI?: number }
+    overrides?: { precoTabela?: number; itbiRegistro?: number; atoITBI?: number; financiamento?: number; subsidio?: number; fgts?: number }
   ) => {
     if (!hasUnitSelected) return;
     const atoPremiadoAtivo = atoPremiadoOverride !== undefined ? atoPremiadoOverride : isAtoPremiadoEnabled;
     const precoParam = overrides?.precoTabela !== undefined ? overrides.precoTabela : price;
     const itbiRegistroParam = overrides?.itbiRegistro !== undefined ? overrides.itbiRegistro : despCartoriasEfetivas;
     const atoITBIParam = overrides?.atoITBI !== undefined ? overrides.atoITBI : atoITBIValidado;
+    const financiamentoParam = overrides?.financiamento !== undefined ? overrides.financiamento : maxFinanc;
+    const subsidioParam = overrides?.subsidio !== undefined ? overrides.subsidio : subsidy;
+    const fgtsParam = overrides?.fgts !== undefined ? overrides.fgts : fgts;
 
     const mesesObraPadrao = currentCond?.mesesObra ?? 33;
     const mesesObraParam = totalParcObra > 0 ? totalParcObra : mesesObraPadrao;
@@ -982,9 +995,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       avaliacaoBanco: evaluation,
       itbiRegistro: itbiRegistroParam,
       renda: income,
-      financiamento: maxFinanc,
-      subsidio: subsidy,
-      fgts: fgts,
+      financiamento: financiamentoParam,
+      subsidio: subsidioParam,
+      fgts: fgtsParam,
       percentualRiscoGeral: proSolutoGlobalParam,
       percentualRiscoPos: posObraGlobalParam,
       mesesObra: mesesObraParam,
@@ -1072,34 +1085,39 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     recalcularSeriesParaAtoManual(atoPreservado, ativo);
   };
 
-  // Botão "Pgtº à vista": aplica o % de Desconto à Vista da política sobre o
-  // Preço de Tabela (antes de qualquer outro cálculo), zera o ITBI — que passa
-  // a ser responsabilidade do cliente a partir do Habite-se — e traz o Sinal
-  // necessário inteiro para o Ato (Imóvel), quitando o Pró-Soluto.
+  // Botão "Pgtº à vista": 100% recurso próprio do cliente. Aplica o % de
+  // Desconto à Vista da política sobre o Preço de Tabela (antes de qualquer
+  // outro cálculo), zera o ITBI — que passa a ser responsabilidade do cliente
+  // a partir do Habite-se — e traz o preço com desconto INTEIRO para o Ato
+  // (Imóvel), sem descontar Financiamento/Subsídio/FGTS: nenhum recurso
+  // externo é usado, então Max Financ., Subsídio, FGTS e Total Negoc. ficam
+  // todos em R$ 0,00 e o Pró-Soluto é quitado.
   //
   // O Ato Premiado é desligado automaticamente enquanto o pagamento à vista
   // está ativo, para não empilhar os dois descontos sem uma regra definida
   // para isso; ele volta a ficar disponível normalmente ao desligar.
   //
-  // O preço descontado, o ITBI zerado e o Ato Premiado desligado ainda não
-  // estão commitados nos states do React neste mesmo evento — por isso o
-  // cálculo é feito aqui com os valores corretos "na mão" e passado via
-  // `overrides` para `recalcularSeriesParaAtoManual`, em vez de depender de
-  // `price`/`despCartoriasEfetivas`/`isAtoPremiadoEnabled` (que só refletem o
-  // novo estado no próximo render).
+  // O preço descontado, o ITBI zerado, o Ato Premiado desligado e o
+  // financiamento/subsídio/FGTS zerados ainda não estão commitados nos states
+  // do React neste mesmo evento — por isso o cálculo é feito aqui com os
+  // valores corretos "na mão" e passado via `overrides` para
+  // `recalcularSeriesParaAtoManual`, em vez de depender de
+  // `price`/`despCartoriasEfetivas`/`isAtoPremiadoEnabled`/`maxFinanc`/
+  // `subsidy`/`fgts` (que só refletem o novo estado no próximo render).
   const handleTogglePagamentoAVista = (ativo: boolean) => {
     setIsPagamentoAVistaEnabled(ativo);
 
     if (!ativo) {
-      // Volta ao fluxo parcelado normal: preço, ITBI e Ato Premiado (que fica
-      // desligado até o usuário religar) retornam ao normal no próximo render;
-      // o Ato volta a ser sugerido automaticamente.
+      // Volta ao fluxo parcelado normal: preço, ITBI, financiamento/subsídio/
+      // FGTS e Ato Premiado (que fica desligado até o usuário religar)
+      // retornam ao normal no próximo render; o Ato volta a ser sugerido
+      // automaticamente.
       setValAtoManual(null);
       setAtoInputText('');
       setIsManualObra(false);
       setIsManualPos(false);
       if (onShowToast) {
-        onShowToast('Pagamento à vista desativado. Preço de Tabela e ITBI voltam ao normal.');
+        onShowToast('Pagamento à vista desativado. Preço de Tabela, ITBI, Financiamento, Subsídio e FGTS voltam ao normal.');
       }
       return;
     }
@@ -1109,24 +1127,26 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     const descontoPct = currentCond?.descontoAVistaPct ?? 0;
     const precoComDesconto = Math.max(0, Math.round(precoTabelaOriginal * (1 - descontoPct / 100) * 100) / 100);
     const valorDesconto = Math.round((precoTabelaOriginal - precoComDesconto) * 100) / 100;
-    const sinalNecessarioAVista = Math.max(0, Math.round((precoComDesconto - (maxFinanc + subsidy + fgts)) * 100) / 100);
 
     setIsAtoPremiadoEnabled(false);
     setValAtoITBI(0);
     setItbiAtoInputText('');
-    setValAtoManual(sinalNecessarioAVista);
-    setAtoInputText(formatCurrency(sinalNecessarioAVista));
-    recalcularSeriesParaAtoManual(sinalNecessarioAVista, false, {
+    setValAtoManual(precoComDesconto);
+    setAtoInputText(formatCurrency(precoComDesconto));
+    recalcularSeriesParaAtoManual(precoComDesconto, false, {
       precoTabela: precoComDesconto,
       itbiRegistro: 0,
-      atoITBI: 0
+      atoITBI: 0,
+      financiamento: 0,
+      subsidio: 0,
+      fgts: 0
     });
 
     if (onShowToast) {
       const mensagemDesconto = descontoPct > 0
         ? `Desconto à vista de ${formatCurrency(valorDesconto)} (${descontoPct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%) aplicado sobre o Preço de Tabela.`
         : 'Nenhum % de Desconto à Vista configurado na política desta condição.';
-      onShowToast(`${mensagemDesconto} O ITBI foi zerado — é de responsabilidade do cliente a partir da obtenção do Habite-se pelo empreendimento.`);
+      onShowToast(`${mensagemDesconto} O ITBI foi zerado — é de responsabilidade do cliente a partir da obtenção do Habite-se pelo empreendimento. Financiamento, Subsídio e FGTS não são considerados: o Ato (Imóvel) absorve o valor integral.`);
     }
   };
 
