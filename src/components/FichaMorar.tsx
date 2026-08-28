@@ -462,6 +462,18 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     onShowToast('Ficha Morar limpa com sucesso. Selecione a Torre e Unidade para calcular.');
   };
 
+  // Limpa o fluxo e deixa a sugestão inicial por conta do efeito de
+  // "Inicialização inteligente e automática" (mais abaixo) — que só roda
+  // DEPOIS que os states abaixo forem commitados pelo React. Chegou a existir
+  // aqui uma chamada manual e síncrona a `calculateMorarFlowEngine`, mas ela
+  // rodava no MESMO evento em que `isPagamentoAVistaEnabled`/
+  // `isAtoPremiadoEnabled` eram desligados/religados — como o React só
+  // atualiza esses states no próximo render, a chamada ainda enxergava
+  // `price`/`maxFinanc`/`subsidy`/`fgts` com o desconto à vista da rodada
+  // anterior, produzindo um Ato que não correspondia a nenhum cenário real
+  // (só se corrigia num segundo clique em "Limpar", quando os states já
+  // tinham se atualizado). Deixar o efeito automático fazer o recálculo evita
+  // esse descompasso, pois ele já roda com os valores frescos.
   const limparFluxoPagamento = () => {
     setValAtoManual(null);
     setAtoInputText('');
@@ -476,49 +488,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiTotalManual(null);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
-    
-    // Restaura as faixas padrão da curva Morar
-    if (hasUnitSelected && price > 0) {
-      const mesesObraPadrao = currentCond?.mesesObra ?? 33;
-      const mesesPosPadrao = currentCond?.mesesPos ?? 27;
-      const globalPct: [number, number, number, number, number, number] = [
-        currentCond?.globalSerie1Pct ?? 30.0,
-        currentCond?.globalSerie2Pct ?? 25.0,
-        currentCond?.globalSerie3Pct ?? 20.0,
-        currentCond?.globalSerie4Pct ?? 15.0,
-        currentCond?.globalSerie5Pct ?? 10.0,
-        currentCond?.globalSerie6Pct ?? 5.0
-      ];
-      const engineResult = calculateMorarFlowEngine({
-        precoTabela: price,
-        avaliacaoBanco: evaluation,
-        itbiRegistro: despCartoriasCalculadas,
-        renda: income,
-        financiamento: maxFinanc,
-        subsidio: subsidy,
-        fgts: fgts,
-        percentualRiscoGeral: currentCond?.percMaxProSolutoGlobal ?? currentCond?.riscoImovelPct ?? 17.0,
-        percentualRiscoPos: currentCond?.percMaxPosObra ?? currentCond?.riscoPosPct ?? 8.0,
-        mesesObra: mesesObraPadrao,
-        mesesPos: mesesPosPadrao,
-        globalSeriesPct: globalPct,
-        serieMesesCapacidades: serieMesesCapacidades,
-        sinalMinimo: sinalMinimoVal,
-        atoITBI: 0,
-        isAtoPremiadoEnabled: true,
-        isAtoZerado: false
-      });
-      const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
-      const mPosArr = engineResult.posSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
-      setFaixasObra(mObraArr);
-      setFaixasPos(mPosArr);
-      setValAtoManual(engineResult.atoResidual);
-      setAtoInputText(formatCurrency(engineResult.atoResidual));
-      setItbiObraValorManual(engineResult.parcelaMensalITBI);
-      setItbiPosValorManual(engineResult.parcelaMensalITBI);
-      setItbiObraQtd(mObraArr.reduce((a, b) => a + b.qtd, 0));
-      setItbiPosQtd(mPosArr.reduce((a, b) => a + b.qtd, 0));
-    }
 
     if (onShowToast) {
       onShowToast('Fluxo de pagamento redefinido: Ato (Imóvel), ITBI no Ato e Ato Premiado restaurados.');
