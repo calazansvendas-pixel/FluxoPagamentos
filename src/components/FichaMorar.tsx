@@ -1074,6 +1074,22 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       return;
     }
 
+    // O Ato está na posição "À Vista" (o usuário quitou o Pró-Soluto trazendo
+    // o Sinal necessário inteiro para o Ato, via o alternador "Parcelado/À
+    // Vista" do próprio card): ligar/desligar o Ato Premiado muda o desconto
+    // comercial embutido nesse Sinal necessário, e só limitar a um teto (como
+    // no ramo abaixo) deixa faltar exatamente o valor do Ato Premiado,
+    // reabrindo parcelas. Em vez disso, o Ato é recalculado para o novo ponto
+    // de quitação à vista — com o novo estado do prêmio —, mantendo o
+    // Pró-Soluto zerado nos dois sentidos (ligando ou desligando).
+    if (isAVistaActive) {
+      const novoAtoVistaTarget = resolverTetoAtoComDesconto(sinalImovelInicial, ativo);
+      setValAtoManual(novoAtoVistaTarget);
+      setAtoInputText(formatCurrency(novoAtoVistaTarget));
+      recalcularSeriesParaAtoManual(novoAtoVistaTarget, ativo);
+      return;
+    }
+
     // Sinal lançado pelo usuário: é preservado, limitado ao novo teto (nunca
     // pagar mais do que o devido) e elevado ao piso da política de crédito
     // dentro de `recalcularSeriesParaAtoManual` quando o risco exigir.
