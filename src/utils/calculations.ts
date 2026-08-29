@@ -387,6 +387,21 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos, params.serieMesesCapacidades);
   const mesesTotaisGeral = mObra.reduce((a, b) => a + b, 0) + mPos.reduce((a, b) => a + b, 0);
 
+  // Capacidade máxima de Pró-Soluto que a RENDA do cliente sustenta, independente
+  // do preço do imóvel: cada balde de série trava sua parcela mensal em pctAno%
+  // da renda (mesmo teto usado na distribuição final das séries, mais abaixo) —
+  // a soma desses tetos, por quantos meses cada balde dura, é o máximo que
+  // aquela fase consegue absorver, mesmo que o risco por PREÇO permitisse mais.
+  // Sem levar isso em conta na hora de decidir o Ato, um Pró-Soluto "sugerido"
+  // que a renda não sustenta fica só parcialmente distribuído — o resto some
+  // (não vira parcela, que fica travada no teto de renda, nem vira Ato).
+  const capacidadeRendaPorBalde = (idx: number): number => {
+    const pctAno = (params.globalSeriesPct && params.globalSeriesPct[idx]) || [30, 25, 20, 15, 10, 5][idx] || 0;
+    return renda > 0 ? Math.round((renda * (pctAno / 100)) * 100) / 100 : Infinity;
+  };
+  const capacidadeRendaObra = mObra.reduce((soma, qtd, idx) => soma + capacidadeRendaPorBalde(idx) * (qtd || 0), 0);
+  const capacidadeRendaPos = mPos.reduce((soma, qtd, idx) => soma + capacidadeRendaPorBalde(idx) * (qtd || 0), 0);
+
   // ITBI Mensal = ITBI Restante a parcelar / (meses Obra + meses Pós)
   const itbiRestante = Math.max(0, itbiRegistro - (params.atoITBI || 0));
   const parcelaMensalITBIExato = (mesesTotaisGeral > 0 && itbiRestante > 0)
@@ -417,7 +432,11 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   // qualquer Ato maior mantém o risco dentro da política; qualquer Ato menor
   // ultrapassa o limite. Serve de PISO para um Ato digitado manualmente — nunca
   // de teto, o usuário pode sempre pagar mais do que o mínimo exigido.
-  const calcularAtoMinimoDaPolitica = (): { atoResidual: number; descontoAto: number; baseCalculoComITBI: number; totalProSolutoMaximo: number } => {
+  //
+  // Esta função resolve o Ato olhando só para o PREÇO do imóvel (risco máximo %
+  // sobre a base). `calcularAtoMinimoDaPolitica`, logo abaixo, embrulha este
+  // resultado aplicando também o teto por RENDA.
+  const calcularAtoMinimoPorPreco = (): { atoResidual: number; descontoAto: number; baseCalculoComITBI: number; totalProSolutoMaximo: number } => {
     if (!isAtoPremiadoEnabled) {
       const descontoAtoCalc = 0;
       const baseCalc = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
@@ -482,6 +501,45 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
       baseCalculoComITBI: baseCalc,
       totalProSolutoMaximo: proSolutoMax,
       atoResidual: Math.max(sinalMinimoFloor, Math.round(atoCalc * 100) / 100)
+    };
+  };
+
+  // Embrulha o resultado por preço aplicando também o teto por RENDA: se a soma
+  // dos tetos de renda de cada balde (capacidadeRendaObra/Pos, calculados no
+  // início da função) é menor que o Pró-Soluto que o preço permitiria, a renda
+  // é o fator mais restritivo — a diferença precisa ir para o Ato, senão fica
+  // sem dono (a distribuição das séries, mais abaixo, trava cada balde no seu
+  // teto de renda de qualquer forma; sem este ajuste o excedente simplesmente
+  // desaparecia do fluxo, sem virar nem parcela nem Ato).
+  const calcularAtoMinimoDaPolitica = (): { atoResidual: number; descontoAto: number; baseCalculoComITBI: number; totalProSolutoMaximo: number } => {
+    const porPreco = calcularAtoMinimoPorPreco();
+    const maxRiscoPosPorPreco = Math.round(porPreco.baseCalculoComITBI * pctMaxPos * 100) / 100;
+    const capacidadeRendaTotal = Math.min(maxRiscoPosPorPreco, capacidadeRendaPos) + capacidadeRendaObra;
+
+    if (porPreco.totalProSolutoMaximo <= capacidadeRendaTotal + 0.01) {
+      return porPreco;
+    }
+
+    // A renda é o fator mais restritivo: eleva o Ato pela diferença. O desconto
+    // do Ato Premiado pode mudar de faixa com o novo Ato (ex.: cruzar os
+    // R$ 50.000,00), então converge em algumas voltas — mesmo padrão de
+    // "ajuste fino" já usado na Hipótese 2 acima.
+    const base = sinalSemITBI + itbiRegistro;
+    const sinalMinimoFloorRenda = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
+    let atoAjustado = porPreco.atoResidual + (porPreco.totalProSolutoMaximo - capacidadeRendaTotal);
+    let descontoAjustado = porPreco.descontoAto;
+    for (let i = 0; i < 8; i++) {
+      descontoAjustado = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoAjustado) : 0;
+      atoAjustado = Math.round((base - capacidadeRendaTotal - descontoAjustado) * 100) / 100;
+    }
+    atoAjustado = Math.max(sinalMinimoFloorRenda, atoAjustado);
+    const baseAjustada = Math.max(0, Math.round(((precoTabela - descontoAjustado) + itbiRegistro) * 100) / 100);
+
+    return {
+      atoResidual: atoAjustado,
+      descontoAto: descontoAjustado,
+      baseCalculoComITBI: baseAjustada,
+      totalProSolutoMaximo: capacidadeRendaTotal
     };
   };
 
