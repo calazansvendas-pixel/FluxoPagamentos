@@ -310,12 +310,20 @@ export const authService = {
     return { success: !error, error: error?.message };
   },
 
-  async editarCargoEPermissoes(id: string, ajustes: { cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; verPropostasEquipe: boolean }) {
+  async editarCargoEPermissoes(id: string, ajustes: {
+    cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; verPropostasEquipe: boolean;
+    nomeCompleto: string; telefone: string; cpf: string; imobiliaria: string; creci?: string;
+  }) {
     const { error } = await supabase.from('perfis').update({
       cargo: ajustes.cargo,
       superior_id: ajustes.superiorId,
       telas_liberadas: ajustes.telasLiberadas,
-      ver_propostas_equipe: ajustes.verPropostasEquipe
+      ver_propostas_equipe: ajustes.verPropostasEquipe,
+      nome_completo: ajustes.nomeCompleto,
+      telefone: ajustes.telefone,
+      cpf: ajustes.cpf,
+      imobiliaria: ajustes.imobiliaria,
+      creci: ajustes.creci || null
     }).eq('id', id);
     return { success: !error, error: error?.message };
   },

@@ -42,12 +42,20 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
   const [processandoId, setProcessandoId] = useState<string | null>(null);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<string | null>(null);
 
-  // Painel de edição de cargo/hierarquia/permissões de um usuário ativo.
+  // Painel de edição de cargo/hierarquia/permissões/dados cadastrais de um
+  // usuário ativo. E-mail não entra aqui — é o login de verdade (Supabase
+  // Auth), separado do cadastro, e não dá pra trocar com segurança sem uma
+  // peça extra de servidor que ainda não existe no projeto.
   const [editando, setEditando] = useState<PerfilUsuario | null>(null);
   const [edCargo, setEdCargo] = useState<Cargo>('Corretor');
   const [edSuperiorId, setEdSuperiorId] = useState<string | null>(null);
   const [edTelas, setEdTelas] = useState<Set<string>>(new Set());
   const [edVerEquipe, setEdVerEquipe] = useState(false);
+  const [edNomeCompleto, setEdNomeCompleto] = useState('');
+  const [edTelefone, setEdTelefone] = useState('');
+  const [edCpf, setEdCpf] = useState('');
+  const [edImobiliaria, setEdImobiliaria] = useState('');
+  const [edCreci, setEdCreci] = useState('');
 
   const carregar = async () => {
     setCarregando(true);
@@ -110,16 +118,30 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
     setEdSuperiorId(u.superiorId);
     setEdTelas(new Set(u.telasLiberadas));
     setEdVerEquipe(u.verPropostasEquipe);
+    setEdNomeCompleto(u.nomeCompleto);
+    setEdTelefone(u.telefone);
+    setEdCpf(u.cpf);
+    setEdImobiliaria(u.imobiliaria);
+    setEdCreci(u.creci || '');
   };
 
   const salvarEdicao = async () => {
     if (!editando) return;
+    if (!edNomeCompleto.trim() || !edTelefone.trim() || !edCpf.trim() || !edImobiliaria.trim()) {
+      onShowToast('Nome completo, telefone, CPF e imobiliária são obrigatórios.');
+      return;
+    }
     setProcessandoId(editando.id);
     const res = await authService.editarCargoEPermissoes(editando.id, {
       cargo: edCargo,
       superiorId: edSuperiorId,
       telasLiberadas: Array.from(edTelas),
-      verPropostasEquipe: edVerEquipe
+      verPropostasEquipe: edVerEquipe,
+      nomeCompleto: edNomeCompleto.trim(),
+      telefone: edTelefone.trim(),
+      cpf: edCpf.trim(),
+      imobiliaria: edImobiliaria.trim(),
+      creci: edCreci.trim() || undefined
     });
     setProcessandoId(null);
     if (res.success) {
@@ -368,7 +390,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
           </div>
         )}
         <p className="px-5 py-3 text-[11px] text-slate-400 border-t border-slate-100">
-          "Editar" muda o cargo, o superior hierárquico e as telas liberadas de qualquer pessoa — Administrador, Diretor, Gerente, Analista, Assistente ou Corretor — a qualquer momento. "Pausar" bloqueia o acesso sem apagar os dados; "Excluir" remove a conta em definitivo. Por segurança, quem tem cargo Administrador não pode ser pausado nem excluído por aqui — mude o cargo primeiro em "Editar", se for realmente necessário.
+          "Editar" muda o cadastro completo (nome, telefone, CPF, imobiliária, CRECI), o cargo, o superior hierárquico e as telas liberadas de qualquer pessoa — Administrador, Diretor, Gerente, Analista, Assistente ou Corretor — a qualquer momento. O e-mail de login não é editável por aqui. "Pausar" bloqueia o acesso sem apagar os dados; "Excluir" remove a conta em definitivo. Por segurança, quem tem cargo Administrador não pode ser pausado nem excluído por aqui — mude o cargo primeiro em "Editar", se for realmente necessário.
         </p>
       </div>
 
@@ -376,9 +398,38 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
       {editando && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" onClick={(e) => { if (e.target === e.currentTarget) setEditando(null); }}>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">Editar cargo e permissões de {editando.nomeCompleto}</h3>
+            <h3 className="text-sm font-bold text-slate-900">Editar cadastro de {editando.nomeCompleto}</h3>
+            <p className="text-[11px] text-slate-400 -mt-3">
+              E-mail: <span className="text-slate-600">{editando.email}</span> (login não editável por aqui)
+            </p>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">Dados cadastrais</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Nome completo</label>
+                  <input type="text" value={edNomeCompleto} onChange={e => setEdNomeCompleto(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Telefone</label>
+                  <input type="text" value={edTelefone} onChange={e => setEdTelefone(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">CPF</label>
+                  <input type="text" value={edCpf} onChange={e => setEdCpf(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Imobiliária</label>
+                  <input type="text" value={edImobiliaria} onChange={e => setEdImobiliaria(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">CRECI <span className="font-normal text-slate-400">(opcional)</span></label>
+                  <input type="text" value={edCreci} onChange={e => setEdCreci(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 mb-1">Cargo</label>
                 <select value={edCargo} onChange={e => setEdCargo(e.target.value as Cargo)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white">
