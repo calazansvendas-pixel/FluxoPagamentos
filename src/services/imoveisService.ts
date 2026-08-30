@@ -440,19 +440,41 @@ export const imoveisService = {
         return { success: false, error: error.message, data: [] as any[] };
       }
 
-      // Busca o nome de quem criou cada simulação. `criado_por` referencia
-      // auth.users (não perfis diretamente), então não dá pra pedir isso junto
-      // num só embed do PostgREST — faz-se uma segunda consulta com os ids
-      // únicos. Quem está vendo (Administrador, ou quem tem "ver propostas da
-      // equipe") só enxerga o nome de quem já tem permissão de ler o perfil;
-      // se não tiver, o campo fica em branco (não quebra a tela).
-      const idsCriadores = Array.from(new Set((data || []).map((s: any) => s.criado_por).filter(Boolean)));
+      // Filtra por hierarquia aqui no app (a mesma regra que a Parte 2 do SQL
+      // reforça direto no banco quando for ligada, no dia do lançamento —
+      // até lá, essa é a única camada que impede um Corretor de ver a
+      // simulação de outro). Administrador vê tudo; cada um vê as próprias;
+      // quem tem "ver propostas da equipe" ligado também vê as de quem está
+      // de fato abaixo dele na hierarquia (via a função subordinados_de).
+      let visiveis = data || [];
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id;
+      if (uid) {
+        const { data: meuPerfil } = await supabase.from('perfis').select('id, cargo, ver_propostas_equipe').eq('id', uid).maybeSingle();
+        if (!meuPerfil) {
+          // Não deu pra confirmar quem é: por segurança, só mostra as próprias.
+          visiveis = visiveis.filter((s: any) => s.criado_por === uid);
+        } else if (meuPerfil.cargo !== 'Administrador') {
+          const idsPermitidos = new Set<string>([uid]);
+          if (meuPerfil.ver_propostas_equipe) {
+            const { data: subordinados } = await supabase.rpc('subordinados_de', { usuario_id: uid });
+            (subordinados || []).forEach((s: any) => idsPermitidos.add(s.id));
+          }
+          visiveis = visiveis.filter((s: any) => s.criado_por && idsPermitidos.has(s.criado_por));
+        }
+      }
+
+      // Busca o nome de quem criou cada simulação visível. `criado_por`
+      // referencia auth.users (não perfis diretamente), então não dá pra
+      // pedir isso junto num só embed do PostgREST — faz-se uma segunda
+      // consulta com os ids únicos.
+      const idsCriadores = Array.from(new Set(visiveis.map((s: any) => s.criado_por).filter(Boolean)));
       let nomesPorId: Record<string, string> = {};
       if (idsCriadores.length > 0) {
         const { data: perfis } = await supabase.from('perfis').select('id, nome_completo').in('id', idsCriadores);
         nomesPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, p.nome_completo]));
       }
-      const comCriador = (data || []).map((s: any) => ({
+      const comCriador = visiveis.map((s: any) => ({
         ...s,
         criado_por_nome: s.criado_por ? (nomesPorId[s.criado_por] || null) : null
       }));
