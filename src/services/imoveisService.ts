@@ -415,7 +415,25 @@ export const imoveisService = {
         console.error('Erro ao listar simulações do Supabase:', error);
         return { success: false, error: error.message, data: [] as any[] };
       }
-      const ordenadas = (data || []).slice().sort((a: any, b: any) => {
+
+      // Busca o nome de quem criou cada simulação. `criado_por` referencia
+      // auth.users (não perfis diretamente), então não dá pra pedir isso junto
+      // num só embed do PostgREST — faz-se uma segunda consulta com os ids
+      // únicos. Quem está vendo (Administrador, ou quem tem "ver propostas da
+      // equipe") só enxerga o nome de quem já tem permissão de ler o perfil;
+      // se não tiver, o campo fica em branco (não quebra a tela).
+      const idsCriadores = Array.from(new Set((data || []).map((s: any) => s.criado_por).filter(Boolean)));
+      let nomesPorId: Record<string, string> = {};
+      if (idsCriadores.length > 0) {
+        const { data: perfis } = await supabase.from('perfis').select('id, nome_completo').in('id', idsCriadores);
+        nomesPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, p.nome_completo]));
+      }
+      const comCriador = (data || []).map((s: any) => ({
+        ...s,
+        criado_por_nome: s.criado_por ? (nomesPorId[s.criado_por] || null) : null
+      }));
+
+      const ordenadas = comCriador.slice().sort((a: any, b: any) => {
         const dataA = a?.dados?.salvo_em || '';
         const dataB = b?.dados?.salvo_em || '';
         return dataB.localeCompare(dataA);
