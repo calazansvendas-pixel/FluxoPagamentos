@@ -1,13 +1,15 @@
 import React, { useState, Suspense, lazy } from 'react';
-import { ActiveTab, CommercialCondition, Product, SelectedUnit, SimulationData, TableInfo } from './types';
+import { ActiveTab, CommercialCondition, PerfilUsuario, Product, SelectedUnit, SimulationData, TableInfo } from './types';
 import type { SavedSimulationRecord } from './components/SavedSimulationsView';
 import { INITIAL_PRODUCTS } from './data/initialProducts';
 import { ensureProductConditions, getConditionKind, ConditionKind } from './utils/calculations';
+import { TELAS_APP } from './config/telasApp';
 
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { Toast } from './components/Toast';
 import { SimulatorView } from './components/SimulatorView';
+import { AdminPanelView } from './components/AdminPanelView';
 import { imoveisService } from './services/imoveisService';
 
 // Telas carregadas sob demanda: evitam colocar recharts, jsPDF, html2canvas-pro
@@ -36,8 +38,22 @@ const AMORAS_LEGACY_ID = 'amoras';
 const AMORAS_ID = '22222222-2222-2222-2222-222222222222';
 const AMORAS_MIGRATION_FLAG = 'simulador_amoras_migrado_v1';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('simulator');
+interface AppProps {
+  perfil: PerfilUsuario;
+  onSair: () => void;
+}
+
+export default function App({ perfil, onSair }: AppProps) {
+  const ehAdministrador = perfil.cargo === 'Administrador';
+  const telasLiberadas = ehAdministrador ? undefined : perfil.telasLiberadas;
+
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    if (telasLiberadas && telasLiberadas.length > 0 && !telasLiberadas.includes('simulator')) {
+      const primeiraTelaPermitida = TELAS_APP.find(t => telasLiberadas.includes(t.key));
+      if (primeiraTelaPermitida) return primeiraTelaPermitida.tab;
+    }
+    return 'simulator';
+  });
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [currentDate, setCurrentDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -568,16 +584,20 @@ export default function App() {
         onResetAll={handleResetAll}
         onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
         onNavigateHome={() => setActiveTab('simulator')}
+        usuarioNome={perfil.nomeCompleto}
+        usuarioCargo={perfil.cargo}
+        onSair={onSair}
       />
 
       <div className="flex flex-1 w-full max-w-7xl mx-auto">
-        
+
         {/* SIDEBAR */}
         <Sidebar
           activeTab={activeTab}
           onSelectTab={handleSidebarTabSelect}
           isCollapsed={isSidebarCollapsed}
           activeConditionKind={activeAnalysisCondition ? getConditionKind(activeAnalysisCondition.name) : undefined}
+          telasLiberadas={telasLiberadas}
         />
 
         {/* MAIN VIEW AREA */}
@@ -683,6 +703,10 @@ export default function App() {
               onEditSimulation={handleEditSimulation}
               onShowToast={showToast}
             />
+          )}
+
+          {activeTab === 'admin-panel' && (
+            <AdminPanelView onShowToast={showToast} />
           )}
           </Suspense>
         </main>

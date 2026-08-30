@@ -123,7 +123,46 @@ export interface SelectedUnit {
   unidade: string;
 }
 
-export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table' | 'saved-simulations' | 'pdf-settings';
+export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table' | 'saved-simulations' | 'pdf-settings' | 'admin-panel';
+
+// ---------------------------------------------------------------------------
+// Acesso & Permissões (login, cadastro, hierarquia e Painel do Administrador)
+// ---------------------------------------------------------------------------
+
+export type Cargo =
+  | 'Administrador'
+  | 'Diretor'
+  | 'Gerente'
+  | 'Analista de Vendas'
+  | 'Analista de Crédito'
+  | 'Assistente de Vendas'
+  | 'Assistente de Crédito'
+  | 'Corretor';
+
+export type StatusConta = 'pendente' | 'ativo' | 'pausado';
+
+// Espelha a tabela `perfis` no Supabase (ver SQL de criação em authService.ts).
+// `id` é sempre o mesmo id do usuário em auth.users (Supabase Auth cuida da
+// senha; esta tabela guarda só os dados de negócio: cargo, hierarquia, telas
+// liberadas e status de aprovação).
+export interface PerfilUsuario {
+  id: string;
+  email: string;
+  nomeCompleto: string;
+  telefone: string;
+  cpf: string;
+  imobiliaria: string;
+  creci?: string;
+  cargo: Cargo;
+  superiorId: string | null;
+  status: StatusConta;
+  // Chaves de TELAS_APP (src/config/telasApp.ts) liberadas para este usuário.
+  telasLiberadas: string[];
+  // Permissão à parte (não é uma tela): enxergar, além das próprias, as
+  // propostas/simulações salvas de quem está abaixo dele na hierarquia.
+  verPropostasEquipe: boolean;
+  createdAt?: string;
+}
 
 // Configuração do que cada ficha em PDF exportada deve conter e apresentar,
 // uma por tipo de condição comercial (Sinal c/ Banco Direto, Sinal c/ Morar,

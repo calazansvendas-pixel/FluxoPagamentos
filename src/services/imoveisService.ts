@@ -363,17 +363,36 @@ export const imoveisService = {
         dados: dadosProposta.dados
       };
 
+      // Marca quem criou a proposta — é o que permite, junto das regras de
+      // segurança (RLS) do Supabase, cada usuário ver as próprias simulações
+      // e (quando liberado) as da equipe abaixo dele na hierarquia.
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user?.id) {
+        payload.criado_por = userData.user.id;
+      }
+
       // Validar se o empreendimento_id é um UUID válido para o Supabase
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dadosProposta.empreendimento_id || '');
       if (isUUID) {
         payload.empreendimento_id = dadosProposta.empreendimento_id;
       }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('simulacoes')
         .insert([payload])
         .select();
-      
+
+      // Se a coluna criado_por ainda não existir (usuário não rodou a
+      // migração de Acesso & Permissões), grava ao menos sem o dono, para não
+      // perder a simulação enquanto isso.
+      if (error && (error.code === 'PGRST204' || /criado_por/i.test(String(error.message || '')))) {
+        console.warn('Aviso: coluna criado_por não encontrada em `simulacoes`. Rode o SQL indicado em authService.ts para habilitar a visão de propostas por hierarquia. Salvando sem o dono por enquanto.');
+        const { criado_por, ...payloadSemDono } = payload;
+        const res2 = await supabase.from('simulacoes').insert([payloadSemDono]).select();
+        data = res2.data;
+        error = res2.error;
+      }
+
       if (error) {
         console.error('Erro ao salvar no Supabase, salvando apenas no console/storage:', error);
         return { success: false, error: error.message };

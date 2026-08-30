@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Calendar, Menu, RotateCcw } from 'lucide-react';
+import { Building2, Calendar, Menu, RotateCcw, LogOut } from 'lucide-react';
 
 interface HeaderProps {
   currentDate: string;
@@ -7,6 +7,11 @@ interface HeaderProps {
   onResetAll: () => void;
   onToggleSidebar: () => void;
   onNavigateHome: () => void;
+  // Nome/cargo de quem está logado e ação de sair — opcionais para não quebrar
+  // nenhum uso existente do Header antes da tela de login estar ligada.
+  usuarioNome?: string;
+  usuarioCargo?: string;
+  onSair?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -14,7 +19,10 @@ export const Header: React.FC<HeaderProps> = ({
   onDateChange,
   onResetAll,
   onToggleSidebar,
-  onNavigateHome
+  onNavigateHome,
+  usuarioNome,
+  usuarioCargo,
+  onSair
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs w-full">
@@ -63,13 +71,32 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="hidden md:flex items-center gap-2 bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600">
             <Calendar className="w-3.5 h-3.5 text-sky-600" />
             <span className="font-medium">Hoje é:</span>
-            <input 
-              type="date" 
-              value={currentDate} 
+            <input
+              type="date"
+              value={currentDate}
               onChange={(e) => onDateChange(e.target.value)}
               className="bg-transparent border-none text-slate-900 font-semibold focus:outline-none cursor-pointer"
             />
           </div>
+
+          {onSair && (
+            <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-slate-200">
+              {usuarioNome && (
+                <div className="text-right leading-tight">
+                  <div className="text-xs font-bold text-slate-800 truncate max-w-[140px]">{usuarioNome}</div>
+                  {usuarioCargo && <div className="text-[10px] text-slate-400">{usuarioCargo}</div>}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={onSair}
+                className="p-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-500 transition-all cursor-pointer"
+                title="Sair"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
