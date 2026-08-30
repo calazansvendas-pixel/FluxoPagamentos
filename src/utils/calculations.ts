@@ -513,10 +513,24 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   // desaparecia do fluxo, sem virar nem parcela nem Ato).
   const calcularAtoMinimoDaPolitica = (): { atoResidual: number; descontoAto: number; baseCalculoComITBI: number; totalProSolutoMaximo: number } => {
     const porPreco = calcularAtoMinimoPorPreco();
-    const maxRiscoPosPorPreco = Math.round(porPreco.baseCalculoComITBI * pctMaxPos * 100) / 100;
-    const capacidadeRendaTotal = Math.min(maxRiscoPosPorPreco, capacidadeRendaPos) + capacidadeRendaObra;
 
-    if (porPreco.totalProSolutoMaximo <= capacidadeRendaTotal + 0.01) {
+    // O teto de risco da Pós-Obra é um % da Base Líquida c/ ITBI, e essa base é
+    // líquida do Desconto do Ato Premiado — ou seja, ela ENCOLHE conforme o Ato
+    // (e o desconto de 10% sobre ele) cresce. Por isso a capacidade de renda
+    // total precisa ser recalculada a cada volta da convergência abaixo, junto
+    // com o desconto: mantê-la travada no desconto da hipótese por preço fazia
+    // o Ato sugerido convergir para (base - capacidade) / 1,10 em vez do ponto
+    // fixo correto (base - capacidade) / 1,092, fechando alguns reais abaixo do
+    // valor da planilha de referência.
+    const capacidadeRendaTotalCom = (desconto: number): number => {
+      const baseCom = Math.max(0, Math.round(((precoTabela - desconto) + itbiRegistro) * 100) / 100);
+      const maxRiscoPosCom = Math.round(baseCom * pctMaxPos * 100) / 100;
+      return Math.min(maxRiscoPosCom, capacidadeRendaPos) + capacidadeRendaObra;
+    };
+
+    const capacidadeRendaInicial = capacidadeRendaTotalCom(porPreco.descontoAto);
+
+    if (porPreco.totalProSolutoMaximo <= capacidadeRendaInicial + 0.01) {
       return porPreco;
     }
 
@@ -526,11 +540,13 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     // "ajuste fino" já usado na Hipótese 2 acima.
     const base = sinalSemITBI + itbiRegistro;
     const sinalMinimoFloorRenda = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
-    let atoAjustado = porPreco.atoResidual + (porPreco.totalProSolutoMaximo - capacidadeRendaTotal);
+    let atoAjustado = porPreco.atoResidual + (porPreco.totalProSolutoMaximo - capacidadeRendaInicial);
     let descontoAjustado = porPreco.descontoAto;
-    for (let i = 0; i < 8; i++) {
+    let capacidadeAjustada = capacidadeRendaInicial;
+    for (let i = 0; i < 12; i++) {
       descontoAjustado = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoAjustado) : 0;
-      atoAjustado = Math.round((base - capacidadeRendaTotal - descontoAjustado) * 100) / 100;
+      capacidadeAjustada = capacidadeRendaTotalCom(descontoAjustado);
+      atoAjustado = Math.round((base - capacidadeAjustada - descontoAjustado) * 100) / 100;
     }
     atoAjustado = Math.max(sinalMinimoFloorRenda, atoAjustado);
     const baseAjustada = Math.max(0, Math.round(((precoTabela - descontoAjustado) + itbiRegistro) * 100) / 100);
@@ -539,7 +555,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
       atoResidual: atoAjustado,
       descontoAto: descontoAjustado,
       baseCalculoComITBI: baseAjustada,
-      totalProSolutoMaximo: capacidadeRendaTotal
+      totalProSolutoMaximo: capacidadeAjustada
     };
   };
 
