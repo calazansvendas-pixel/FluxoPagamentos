@@ -168,9 +168,12 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
   const carregarEquipe = async () => {
     if (!podeEditarEquipe) return;
     setCarregandoEquipe(true);
-    const dados = await authService.listarEquipeParaEdicao(usuarioId);
-    setEquipe(dados);
+    const res = await authService.listarEquipeParaEdicao(usuarioId);
+    setEquipe(res.dados);
     setCarregandoEquipe(false);
+    if (res.error) {
+      onShowToast(`Não foi possível carregar a equipe: ${res.error}`);
+    }
   };
 
   useEffect(() => {

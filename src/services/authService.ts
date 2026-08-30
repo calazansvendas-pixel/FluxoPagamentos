@@ -527,20 +527,22 @@ export const authService = {
   // o formulário de edição — só retorna algo se o próprio usuário logado tiver
   // ao menos um campo autorizado em `camposEditaveisEquipe` (ver função
   // `dados_equipe_para_edicao` no SQL acima).
-  async listarEquipeParaEdicao(usuarioId: string): Promise<MembroEquipeEditavel[]> {
+  async listarEquipeParaEdicao(usuarioId: string): Promise<{ dados: MembroEquipeEditavel[]; error?: string }> {
     const { data, error } = await supabase.rpc('dados_equipe_para_edicao', { usuario_id: usuarioId });
-    if (error || !data) return [];
-    return (data as any[]).map(row => ({
-      id: row.id,
-      nomeCompleto: row.nome_completo,
-      telefone: row.telefone,
-      cpf: row.cpf,
-      imobiliaria: row.imobiliaria,
-      creci: row.creci || undefined,
-      cargo: row.cargo,
-      superiorId: row.superior_id,
-      telasLiberadas: row.telas_liberadas || []
-    }));
+    if (error) return { dados: [], error: error.message };
+    return {
+      dados: ((data as any[]) || []).map(row => ({
+        id: row.id,
+        nomeCompleto: row.nome_completo,
+        telefone: row.telefone,
+        cpf: row.cpf,
+        imobiliaria: row.imobiliaria,
+        creci: row.creci || undefined,
+        cargo: row.cargo,
+        superiorId: row.superior_id,
+        telasLiberadas: row.telas_liberadas || []
+      }))
+    };
   },
 
   // Aplica a edição de um subordinado, campo a campo — só os campos
