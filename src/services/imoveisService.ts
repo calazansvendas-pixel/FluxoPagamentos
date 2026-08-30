@@ -446,12 +446,13 @@ export const imoveisService = {
       // simulação de outro). Administrador vê tudo; cada um vê as próprias;
       // quem tem "ver propostas da equipe" ligado também vê as de quem está
       // de fato abaixo dele na hierarquia (via a função subordinados_de).
+      interface InfoCriador { nome: string; cargo: string; imobiliaria: string }
       let visiveis = data || [];
-      let nomesPorId: Record<string, string> = {};
+      let infoPorId: Record<string, InfoCriador> = {};
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData?.user?.id;
       if (uid) {
-        const { data: meuPerfil, error: perfilError } = await supabase.from('perfis').select('id, nome_completo, cargo, ver_propostas_equipe').eq('id', uid).maybeSingle();
+        const { data: meuPerfil, error: perfilError } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria, ver_propostas_equipe').eq('id', uid).maybeSingle();
         if (perfilError) {
           console.warn('Aviso: não foi possível confirmar o perfil de quem está logado ao listar simulações (mostrando só as próprias, por segurança):', perfilError);
         }
@@ -460,18 +461,18 @@ export const imoveisService = {
           visiveis = visiveis.filter((s: any) => s.criado_por === uid);
         } else if (meuPerfil.cargo === 'Administrador') {
           // Administrador já tem leitura livre de `perfis` pela RLS — busca
-          // os nomes direto, é mais simples e cobre qualquer criador.
+          // os dados direto, é mais simples e cobre qualquer criador.
           const idsCriadores = Array.from(new Set(visiveis.map((s: any) => s.criado_por).filter(Boolean)));
           if (idsCriadores.length > 0) {
-            const { data: perfis } = await supabase.from('perfis').select('id, nome_completo').in('id', idsCriadores);
-            nomesPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, p.nome_completo]));
+            const { data: perfis } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria').in('id', idsCriadores);
+            infoPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, { nome: p.nome_completo, cargo: p.cargo, imobiliaria: p.imobiliaria }]));
           }
         } else {
           // Quem não é Administrador não tem permissão de ler o perfil de
-          // outras pessoas direto na tabela — por isso os nomes da equipe
-          // vêm da função nomes_subordinados_de (só id + nome, nada de
-          // CPF/telefone/e-mail).
-          nomesPorId = { [uid]: meuPerfil.nome_completo };
+          // outras pessoas direto na tabela — por isso os dados da equipe vêm
+          // da função nomes_subordinados_de (só id/nome/cargo/imobiliária,
+          // nada de CPF/telefone/e-mail).
+          infoPorId = { [uid]: { nome: meuPerfil.nome_completo, cargo: meuPerfil.cargo, imobiliaria: meuPerfil.imobiliaria } };
           const idsPermitidos = new Set<string>([uid]);
           if (meuPerfil.ver_propostas_equipe) {
             const { data: subordinados, error: rpcError } = await supabase.rpc('nomes_subordinados_de', { usuario_id: uid });
@@ -480,17 +481,22 @@ export const imoveisService = {
             }
             (subordinados || []).forEach((s: any) => {
               idsPermitidos.add(s.id);
-              nomesPorId[s.id] = s.nome_completo;
+              infoPorId[s.id] = { nome: s.nome_completo, cargo: s.cargo, imobiliaria: s.imobiliaria };
             });
           }
           visiveis = visiveis.filter((s: any) => s.criado_por && idsPermitidos.has(s.criado_por));
         }
       }
 
-      const comCriador = visiveis.map((s: any) => ({
-        ...s,
-        criado_por_nome: s.criado_por ? (nomesPorId[s.criado_por] || null) : null
-      }));
+      const comCriador = visiveis.map((s: any) => {
+        const info = s.criado_por ? infoPorId[s.criado_por] : null;
+        return {
+          ...s,
+          criado_por_nome: info?.nome || null,
+          criado_por_cargo: info?.cargo || null,
+          criado_por_imobiliaria: info?.imobiliaria || null
+        };
+      });
 
       const ordenadas = comCriador.slice().sort((a: any, b: any) => {
         const dataA = a?.dados?.salvo_em || '';

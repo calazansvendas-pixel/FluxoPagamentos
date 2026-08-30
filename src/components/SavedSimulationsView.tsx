@@ -11,6 +11,8 @@ export interface SavedSimulationRecord {
   dados?: Record<string, any>;
   criado_por?: string | null;
   criado_por_nome?: string | null;
+  criado_por_cargo?: string | null;
+  criado_por_imobiliaria?: string | null;
 }
 
 interface SavedSimulationsViewProps {
@@ -160,7 +162,11 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
                         <span>Renda: <strong className="text-slate-600">{formatCurrency(Number(sim.renda ?? d.renda) || 0)}</strong></span>
                         <span>Salvo em: <strong className="text-slate-600">{formatarData(d.salvo_em)}</strong></span>
                         {sim.criado_por_nome && (
-                          <span>Feito por: <strong className="text-slate-600">{sim.criado_por_nome}</strong></span>
+                          <span>
+                            Feito por: <strong className="text-slate-600">{sim.criado_por_nome}</strong>
+                            {sim.criado_por_cargo && <> — {sim.criado_por_cargo}</>}
+                            {sim.criado_por_imobiliaria && <> — {sim.criado_por_imobiliaria}</>}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -226,7 +232,12 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Torre {viewingSim.dados?.torre || '-'} / Unidade {viewingSim.dados?.unidade || '-'} • Salvo em {formatarData(viewingSim.dados?.salvo_em)}
-                {viewingSim.criado_por_nome && <> • Feito por {viewingSim.criado_por_nome}</>}
+                {viewingSim.criado_por_nome && (
+                  <>
+                    {' '}• Feito por {viewingSim.criado_por_nome}
+                    {viewingSim.criado_por_cargo && <> ({viewingSim.criado_por_cargo}{viewingSim.criado_por_imobiliaria ? ` — ${viewingSim.criado_por_imobiliaria}` : ''})</>}
+                  </>
+                )}
               </p>
             </div>
 

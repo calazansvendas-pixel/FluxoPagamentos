@@ -92,19 +92,24 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *   SELECT id FROM arvore;
  * $$;
  *
- * -- 5b) Igual à de cima, mas também traz o NOME de cada subordinado — é o que
- * --     permite mostrar "Feito por: <nome>" pra um Gerente/Diretor nas
- * --     propostas da equipe, sem dar acesso ao perfil completo (CPF,
- * --     telefone, e-mail) de quem está abaixo dele.
+ * -- 5b) Igual à de cima, mas também traz NOME, CARGO e IMOBILIÁRIA de cada
+ * --     subordinado — é o que permite mostrar "Feito por: <nome> — <cargo> —
+ * --     <imobiliária>" pra um Gerente/Diretor nas propostas da equipe, sem
+ * --     dar acesso ao perfil completo (CPF, telefone, e-mail) de quem está
+ * --     abaixo dele. Se você já rodou uma versão anterior desta função (só
+ * --     com nome), rode a linha de DROP abaixo antes do CREATE — o Postgres
+ * --     não deixa trocar as colunas de retorno de uma função existente sem
+ * --     apagar e recriar.
+ * DROP FUNCTION IF EXISTS public.nomes_subordinados_de(UUID);
  * CREATE OR REPLACE FUNCTION public.nomes_subordinados_de(usuario_id UUID)
- * RETURNS TABLE(id UUID, nome_completo TEXT) LANGUAGE SQL SECURITY DEFINER SET search_path = public AS $$
+ * RETURNS TABLE(id UUID, nome_completo TEXT, cargo TEXT, imobiliaria TEXT) LANGUAGE SQL SECURITY DEFINER SET search_path = public AS $$
  *   WITH RECURSIVE arvore AS (
  *     SELECT p.id, 1 AS profundidade FROM perfis p WHERE p.superior_id = usuario_id
  *     UNION ALL
  *     SELECT p.id, a.profundidade + 1 FROM perfis p INNER JOIN arvore a ON p.superior_id = a.id
  *     WHERE a.profundidade < 20
  *   )
- *   SELECT p.id, p.nome_completo FROM perfis p WHERE p.id IN (SELECT id FROM arvore);
+ *   SELECT p.id, p.nome_completo, p.cargo, p.imobiliaria FROM perfis p WHERE p.id IN (SELECT id FROM arvore);
  * $$;
  * GRANT EXECUTE ON FUNCTION public.is_admin(UUID) TO authenticated;
  * GRANT EXECUTE ON FUNCTION public.subordinados_de(UUID) TO authenticated;
