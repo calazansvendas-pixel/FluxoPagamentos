@@ -446,13 +446,13 @@ export const imoveisService = {
       // simulação de outro). Administrador vê tudo; cada um vê as próprias;
       // quem tem "ver propostas da equipe" ligado também vê as de quem está
       // de fato abaixo dele na hierarquia (via a função subordinados_de).
-      interface InfoCriador { nome: string; cargo: string; imobiliaria: string }
+      interface InfoCriador { nome: string; cargo: string; imobiliaria: string; superiorId: string | null }
       let visiveis = data || [];
       let infoPorId: Record<string, InfoCriador> = {};
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData?.user?.id;
       if (uid) {
-        const { data: meuPerfil, error: perfilError } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria, ver_propostas_equipe').eq('id', uid).maybeSingle();
+        const { data: meuPerfil, error: perfilError } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria, superior_id, ver_propostas_equipe').eq('id', uid).maybeSingle();
         if (perfilError) {
           console.warn('Aviso: não foi possível confirmar o perfil de quem está logado ao listar simulações (mostrando só as próprias, por segurança):', perfilError);
         }
@@ -464,15 +464,30 @@ export const imoveisService = {
           // os dados direto, é mais simples e cobre qualquer criador.
           const idsCriadores = Array.from(new Set(visiveis.map((s: any) => s.criado_por).filter(Boolean)));
           if (idsCriadores.length > 0) {
-            const { data: perfis } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria').in('id', idsCriadores);
-            infoPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, { nome: p.nome_completo, cargo: p.cargo, imobiliaria: p.imobiliaria }]));
+            const { data: perfis } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria, superior_id').in('id', idsCriadores);
+            infoPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, { nome: p.nome_completo, cargo: p.cargo, imobiliaria: p.imobiliaria, superiorId: p.superior_id }]));
+
+            // Busca também o nome de quem é superior de algum criador, caso
+            // esse superior não tenha feito nenhuma simulação (por isso não
+            // estaria na lista acima) — é o que permite o filtro "Gerente
+            // responsável" encontrar o Gerente mesmo que ele mesmo nunca
+            // tenha salvo uma proposta.
+            const idsSuperioresFaltando = Array.from(new Set(
+              Object.values(infoPorId).map(i => i.superiorId).filter((sid): sid is string => !!sid && !infoPorId[sid])
+            ));
+            if (idsSuperioresFaltando.length > 0) {
+              const { data: superiores } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria, superior_id').in('id', idsSuperioresFaltando);
+              (superiores || []).forEach((p: any) => {
+                infoPorId[p.id] = { nome: p.nome_completo, cargo: p.cargo, imobiliaria: p.imobiliaria, superiorId: p.superior_id };
+              });
+            }
           }
         } else {
           // Quem não é Administrador não tem permissão de ler o perfil de
           // outras pessoas direto na tabela — por isso os dados da equipe vêm
-          // da função nomes_subordinados_de (só id/nome/cargo/imobiliária,
-          // nada de CPF/telefone/e-mail).
-          infoPorId = { [uid]: { nome: meuPerfil.nome_completo, cargo: meuPerfil.cargo, imobiliaria: meuPerfil.imobiliaria } };
+          // da função nomes_subordinados_de (só id/nome/cargo/imobiliária/
+          // superior, nada de CPF/telefone/e-mail).
+          infoPorId = { [uid]: { nome: meuPerfil.nome_completo, cargo: meuPerfil.cargo, imobiliaria: meuPerfil.imobiliaria, superiorId: meuPerfil.superior_id } };
           const idsPermitidos = new Set<string>([uid]);
           if (meuPerfil.ver_propostas_equipe) {
             const { data: subordinados, error: rpcError } = await supabase.rpc('nomes_subordinados_de', { usuario_id: uid });
@@ -481,7 +496,7 @@ export const imoveisService = {
             }
             (subordinados || []).forEach((s: any) => {
               idsPermitidos.add(s.id);
-              infoPorId[s.id] = { nome: s.nome_completo, cargo: s.cargo, imobiliaria: s.imobiliaria };
+              infoPorId[s.id] = { nome: s.nome_completo, cargo: s.cargo, imobiliaria: s.imobiliaria, superiorId: s.superior_id };
             });
           }
           visiveis = visiveis.filter((s: any) => s.criado_por && idsPermitidos.has(s.criado_por));
@@ -490,11 +505,13 @@ export const imoveisService = {
 
       const comCriador = visiveis.map((s: any) => {
         const info = s.criado_por ? infoPorId[s.criado_por] : null;
+        const gerenteInfo = info?.superiorId ? infoPorId[info.superiorId] : null;
         return {
           ...s,
           criado_por_nome: info?.nome || null,
           criado_por_cargo: info?.cargo || null,
-          criado_por_imobiliaria: info?.imobiliaria || null
+          criado_por_imobiliaria: info?.imobiliaria || null,
+          criado_por_gerente_nome: gerenteInfo?.nome || null
         };
       });
 

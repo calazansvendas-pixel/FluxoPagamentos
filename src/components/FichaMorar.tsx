@@ -1601,6 +1601,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     condicao_nome: currentCond?.name || '',
     torre: selectedTorre || 'Não Selecionada',
     unidade: selectedUnidade || 'Não Selecionada',
+    tipologia: hasUnitSelected ? tipologia : null,
     simulation_data: simulationData,
     cliente_nome: simulationData.clientName || 'Cliente Não Informado',
     renda: income,

@@ -702,6 +702,7 @@ export default function App({ perfil, onSair }: AppProps) {
             <SavedSimulationsView
               onEditSimulation={handleEditSimulation}
               onShowToast={showToast}
+              podeFiltrarPorGerente={ehAdministrador || perfil.cargo === 'Diretor'}
             />
           )}
 
