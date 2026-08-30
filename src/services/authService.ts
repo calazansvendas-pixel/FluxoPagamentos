@@ -215,6 +215,12 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * --     lista vazia, mesmo que tente chamar a função direto — é uma segunda
  * --     camada de proteção, além da tela só mostrar a seção pra quem tem
  * --     `camposEditaveisEquipe` não vazio.
+ * -- Atenção: como esta função é `plpgsql` e usa RETURNS TABLE(id UUID, ...),
+ * -- o Postgres declara `id` como variável interna automaticamente — uma
+ * -- referência a `id` sem qualificar a tabela (ex.: `WHERE id = usuario_id`)
+ * -- fica ambígua entre a coluna `perfis.id` e essa variável, e a função falha
+ * -- (com erro) toda vez que é chamada. Por isso o alias `pf` abaixo é
+ * -- obrigatório, não cosmético.
  * CREATE OR REPLACE FUNCTION public.dados_equipe_para_edicao(usuario_id UUID)
  * RETURNS TABLE(id UUID, nome_completo TEXT, telefone TEXT, cpf TEXT, imobiliaria TEXT, creci TEXT, cargo TEXT, superior_id UUID, telas_liberadas TEXT[])
  * LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -222,7 +228,7 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *   IF usuario_id <> auth.uid() THEN
  *     RAISE EXCEPTION 'Só é possível consultar a própria equipe.';
  *   END IF;
- *   IF NOT EXISTS (SELECT 1 FROM perfis WHERE id = usuario_id AND array_length(campos_editaveis_equipe, 1) > 0) THEN
+ *   IF NOT EXISTS (SELECT 1 FROM perfis pf WHERE pf.id = usuario_id AND array_length(pf.campos_editaveis_equipe, 1) > 0) THEN
  *     RETURN;
  *   END IF;
  *   RETURN QUERY
