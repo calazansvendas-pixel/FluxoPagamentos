@@ -527,6 +527,23 @@ export const authService = {
     return { success: !error, error: error?.message };
   },
 
+  // Aplica a mesma política de permissões (telas liberadas, ver propostas da
+  // equipe, campos editáveis da equipe) para TODO MUNDO que tem este cargo
+  // hoje (ativo ou pausado) — sobrescrevendo qualquer ajuste individual que
+  // essas pessoas já tivessem. Dados pessoais (nome, CPF, superior etc.) não
+  // entram aqui, só ficam mesmo na edição individual. Retorna quantas contas
+  // foram de fato afetadas.
+  async aplicarPermissoesPorCargo(cargo: Cargo, ajustes: {
+    telasLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
+  }): Promise<{ success: boolean; error?: string; afetados?: number }> {
+    const { data, error } = await supabase.from('perfis').update({
+      telas_liberadas: ajustes.telasLiberadas,
+      ver_propostas_equipe: ajustes.verPropostasEquipe,
+      campos_editaveis_equipe: ajustes.camposEditaveisEquipe
+    }).eq('cargo', cargo).in('status', ['ativo', 'pausado']).select('id');
+    return { success: !error, error: error?.message, afetados: data?.length ?? 0 };
+  },
+
   // --- Edição do cadastro da equipe (Diretor/Gerente autorizado) -----------
 
   // Lista os subordinados de `usuarioId` com os dados necessários para montar

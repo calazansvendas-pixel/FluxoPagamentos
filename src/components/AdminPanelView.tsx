@@ -117,6 +117,19 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   const [edImobiliaria, setEdImobiliaria] = useState('');
   const [edCreci, setEdCreci] = useState('');
 
+  // Edição de permissões por cargo — aplica de uma vez só (telas liberadas,
+  // ver propostas da equipe, campos editáveis da equipe) para todo mundo que
+  // tem aquele cargo hoje, sobrescrevendo qualquer ajuste individual que já
+  // tivessem. Dados pessoais (nome, CPF, superior...) ficam de fora — isso só
+  // se edita pessoa por pessoa, no "Editar" de cada linha.
+  const [permCargoAberto, setPermCargoAberto] = useState(false);
+  const [pmCargo, setPmCargo] = useState<Cargo>('Corretor');
+  const [pmTelas, setPmTelas] = useState<Set<string>>(new Set());
+  const [pmVerEquipe, setPmVerEquipe] = useState(false);
+  const [pmCamposEditaveis, setPmCamposEditaveis] = useState<Set<string>>(new Set());
+  const [confirmandoAplicacaoMassa, setConfirmandoAplicacaoMassa] = useState(false);
+  const [aplicandoMassa, setAplicandoMassa] = useState(false);
+
   const carregar = async () => {
     setCarregando(true);
     const [p, a] = await Promise.all([authService.listarPendentes(), authService.listarAtivosEPausados()]);
@@ -310,6 +323,35 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     }
   };
 
+  // Quantas contas (ativas ou pausadas) têm hoje o cargo selecionado — é o
+  // que a aplicação em massa vai afetar.
+  const usuariosDoCargoEmMassa = ativos.filter(u => u.cargo === pmCargo);
+
+  const abrirPermissoesPorCargo = (cargo: Cargo) => {
+    setPmCargo(cargo);
+    setPmTelas(new Set(TELAS_PADRAO_POR_CARGO[cargo] || []));
+    setPmVerEquipe(CARGOS_COM_EQUIPE.includes(cargo));
+    setPmCamposEditaveis(new Set());
+    setPermCargoAberto(true);
+  };
+
+  const confirmarAplicacaoMassa = async () => {
+    setAplicandoMassa(true);
+    const res = await authService.aplicarPermissoesPorCargo(pmCargo, {
+      telasLiberadas: Array.from(pmTelas),
+      verPropostasEquipe: pmVerEquipe,
+      camposEditaveisEquipe: Array.from(pmCamposEditaveis)
+    });
+    setAplicandoMassa(false);
+    setConfirmandoAplicacaoMassa(false);
+    if (res.success) {
+      onShowToast(`Permissões aplicadas para ${res.afetados ?? 0} conta${res.afetados === 1 ? '' : 's'} com o cargo ${pmCargo}.`);
+      carregar();
+    } else {
+      onShowToast(`Erro ao aplicar em massa: ${res.error || 'erro desconhecido'}`);
+    }
+  };
+
   return (
     <div className="w-full space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -335,6 +377,106 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
         <StatTile n={pendentes.length} label="Pendentes de aprovação" tone="amber" />
         <StatTile n={totalAtivos} label="Usuários ativos" tone="sky" />
         <StatTile n={totalPausados} label="Contas pausadas" tone="slate" />
+      </div>
+
+      {/* EDITAR PERMISSÕES POR CARGO (EM MASSA) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <button
+          type="button"
+          onClick={() => {
+            if (!permCargoAberto) abrirPermissoesPorCargo(pmCargo);
+            else setPermCargoAberto(false);
+          }}
+          className="w-full px-5 py-4 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/60 transition-colors"
+        >
+          <div className="text-left">
+            <div className="text-sm font-bold text-slate-800">Editar permissões por cargo</div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Define telas liberadas, ver equipe e edição de cadastro da equipe para todo mundo de um cargo de uma vez — dados pessoais continuam só na edição individual.
+            </p>
+          </div>
+          {permCargoAberto ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+        </button>
+
+        {permCargoAberto && (
+          <div className="px-5 pb-5 space-y-4 border-t border-slate-100 pt-4">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">Cargo</label>
+              <select
+                value={pmCargo}
+                onChange={e => abrirPermissoesPorCargo(e.target.value as Cargo)}
+                className="w-full sm:w-64 px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white"
+              >
+                {CARGOS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1.5">
+                {usuariosDoCargoEmMassa.length} conta{usuariosDoCargoEmMassa.length === 1 ? '' : 's'} com o cargo {pmCargo} hoje (ativas ou pausadas).
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input type="checkbox" checked={pmVerEquipe} onChange={e => setPmVerEquipe(e.target.checked)} className="w-4 h-4 accent-sky-600" />
+              Também pode ver as propostas de quem está abaixo dele na hierarquia
+            </label>
+
+            <div>
+              <p className="text-[11px] font-bold text-slate-500 mb-2">Telas liberadas</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {TELAS_APP.map(t => (
+                  <label key={t.key} className="flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={pmTelas.has(t.key)}
+                      onChange={e => {
+                        setPmTelas(prev => {
+                          const novo = new Set(prev);
+                          if (e.target.checked) novo.add(t.key); else novo.delete(t.key);
+                          return novo;
+                        });
+                      }}
+                      className="w-4 h-4 accent-sky-600"
+                    />
+                    {t.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <p className="text-[11px] font-bold text-slate-500 mb-1">Pode editar o cadastro da equipe</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {CAMPOS_EDITAVEIS_EQUIPE.map(c => (
+                  <label key={c.key} className="flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={pmCamposEditaveis.has(c.key)}
+                      onChange={e => {
+                        setPmCamposEditaveis(prev => {
+                          const novo = new Set(prev);
+                          if (e.target.checked) novo.add(c.key); else novo.delete(c.key);
+                          return novo;
+                        });
+                      }}
+                      className="w-4 h-4 accent-sky-600"
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={usuariosDoCargoEmMassa.length === 0}
+                onClick={() => setConfirmandoAplicacaoMassa(true)}
+                className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Aplicar a todos os {pmCargo} ({usuariosDoCargoEmMassa.length})
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CADASTROS PENDENTES */}
@@ -726,6 +868,39 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                 className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-60"
               >
                 Salvar alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMAR APLICAÇÃO DE PERMISSÕES EM MASSA */}
+      {confirmandoAplicacaoMassa && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" onClick={(e) => { if (e.target === e.currentTarget) setConfirmandoAplicacaoMassa(false); }}>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600 shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Aplicar permissões para todo o cargo {pmCargo}?</h3>
+                <p className="text-xs text-slate-500">
+                  Isso vai sobrescrever as telas liberadas, "ver equipe" e "editar cadastro da equipe" de{' '}
+                  <strong>{usuariosDoCargoEmMassa.length} conta{usuariosDoCargoEmMassa.length === 1 ? '' : 's'}</strong> com o cargo {pmCargo} — inclusive quem já tiver algum ajuste individual diferente. Dados pessoais e o cargo de cada um não mudam.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setConfirmandoAplicacaoMassa(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={aplicandoMassa}
+                onClick={confirmarAplicacaoMassa}
+                className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {aplicandoMassa ? 'Aplicando...' : 'Sim, aplicar a todos'}
               </button>
             </div>
           </div>
