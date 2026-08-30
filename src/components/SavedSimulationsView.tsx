@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Eye, Pencil, Trash2, X, RefreshCw, ClipboardList, AlertTriangle, Building2, User, Filter, ChevronDown, ChevronUp } from 'lucide-react';
-import { formatCurrency } from '../utils/formatters';
+import { Eye, Pencil, Trash2, X, RefreshCw, ClipboardList, AlertTriangle, Building2, User, Filter, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { formatCurrency, parseCurrency, formatForEdit } from '../utils/formatters';
 import { imoveisService } from '../services/imoveisService';
 
 export interface SavedSimulationRecord {
@@ -56,9 +56,12 @@ const FILTROS_VAZIOS: FiltrosSimulacoes = {
   atoMin: '', atoMax: '', dataDe: '', dataAte: ''
 };
 
+// min/max chegam como texto em R$ (ex.: "R$ 5.000,00") — parseCurrency já lê
+// esse formato (e também números soltos, digitados sem terminar de sair do
+// campo ainda).
 const dentroDaFaixa = (valor: number, min: string, max: string): boolean => {
-  if (min !== '' && valor < Number(min)) return false;
-  if (max !== '' && valor > Number(max)) return false;
+  if (min !== '' && valor < parseCurrency(min)) return false;
+  if (max !== '' && valor > parseCurrency(max)) return false;
   return true;
 };
 
@@ -112,10 +115,24 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
   const [confirmDeleteSim, setConfirmDeleteSim] = useState<SavedSimulationRecord | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filtrosAbertos, setFiltrosAbertos] = useState<boolean>(false);
-  const [filtros, setFiltros] = useState<FiltrosSimulacoes>(FILTROS_VAZIOS);
+  // Rascunho: o que a pessoa está escolhendo no painel, ainda não aplicado.
+  // Aplicados: o que de fato filtra a lista embaixo — só muda quando ela
+  // clica em "Filtrar".
+  const [filtrosRascunho, setFiltrosRascunho] = useState<FiltrosSimulacoes>(FILTROS_VAZIOS);
+  const [filtrosAplicados, setFiltrosAplicados] = useState<FiltrosSimulacoes>(FILTROS_VAZIOS);
 
   const setFiltro = <K extends keyof FiltrosSimulacoes>(campo: K, valor: FiltrosSimulacoes[K]) =>
-    setFiltros(prev => ({ ...prev, [campo]: valor }));
+    setFiltrosRascunho(prev => ({ ...prev, [campo]: valor }));
+
+  const aplicarFiltros = () => {
+    setFiltrosAplicados(filtrosRascunho);
+    setFiltrosAbertos(false);
+  };
+
+  const limparFiltros = () => {
+    setFiltrosRascunho(FILTROS_VAZIOS);
+    setFiltrosAplicados(FILTROS_VAZIOS);
+  };
 
   // Listas de opções pros seletores, derivadas do que já foi carregado — só
   // aparecem opções que realmente existem entre as simulações visíveis.
@@ -145,38 +162,39 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
 
   const filtradas = useMemo(() => simulations.filter(sim => {
     const d = sim.dados || {};
-    if (filtros.corretorId && sim.criado_por !== filtros.corretorId) return false;
-    if (filtros.gerenteNome && sim.criado_por_gerente_nome !== filtros.gerenteNome) return false;
-    if (filtros.empreendimento && d.empreendimento_nome !== filtros.empreendimento) return false;
-    if (filtros.condicao && d.condicao_nome !== filtros.condicao) return false;
-    if (filtros.torre && d.torre !== filtros.torre) return false;
-    if (!contemTexto(d.unidade, filtros.unidade)) return false;
-    if (filtros.tipologia && d.tipologia !== filtros.tipologia) return false;
-    if (filtros.cargo && sim.criado_por_cargo !== filtros.cargo) return false;
-    if (filtros.imobiliaria && sim.criado_por_imobiliaria !== filtros.imobiliaria) return false;
-    if (!contemTexto(sim.cliente_nome || d.cliente_nome, filtros.clienteNome)) return false;
-    if (filtros.percFinanciamento) {
+    const f = filtrosAplicados;
+    if (f.corretorId && sim.criado_por !== f.corretorId) return false;
+    if (f.gerenteNome && sim.criado_por_gerente_nome !== f.gerenteNome) return false;
+    if (f.empreendimento && d.empreendimento_nome !== f.empreendimento) return false;
+    if (f.condicao && d.condicao_nome !== f.condicao) return false;
+    if (f.torre && d.torre !== f.torre) return false;
+    if (!contemTexto(d.unidade, f.unidade)) return false;
+    if (f.tipologia && d.tipologia !== f.tipologia) return false;
+    if (f.cargo && sim.criado_por_cargo !== f.cargo) return false;
+    if (f.imobiliaria && sim.criado_por_imobiliaria !== f.imobiliaria) return false;
+    if (!contemTexto(sim.cliente_nome || d.cliente_nome, f.clienteNome)) return false;
+    if (f.percFinanciamento) {
       const perc = d.simulation_data?.finPercent;
-      if (perc === undefined || perc === null || Math.round(Number(perc) * 100) !== Number(filtros.percFinanciamento)) return false;
+      if (perc === undefined || perc === null || Math.round(Number(perc) * 100) !== Number(f.percFinanciamento)) return false;
     }
-    if (filtros.primeiroImovel) {
+    if (f.primeiroImovel) {
       const ehPrimeiro = !!d.simulation_data?.isFirstHome;
-      if (filtros.primeiroImovel === 'sim' && !ehPrimeiro) return false;
-      if (filtros.primeiroImovel === 'nao' && ehPrimeiro) return false;
+      if (f.primeiroImovel === 'sim' && !ehPrimeiro) return false;
+      if (f.primeiroImovel === 'nao' && ehPrimeiro) return false;
     }
-    if (!dentroDaFaixa(Number(sim.renda ?? d.renda) || 0, filtros.rendaMin, filtros.rendaMax)) return false;
-    if (!dentroDaFaixa(Number(d.preco_tabela) || 0, filtros.precoMin, filtros.precoMax)) return false;
-    if (!dentroDaFaixa(Number(d.avaliacao_bancaria) || 0, filtros.avaliacaoMin, filtros.avaliacaoMax)) return false;
-    if (!dentroDaFaixa(Number(d.financiamento_maximo) || 0, filtros.financiamentoMin, filtros.financiamentoMax)) return false;
-    if (!dentroDaFaixa(Number(d.subsidio) || 0, filtros.subsidioMin, filtros.subsidioMax)) return false;
-    if (!dentroDaFaixa(Number(d.fgts) || 0, filtros.fgtsMin, filtros.fgtsMax)) return false;
-    if (!dentroDaFaixa(Number(d.ato_liquido ?? d.ato_bruto) || 0, filtros.atoMin, filtros.atoMax)) return false;
-    if (filtros.dataDe && (!d.salvo_em || d.salvo_em.slice(0, 10) < filtros.dataDe)) return false;
-    if (filtros.dataAte && (!d.salvo_em || d.salvo_em.slice(0, 10) > filtros.dataAte)) return false;
+    if (!dentroDaFaixa(Number(sim.renda ?? d.renda) || 0, f.rendaMin, f.rendaMax)) return false;
+    if (!dentroDaFaixa(Number(d.preco_tabela) || 0, f.precoMin, f.precoMax)) return false;
+    if (!dentroDaFaixa(Number(d.avaliacao_bancaria) || 0, f.avaliacaoMin, f.avaliacaoMax)) return false;
+    if (!dentroDaFaixa(Number(d.financiamento_maximo) || 0, f.financiamentoMin, f.financiamentoMax)) return false;
+    if (!dentroDaFaixa(Number(d.subsidio) || 0, f.subsidioMin, f.subsidioMax)) return false;
+    if (!dentroDaFaixa(Number(d.fgts) || 0, f.fgtsMin, f.fgtsMax)) return false;
+    if (!dentroDaFaixa(Number(d.ato_liquido ?? d.ato_bruto) || 0, f.atoMin, f.atoMax)) return false;
+    if (f.dataDe && (!d.salvo_em || d.salvo_em.slice(0, 10) < f.dataDe)) return false;
+    if (f.dataAte && (!d.salvo_em || d.salvo_em.slice(0, 10) > f.dataAte)) return false;
     return true;
-  }), [simulations, filtros]);
+  }), [simulations, filtrosAplicados]);
 
-  const filtrosAtivos = Object.values(filtros).filter(v => v !== '').length;
+  const filtrosAtivos = Object.values(filtrosAplicados).filter(v => v !== '').length;
 
   const loadSimulations = async () => {
     setIsLoading(true);
@@ -245,77 +263,85 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
       {filtrosAbertos && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <CampoSelect label="Corretor / quem fez" value={filtros.corretorId} onChange={v => setFiltro('corretorId', v)}>
+            <CampoSelect label="Corretor / quem fez" value={filtrosRascunho.corretorId} onChange={v => setFiltro('corretorId', v)}>
               {opcoes.corretores.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
             </CampoSelect>
             {podeFiltrarPorGerente && (
-              <CampoSelect label="Gerente responsável" value={filtros.gerenteNome} onChange={v => setFiltro('gerenteNome', v)}>
+              <CampoSelect label="Gerente responsável" value={filtrosRascunho.gerenteNome} onChange={v => setFiltro('gerenteNome', v)}>
                 {opcoes.gerentes.map(g => <option key={g} value={g}>{g}</option>)}
               </CampoSelect>
             )}
-            <CampoSelect label="Cargo" value={filtros.cargo} onChange={v => setFiltro('cargo', v)}>
+            <CampoSelect label="Cargo" value={filtrosRascunho.cargo} onChange={v => setFiltro('cargo', v)}>
               {opcoes.cargos.map(c => <option key={c} value={c}>{c}</option>)}
             </CampoSelect>
-            <CampoSelect label="Imobiliária" value={filtros.imobiliaria} onChange={v => setFiltro('imobiliaria', v)}>
+            <CampoSelect label="Imobiliária" value={filtrosRascunho.imobiliaria} onChange={v => setFiltro('imobiliaria', v)}>
               {opcoes.imobiliarias.map(i => <option key={i} value={i}>{i}</option>)}
             </CampoSelect>
 
-            <CampoSelect label="Empreendimento" value={filtros.empreendimento} onChange={v => setFiltro('empreendimento', v)}>
+            <CampoSelect label="Empreendimento" value={filtrosRascunho.empreendimento} onChange={v => setFiltro('empreendimento', v)}>
               {opcoes.empreendimentos.map(e => <option key={e} value={e}>{e}</option>)}
             </CampoSelect>
-            <CampoSelect label="Tipo de condição" value={filtros.condicao} onChange={v => setFiltro('condicao', v)}>
+            <CampoSelect label="Tipo de condição" value={filtrosRascunho.condicao} onChange={v => setFiltro('condicao', v)}>
               {opcoes.condicoes.map(c => <option key={c} value={c}>{c}</option>)}
             </CampoSelect>
-            <CampoSelect label="Torre" value={filtros.torre} onChange={v => setFiltro('torre', v)}>
+            <CampoSelect label="Torre" value={filtrosRascunho.torre} onChange={v => setFiltro('torre', v)}>
               {opcoes.torres.map(t => <option key={t} value={t}>{t}</option>)}
             </CampoSelect>
-            <CampoTexto label="Unidade" value={filtros.unidade} onChange={v => setFiltro('unidade', v)} placeholder="Ex.: 404" />
+            <CampoTexto label="Unidade" value={filtrosRascunho.unidade} onChange={v => setFiltro('unidade', v)} placeholder="Ex.: 404" />
 
-            <CampoSelect label="Tipologia" value={filtros.tipologia} onChange={v => setFiltro('tipologia', v)}>
+            <CampoSelect label="Tipologia" value={filtrosRascunho.tipologia} onChange={v => setFiltro('tipologia', v)}>
               {opcoes.tipologias.map(t => <option key={t} value={t}>{t}</option>)}
             </CampoSelect>
-            <CampoTexto label="Nome do cliente" value={filtros.clienteNome} onChange={v => setFiltro('clienteNome', v)} placeholder="Buscar por nome" />
-            <CampoSelect label="% de Financiamento" value={filtros.percFinanciamento} onChange={v => setFiltro('percFinanciamento', v)}>
+            <CampoTexto label="Nome do cliente" value={filtrosRascunho.clienteNome} onChange={v => setFiltro('clienteNome', v)} placeholder="Buscar por nome" />
+            <CampoSelect label="% de Financiamento" value={filtrosRascunho.percFinanciamento} onChange={v => setFiltro('percFinanciamento', v)}>
               <option value="80">80% (Padrão)</option>
               <option value="90">90% (Máximo)</option>
             </CampoSelect>
-            <CampoSelect label="Primeiro imóvel do cliente?" value={filtros.primeiroImovel} onChange={v => setFiltro('primeiroImovel', v as '' | 'sim' | 'nao')}>
+            <CampoSelect label="Primeiro imóvel do cliente?" value={filtrosRascunho.primeiroImovel} onChange={v => setFiltro('primeiroImovel', v as '' | 'sim' | 'nao')}>
               <option value="sim">Sim</option>
               <option value="nao">Não</option>
             </CampoSelect>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100">
-            <CampoFaixa label="Renda" min={filtros.rendaMin} max={filtros.rendaMax} onChangeMin={v => setFiltro('rendaMin', v)} onChangeMax={v => setFiltro('rendaMax', v)} />
-            <CampoFaixa label="Preço do Imóvel (Tabela)" min={filtros.precoMin} max={filtros.precoMax} onChangeMin={v => setFiltro('precoMin', v)} onChangeMax={v => setFiltro('precoMax', v)} />
-            <CampoFaixa label="Avaliação Bancária" min={filtros.avaliacaoMin} max={filtros.avaliacaoMax} onChangeMin={v => setFiltro('avaliacaoMin', v)} onChangeMax={v => setFiltro('avaliacaoMax', v)} />
-            <CampoFaixa label="Financiamento" min={filtros.financiamentoMin} max={filtros.financiamentoMax} onChangeMin={v => setFiltro('financiamentoMin', v)} onChangeMax={v => setFiltro('financiamentoMax', v)} />
-            <CampoFaixa label="Subsídio" min={filtros.subsidioMin} max={filtros.subsidioMax} onChangeMin={v => setFiltro('subsidioMin', v)} onChangeMax={v => setFiltro('subsidioMax', v)} />
-            <CampoFaixa label="FGTS" min={filtros.fgtsMin} max={filtros.fgtsMax} onChangeMin={v => setFiltro('fgtsMin', v)} onChangeMax={v => setFiltro('fgtsMax', v)} />
-            <CampoFaixa label="Ato (Imóvel)" min={filtros.atoMin} max={filtros.atoMax} onChangeMin={v => setFiltro('atoMin', v)} onChangeMax={v => setFiltro('atoMax', v)} />
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Salvo em</label>
-              <div className="flex items-center gap-1.5">
-                <input type="date" value={filtros.dataDe} onChange={e => setFiltro('dataDe', e.target.value)} className="w-full px-2 py-2 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400" />
-                <span className="text-slate-400 text-xs">até</span>
-                <input type="date" value={filtros.dataAte} onChange={e => setFiltro('dataAte', e.target.value)} className="w-full px-2 py-2 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400" />
-              </div>
-            </div>
+            <CampoFaixaMoeda label="Renda" min={filtrosRascunho.rendaMin} max={filtrosRascunho.rendaMax} onChangeMin={v => setFiltro('rendaMin', v)} onChangeMax={v => setFiltro('rendaMax', v)} />
+            <CampoFaixaMoeda label="Preço do Imóvel (Tabela)" min={filtrosRascunho.precoMin} max={filtrosRascunho.precoMax} onChangeMin={v => setFiltro('precoMin', v)} onChangeMax={v => setFiltro('precoMax', v)} />
+            <CampoFaixaMoeda label="Avaliação Bancária" min={filtrosRascunho.avaliacaoMin} max={filtrosRascunho.avaliacaoMax} onChangeMin={v => setFiltro('avaliacaoMin', v)} onChangeMax={v => setFiltro('avaliacaoMax', v)} />
+            <CampoFaixaMoeda label="Financiamento" min={filtrosRascunho.financiamentoMin} max={filtrosRascunho.financiamentoMax} onChangeMin={v => setFiltro('financiamentoMin', v)} onChangeMax={v => setFiltro('financiamentoMax', v)} />
+            <CampoFaixaMoeda label="Subsídio" min={filtrosRascunho.subsidioMin} max={filtrosRascunho.subsidioMax} onChangeMin={v => setFiltro('subsidioMin', v)} onChangeMax={v => setFiltro('subsidioMax', v)} />
+            <CampoFaixaMoeda label="FGTS" min={filtrosRascunho.fgtsMin} max={filtrosRascunho.fgtsMax} onChangeMin={v => setFiltro('fgtsMin', v)} onChangeMax={v => setFiltro('fgtsMax', v)} />
+            <CampoFaixaMoeda label="Ato (Imóvel)" min={filtrosRascunho.atoMin} max={filtrosRascunho.atoMax} onChangeMin={v => setFiltro('atoMin', v)} onChangeMax={v => setFiltro('atoMax', v)} />
+            <CampoFaixaData label="Salvo em" min={filtrosRascunho.dataDe} max={filtrosRascunho.dataAte} onChangeMin={v => setFiltro('dataDe', v)} onChangeMax={v => setFiltro('dataAte', v)} />
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <p className="text-xs text-slate-500">
-              <strong className="text-slate-700">{filtradas.length}</strong> de {simulations.length} simulaç{simulations.length === 1 ? 'ão' : 'ões'}
-            </p>
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => setFiltros(FILTROS_VAZIOS)}
-              disabled={filtrosAtivos === 0}
-              className="px-3.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={limparFiltros}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-500 hover:text-rose-600 rounded-lg transition-all cursor-pointer"
             >
               Limpar filtros
             </button>
+            <button
+              type="button"
+              onClick={aplicarFiltros}
+              className="px-5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Filtrar</span>
+            </button>
           </div>
+        </div>
+      )}
+
+      {!filtrosAbertos && filtrosAtivos > 0 && (
+        <div className="flex items-center justify-between bg-sky-50 border border-sky-100 rounded-xl px-4 py-2.5">
+          <p className="text-xs text-sky-700">
+            Mostrando <strong>{filtradas.length}</strong> de {simulations.length} simulaç{simulations.length === 1 ? 'ão' : 'ões'} — {filtrosAtivos} filtro{filtrosAtivos === 1 ? '' : 's'} ativo{filtrosAtivos === 1 ? '' : 's'}
+          </p>
+          <button type="button" onClick={limparFiltros} className="text-xs font-semibold text-sky-700 hover:underline cursor-pointer shrink-0">
+            Limpar filtros
+          </button>
         </div>
       )}
 
@@ -332,7 +358,7 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
           <div className="p-10 text-center space-y-2">
             <Filter className="w-8 h-8 text-slate-300 mx-auto" />
             <p className="text-sm text-slate-500">Nenhuma simulação bate com os filtros escolhidos.</p>
-            <button type="button" onClick={() => setFiltros(FILTROS_VAZIOS)} className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
+            <button type="button" onClick={limparFiltros} className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
               Limpar filtros
             </button>
           </div>
@@ -541,13 +567,54 @@ const CampoTexto: React.FC<{ label: string; value: string; onChange: (v: string)
   </div>
 );
 
-const CampoFaixa: React.FC<{ label: string; min: string; max: string; onChangeMin: (v: string) => void; onChangeMax: (v: string) => void }> = ({ label, min, max, onChangeMin, onChangeMax }) => (
+interface CampoFaixaProps { label: string; min: string; max: string; onChangeMin: (v: string) => void; onChangeMax: (v: string) => void }
+
+// Faixa "de/até" com máscara de moeda (R$), no mesmo padrão de digitação já
+// usado no Simulador de Crédito: foca e mostra o número "cru" pra editar
+// fácil, sai do campo (blur) e formata como R$ 1.234,56.
+const CampoFaixaMoeda: React.FC<CampoFaixaProps> = ({ label, min, max, onChangeMin, onChangeMax }) => {
+  const aoFocar = (valor: string, onChange: (v: string) => void) => {
+    if (!valor) return;
+    onChange(formatForEdit(parseCurrency(valor)));
+  };
+  const aoSair = (valor: string, onChange: (v: string) => void) => {
+    if (!valor) return;
+    onChange(formatCurrency(parseCurrency(valor)));
+  };
+  return (
+    <div>
+      <label className={rotuloCampo}>{label}</label>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="text" inputMode="decimal" value={min} placeholder="De"
+          onChange={e => onChangeMin(e.target.value)}
+          onFocus={() => aoFocar(min, onChangeMin)}
+          onBlur={() => aoSair(min, onChangeMin)}
+          className={estiloInput}
+        />
+        <span className="text-slate-400 text-xs shrink-0">até</span>
+        <input
+          type="text" inputMode="decimal" value={max} placeholder="Até"
+          onChange={e => onChangeMax(e.target.value)}
+          onFocus={() => aoFocar(max, onChangeMax)}
+          onBlur={() => aoSair(max, onChangeMax)}
+          className={estiloInput}
+        />
+      </div>
+    </div>
+  );
+};
+
+// Mesmo padrão visual da faixa de moeda, mas com seletor de data — usa o
+// mesmo rótulo/input compartilhado (estiloInput) pra ficar proporcional aos
+// outros campos da mesma grade, em vez de destoar.
+const CampoFaixaData: React.FC<CampoFaixaProps> = ({ label, min, max, onChangeMin, onChangeMax }) => (
   <div>
     <label className={rotuloCampo}>{label}</label>
     <div className="flex items-center gap-1.5">
-      <input type="number" value={min} onChange={e => onChangeMin(e.target.value)} placeholder="De" className={estiloInput} />
+      <input type="date" value={min} onChange={e => onChangeMin(e.target.value)} className={`${estiloInput} min-w-0`} />
       <span className="text-slate-400 text-xs shrink-0">até</span>
-      <input type="number" value={max} onChange={e => onChangeMax(e.target.value)} placeholder="Até" className={estiloInput} />
+      <input type="date" value={max} onChange={e => onChangeMax(e.target.value)} className={`${estiloInput} min-w-0`} />
     </div>
   </div>
 );
