@@ -703,6 +703,8 @@ export default function App({ perfil, onSair }: AppProps) {
               onEditSimulation={handleEditSimulation}
               onShowToast={showToast}
               podeFiltrarPorGerente={ehAdministrador || perfil.cargo === 'Diretor'}
+              usuarioId={perfil.id}
+              camposEditaveisEquipe={perfil.camposEditaveisEquipe}
             />
           )}
 

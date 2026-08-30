@@ -131,6 +131,109 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * -- (RLS na tabela `perfis` é segura de ligar já: o app de hoje, no ar, nunca
  * -- lê nem grava nessa tabela — só o código deste PR usa ela.)
  *
+ * -- 6b) Coluna com os campos do cadastro (ver CAMPOS_EDITAVEIS_EQUIPE em
+ * --     src/config/telasApp.ts) que este usuário está autorizado, pelo
+ * --     Administrador, a editar no cadastro de quem está abaixo dele na
+ * --     hierarquia — ex.: um Gerente autorizado a corrigir só telefone e
+ * --     imobiliária dos próprios corretores.
+ * ALTER TABLE perfis ADD COLUMN IF NOT EXISTS campos_editaveis_equipe TEXT[] NOT NULL DEFAULT '{}';
+ *
+ * -- 6c) Função protegida que aplica a edição do cadastro de um subordinado.
+ * --     Roda como SECURITY DEFINER (o Diretor/Gerente comum não tem permissão
+ * --     de UPDATE direta em `perfis` — só o Administrador tem, pela policy
+ * --     "admin_atualiza_qualquer_perfil"), mas revalida TUDO por dentro antes
+ * --     de gravar qualquer coisa: (1) `subordinado_id` precisa estar na árvore
+ * --     de `subordinados_de(auth.uid())`, senão nem é gente de baixo dele; (2)
+ * --     cada campo só é gravado se a chave correspondente estiver presente no
+ * --     `campos_editaveis_equipe` do próprio usuário logado — ou seja, a
+ * --     autorização é sempre a que o Administrador concedeu, nunca a que o
+ * --     app manda pedindo. Isso é o que garante a regra mesmo que alguém tente
+ * --     chamar a função direto, pulando a tela.
+ * CREATE OR REPLACE FUNCTION public.editar_cadastro_subordinado(
+ *   subordinado_id UUID,
+ *   novo_nome TEXT DEFAULT NULL,
+ *   novo_telefone TEXT DEFAULT NULL,
+ *   novo_cpf TEXT DEFAULT NULL,
+ *   nova_imobiliaria TEXT DEFAULT NULL,
+ *   novo_creci TEXT DEFAULT NULL,
+ *   limpar_creci BOOLEAN DEFAULT FALSE,
+ *   novo_cargo TEXT DEFAULT NULL,
+ *   novo_superior_id UUID DEFAULT NULL,
+ *   limpar_superior BOOLEAN DEFAULT FALSE,
+ *   novas_telas TEXT[] DEFAULT NULL
+ * ) RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+ * DECLARE
+ *   permissoes TEXT[];
+ * BEGIN
+ *   IF NOT EXISTS (SELECT 1 FROM public.subordinados_de(auth.uid()) WHERE id = subordinado_id) THEN
+ *     RAISE EXCEPTION 'Esse usuário não está na sua hierarquia.';
+ *   END IF;
+ *
+ *   SELECT campos_editaveis_equipe INTO permissoes FROM perfis WHERE id = auth.uid();
+ *
+ *   IF novo_nome IS NOT NULL THEN
+ *     IF NOT ('nome' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar o nome.'; END IF;
+ *     UPDATE perfis SET nome_completo = novo_nome WHERE id = subordinado_id;
+ *   END IF;
+ *   IF novo_telefone IS NOT NULL THEN
+ *     IF NOT ('telefone' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar o telefone.'; END IF;
+ *     UPDATE perfis SET telefone = novo_telefone WHERE id = subordinado_id;
+ *   END IF;
+ *   IF novo_cpf IS NOT NULL THEN
+ *     IF NOT ('cpf' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar o CPF.'; END IF;
+ *     UPDATE perfis SET cpf = novo_cpf WHERE id = subordinado_id;
+ *   END IF;
+ *   IF nova_imobiliaria IS NOT NULL THEN
+ *     IF NOT ('imobiliaria' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar a imobiliária.'; END IF;
+ *     UPDATE perfis SET imobiliaria = nova_imobiliaria WHERE id = subordinado_id;
+ *   END IF;
+ *   IF novo_creci IS NOT NULL OR limpar_creci THEN
+ *     IF NOT ('creci' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar o CRECI.'; END IF;
+ *     UPDATE perfis SET creci = CASE WHEN limpar_creci THEN NULL ELSE novo_creci END WHERE id = subordinado_id;
+ *   END IF;
+ *   IF novo_cargo IS NOT NULL THEN
+ *     IF NOT ('cargo' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar o cargo.'; END IF;
+ *     UPDATE perfis SET cargo = novo_cargo WHERE id = subordinado_id;
+ *   END IF;
+ *   IF novo_superior_id IS NOT NULL OR limpar_superior THEN
+ *     IF NOT ('superior' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar o superior hierárquico.'; END IF;
+ *     UPDATE perfis SET superior_id = CASE WHEN limpar_superior THEN NULL ELSE novo_superior_id END WHERE id = subordinado_id;
+ *   END IF;
+ *   IF novas_telas IS NOT NULL THEN
+ *     IF NOT ('telas' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar as telas liberadas.'; END IF;
+ *     UPDATE perfis SET telas_liberadas = novas_telas WHERE id = subordinado_id;
+ *   END IF;
+ *
+ *   RETURN TRUE;
+ * END;
+ * $$;
+ *
+ * -- 6d) Lista, para quem tem ALGUMA permissão de campos_editaveis_equipe, os
+ * --     próprios subordinados com os dados básicos necessários pra montar o
+ * --     formulário de edição na tela (sem CPF completo nem e-mail — só o que
+ * --     é de fato editável). Quem não tem nenhum campo autorizado recebe uma
+ * --     lista vazia, mesmo que tente chamar a função direto — é uma segunda
+ * --     camada de proteção, além da tela só mostrar a seção pra quem tem
+ * --     `camposEditaveisEquipe` não vazio.
+ * CREATE OR REPLACE FUNCTION public.dados_equipe_para_edicao(usuario_id UUID)
+ * RETURNS TABLE(id UUID, nome_completo TEXT, telefone TEXT, cpf TEXT, imobiliaria TEXT, creci TEXT, cargo TEXT, superior_id UUID, telas_liberadas TEXT[])
+ * LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+ * BEGIN
+ *   IF usuario_id <> auth.uid() THEN
+ *     RAISE EXCEPTION 'Só é possível consultar a própria equipe.';
+ *   END IF;
+ *   IF NOT EXISTS (SELECT 1 FROM perfis WHERE id = usuario_id AND array_length(campos_editaveis_equipe, 1) > 0) THEN
+ *     RETURN;
+ *   END IF;
+ *   RETURN QUERY
+ *     SELECT p.id, p.nome_completo, p.telefone, p.cpf, p.imobiliaria, p.creci, p.cargo, p.superior_id, p.telas_liberadas
+ *     FROM perfis p WHERE p.id IN (SELECT sub.id FROM public.subordinados_de(usuario_id) sub);
+ * END;
+ * $$;
+ *
+ * GRANT EXECUTE ON FUNCTION public.editar_cadastro_subordinado(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, TEXT, UUID, BOOLEAN, TEXT[]) TO authenticated;
+ * GRANT EXECUTE ON FUNCTION public.dados_equipe_para_edicao(UUID) TO authenticated;
+ *
  * ┌───────────────────────────────────────────────────────────────────────┐
  * │ PARTE 2 — NÃO RODAR AINDA. Só execute isto no exato momento em que o  │
  * │ merge deste PR for para produção (ou logo em seguida). `empreendimen- │
@@ -187,6 +290,7 @@ interface PerfilRow {
   status: StatusConta;
   telas_liberadas: string[] | null;
   ver_propostas_equipe: boolean | null;
+  campos_editaveis_equipe: string[] | null;
   created_at?: string;
 }
 
@@ -204,8 +308,21 @@ function rowParaPerfil(row: PerfilRow): PerfilUsuario {
     status: row.status,
     telasLiberadas: row.telas_liberadas || [],
     verPropostasEquipe: !!row.ver_propostas_equipe,
+    camposEditaveisEquipe: row.campos_editaveis_equipe || [],
     createdAt: row.created_at
   };
+}
+
+export interface MembroEquipeEditavel {
+  id: string;
+  nomeCompleto: string;
+  telefone: string;
+  cpf: string;
+  imobiliaria: string;
+  creci?: string;
+  cargo: Cargo;
+  superiorId: string | null;
+  telasLiberadas: string[];
 }
 
 export interface DadosCadastro {
@@ -313,6 +430,7 @@ export const authService = {
   async editarCargoEPermissoes(id: string, ajustes: {
     cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; verPropostasEquipe: boolean;
     nomeCompleto: string; telefone: string; cpf: string; imobiliaria: string; creci?: string;
+    camposEditaveisEquipe: string[];
   }) {
     const { error } = await supabase.from('perfis').update({
       cargo: ajustes.cargo,
@@ -323,8 +441,55 @@ export const authService = {
       telefone: ajustes.telefone,
       cpf: ajustes.cpf,
       imobiliaria: ajustes.imobiliaria,
-      creci: ajustes.creci || null
+      creci: ajustes.creci || null,
+      campos_editaveis_equipe: ajustes.camposEditaveisEquipe
     }).eq('id', id);
+    return { success: !error, error: error?.message };
+  },
+
+  // --- Edição do cadastro da equipe (Diretor/Gerente autorizado) -----------
+
+  // Lista os subordinados de `usuarioId` com os dados necessários para montar
+  // o formulário de edição — só retorna algo se o próprio usuário logado tiver
+  // ao menos um campo autorizado em `camposEditaveisEquipe` (ver função
+  // `dados_equipe_para_edicao` no SQL acima).
+  async listarEquipeParaEdicao(usuarioId: string): Promise<MembroEquipeEditavel[]> {
+    const { data, error } = await supabase.rpc('dados_equipe_para_edicao', { usuario_id: usuarioId });
+    if (error || !data) return [];
+    return (data as any[]).map(row => ({
+      id: row.id,
+      nomeCompleto: row.nome_completo,
+      telefone: row.telefone,
+      cpf: row.cpf,
+      imobiliaria: row.imobiliaria,
+      creci: row.creci || undefined,
+      cargo: row.cargo,
+      superiorId: row.superior_id,
+      telasLiberadas: row.telas_liberadas || []
+    }));
+  },
+
+  // Aplica a edição de um subordinado, campo a campo — só os campos
+  // efetivamente enviados (não-undefined) são gravados, e a função no banco
+  // (`editar_cadastro_subordinado`) revalida a autorização de cada um antes de
+  // aplicar, então esta chamada nunca é a última linha de defesa.
+  async editarCadastroSubordinado(subordinadoId: string, ajustes: {
+    nomeCompleto?: string; telefone?: string; cpf?: string; imobiliaria?: string;
+    creci?: string | null; cargo?: Cargo; superiorId?: string | null; telasLiberadas?: string[];
+  }): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.rpc('editar_cadastro_subordinado', {
+      subordinado_id: subordinadoId,
+      novo_nome: ajustes.nomeCompleto ?? null,
+      novo_telefone: ajustes.telefone ?? null,
+      novo_cpf: ajustes.cpf ?? null,
+      nova_imobiliaria: ajustes.imobiliaria ?? null,
+      novo_creci: ajustes.creci ?? null,
+      limpar_creci: ajustes.creci === null,
+      novo_cargo: ajustes.cargo ?? null,
+      novo_superior_id: ajustes.superiorId ?? null,
+      limpar_superior: ajustes.superiorId === null,
+      novas_telas: ajustes.telasLiberadas ?? null
+    });
     return { success: !error, error: error?.message };
   },
 

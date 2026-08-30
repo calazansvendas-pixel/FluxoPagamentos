@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Eye, Pencil, Trash2, X, RefreshCw, ClipboardList, AlertTriangle, Building2, User, Filter, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Eye, Pencil, Trash2, X, RefreshCw, ClipboardList, AlertTriangle, Building2, User, Filter, ChevronDown, ChevronUp, Search, Users, Save } from 'lucide-react';
 import { formatCurrency, parseCurrency, formatForEdit } from '../utils/formatters';
 import { imoveisService } from '../services/imoveisService';
+import { authService, MembroEquipeEditavel } from '../services/authService';
+import { CAMPOS_EDITAVEIS_EQUIPE, CARGOS, TELAS_APP } from '../config/telasApp';
+import { Cargo } from '../types';
 
 export interface SavedSimulationRecord {
   id: string;
@@ -23,6 +26,12 @@ interface SavedSimulationsViewProps {
   // "Gerente responsável" — pra um Gerente comum, que já só vê a própria
   // equipe, esse filtro seria redundante.
   podeFiltrarPorGerente?: boolean;
+  // Id do usuário logado e, se ele tiver, os campos do cadastro da equipe que
+  // o Administrador autorizou este usuário a editar (ver Painel do
+  // Administrador → Editar → "Pode editar o cadastro da equipe"). Vazio ou
+  // ausente = a seção "Editar cadastro da equipe" nem aparece.
+  usuarioId: string;
+  camposEditaveisEquipe?: string[];
 }
 
 interface FiltrosSimulacoes {
@@ -108,7 +117,25 @@ const formatarData = (isoString?: string): string => {
   }
 };
 
-export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEditSimulation, onShowToast, podeFiltrarPorGerente }) => {
+// Evita, na hora de trocar o "Superior hierárquico" de alguém pela seção de
+// edição da equipe, oferecer como opção a própria pessoa ou algum dos seus
+// próprios subordinados (o que criaria um ciclo na hierarquia).
+function descendentesNaEquipe(id: string, equipe: MembroEquipeEditavel[]): Set<string> {
+  const resultado = new Set<string>();
+  const fila = [id];
+  while (fila.length > 0) {
+    const atual = fila.shift()!;
+    for (const m of equipe) {
+      if (m.superiorId === atual && !resultado.has(m.id)) {
+        resultado.add(m.id);
+        fila.push(m.id);
+      }
+    }
+  }
+  return resultado;
+}
+
+export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEditSimulation, onShowToast, podeFiltrarPorGerente, usuarioId, camposEditaveisEquipe }) => {
   const [simulations, setSimulations] = useState<SavedSimulationRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [viewingSim, setViewingSim] = useState<SavedSimulationRecord | null>(null);
@@ -120,6 +147,77 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
   // clica em "Filtrar".
   const [filtrosRascunho, setFiltrosRascunho] = useState<FiltrosSimulacoes>(FILTROS_VAZIOS);
   const [filtrosAplicados, setFiltrosAplicados] = useState<FiltrosSimulacoes>(FILTROS_VAZIOS);
+
+  // --- Editar cadastro da equipe (Diretor/Gerente autorizado pelo Administrador) ---
+  const camposAutorizados = useMemo(() => new Set(camposEditaveisEquipe || []), [camposEditaveisEquipe]);
+  const podeEditarEquipe = camposAutorizados.size > 0;
+  const [equipeAberta, setEquipeAberta] = useState(false);
+  const [equipe, setEquipe] = useState<MembroEquipeEditavel[]>([]);
+  const [carregandoEquipe, setCarregandoEquipe] = useState(false);
+  const [membroEditando, setMembroEditando] = useState<MembroEquipeEditavel | null>(null);
+  const [salvandoMembro, setSalvandoMembro] = useState(false);
+  const [emNome, setEmNome] = useState('');
+  const [emTelefone, setEmTelefone] = useState('');
+  const [emCpf, setEmCpf] = useState('');
+  const [emImobiliaria, setEmImobiliaria] = useState('');
+  const [emCreci, setEmCreci] = useState('');
+  const [emCargo, setEmCargo] = useState<Cargo>('Corretor');
+  const [emSuperiorId, setEmSuperiorId] = useState<string | null>(null);
+  const [emTelas, setEmTelas] = useState<Set<string>>(new Set());
+
+  const carregarEquipe = async () => {
+    if (!podeEditarEquipe) return;
+    setCarregandoEquipe(true);
+    const dados = await authService.listarEquipeParaEdicao(usuarioId);
+    setEquipe(dados);
+    setCarregandoEquipe(false);
+  };
+
+  useEffect(() => {
+    if (podeEditarEquipe) carregarEquipe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [podeEditarEquipe, usuarioId]);
+
+  const abrirEdicaoMembro = (m: MembroEquipeEditavel) => {
+    setMembroEditando(m);
+    setEmNome(m.nomeCompleto);
+    setEmTelefone(m.telefone);
+    setEmCpf(m.cpf);
+    setEmImobiliaria(m.imobiliaria);
+    setEmCreci(m.creci || '');
+    setEmCargo(m.cargo);
+    setEmSuperiorId(m.superiorId);
+    setEmTelas(new Set(m.telasLiberadas));
+  };
+
+  const descendentesDoMembroEditando = membroEditando ? descendentesNaEquipe(membroEditando.id, equipe) : new Set<string>();
+
+  const salvarEdicaoMembro = async () => {
+    if (!membroEditando) return;
+    if (camposAutorizados.has('nome') && !emNome.trim()) {
+      onShowToast('Nome completo é obrigatório.');
+      return;
+    }
+    setSalvandoMembro(true);
+    const res = await authService.editarCadastroSubordinado(membroEditando.id, {
+      nomeCompleto: camposAutorizados.has('nome') ? emNome.trim() : undefined,
+      telefone: camposAutorizados.has('telefone') ? emTelefone.trim() : undefined,
+      cpf: camposAutorizados.has('cpf') ? emCpf.trim() : undefined,
+      imobiliaria: camposAutorizados.has('imobiliaria') ? emImobiliaria.trim() : undefined,
+      creci: camposAutorizados.has('creci') ? (emCreci.trim() || null) : undefined,
+      cargo: camposAutorizados.has('cargo') ? emCargo : undefined,
+      superiorId: camposAutorizados.has('superior') ? emSuperiorId : undefined,
+      telasLiberadas: camposAutorizados.has('telas') ? Array.from(emTelas) : undefined
+    });
+    setSalvandoMembro(false);
+    if (res.success) {
+      onShowToast(`Cadastro de ${membroEditando.nomeCompleto} atualizado.`);
+      setMembroEditando(null);
+      carregarEquipe();
+    } else {
+      onShowToast(`Erro ao salvar: ${res.error || 'erro desconhecido'}`);
+    }
+  };
 
   const setFiltro = <K extends keyof FiltrosSimulacoes>(campo: K, valor: FiltrosSimulacoes[K]) =>
     setFiltrosRascunho(prev => ({ ...prev, [campo]: valor }));
@@ -239,6 +337,17 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {podeEditarEquipe && (
+            <button
+              onClick={() => setEquipeAberta(v => !v)}
+              type="button"
+              className={`px-4 py-2.5 font-semibold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer border ${equipeAberta ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-slate-100 border-transparent text-slate-700 hover:bg-slate-200'}`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Editar cadastro da equipe</span>
+              {equipeAberta ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          )}
           <button
             onClick={() => setFiltrosAbertos(v => !v)}
             type="button"
@@ -259,6 +368,43 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
           </button>
         </div>
       </div>
+
+      {equipeAberta && podeEditarEquipe && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+          <div>
+            <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-sky-600" /> Equipe abaixo de você
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Selecione um corretor da sua equipe para corrigir os campos do cadastro que o Administrador autorizou você a editar.
+            </p>
+          </div>
+          {carregandoEquipe ? (
+            <div className="py-6 text-center text-xs text-slate-400">Carregando equipe...</div>
+          ) : equipe.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-400">Nenhum corretor abaixo de você na hierarquia ainda.</div>
+          ) : (
+            <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+              {equipe.map(m => (
+                <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-50/60">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 truncate">{m.nomeCompleto}</p>
+                    <p className="text-[11px] text-slate-400">{m.cargo} — {m.imobiliaria}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => abrirEdicaoMembro(m)}
+                    className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-semibold rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer border border-sky-100 shrink-0"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>Editar cadastro</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {filtrosAbertos && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-5">
@@ -498,6 +644,118 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
               >
                 <Pencil className="w-3.5 h-3.5" />
                 <span>Editar esta Simulação</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDITAR CADASTRO DE UM MEMBRO DA EQUIPE */}
+      {membroEditando && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+          onClick={(e) => { if (e.target === e.currentTarget) setMembroEditando(null); }}
+        >
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4">
+            <h3 className="text-sm font-bold text-slate-900">Editar cadastro de {membroEditando.nomeCompleto}</h3>
+            <p className="text-[11px] text-slate-400 -mt-3">
+              Só os campos que o Administrador autorizou você a editar aparecem aqui.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              {camposAutorizados.has('nome') && (
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Nome completo</label>
+                  <input type="text" value={emNome} onChange={e => setEmNome(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+              )}
+              {camposAutorizados.has('telefone') && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Telefone</label>
+                  <input type="text" value={emTelefone} onChange={e => setEmTelefone(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+              )}
+              {camposAutorizados.has('cpf') && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">CPF</label>
+                  <input type="text" value={emCpf} onChange={e => setEmCpf(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+              )}
+              {camposAutorizados.has('imobiliaria') && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Imobiliária</label>
+                  <input type="text" value={emImobiliaria} onChange={e => setEmImobiliaria(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+              )}
+              {camposAutorizados.has('creci') && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">CRECI <span className="font-normal text-slate-400">(opcional)</span></label>
+                  <input type="text" value={emCreci} onChange={e => setEmCreci(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                </div>
+              )}
+            </div>
+
+            {(camposAutorizados.has('cargo') || camposAutorizados.has('superior')) && (
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                {camposAutorizados.has('cargo') && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Cargo</label>
+                    <select value={emCargo} onChange={e => setEmCargo(e.target.value as Cargo)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white">
+                      {CARGOS.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                )}
+                {camposAutorizados.has('superior') && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Superior hierárquico</label>
+                    <select value={emSuperiorId || ''} onChange={e => setEmSuperiorId(e.target.value || null)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white">
+                      <option value={usuarioId}>Eu mesmo</option>
+                      {equipe.filter(m => m.id !== membroEditando.id && !descendentesDoMembroEditando.has(m.id)).map(m => (
+                        <option key={m.id} value={m.id}>{m.nomeCompleto} — {m.cargo}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {camposAutorizados.has('telas') && (
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-[11px] font-bold text-slate-500 mb-2">Telas liberadas</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {TELAS_APP.map(t => (
+                    <label key={t.key} className="flex items-center gap-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={emTelas.has(t.key)}
+                        onChange={e => {
+                          setEmTelas(prev => {
+                            const novo = new Set(prev);
+                            if (e.target.checked) novo.add(t.key); else novo.delete(t.key);
+                            return novo;
+                          });
+                        }}
+                        className="w-4 h-4 accent-sky-600"
+                      />
+                      {t.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button type="button" onClick={() => setMembroEditando(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={salvandoMembro}
+                onClick={salvarEdicaoMembro}
+                className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{salvandoMembro ? 'Salvando...' : 'Salvar alterações'}</span>
               </button>
             </div>
           </div>

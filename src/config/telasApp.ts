@@ -28,6 +28,26 @@ export const TELAS_APP: TelaApp[] = [
   { key: 'admin-panel', label: 'Painel do Administrador', icon: ShieldCheck, tab: 'admin-panel' }
 ];
 
+// Campos do cadastro de um usuário que o Administrador pode autorizar um
+// Diretor/Gerente a editar nos cadastros de quem está abaixo dele na
+// hierarquia (ver PerfilUsuario.camposEditaveisEquipe). Chave estável — nunca
+// renomear uma já existente.
+export interface CampoEditavelEquipe {
+  key: string;
+  label: string;
+}
+
+export const CAMPOS_EDITAVEIS_EQUIPE: CampoEditavelEquipe[] = [
+  { key: 'nome', label: 'Nome completo' },
+  { key: 'telefone', label: 'Telefone' },
+  { key: 'cpf', label: 'CPF' },
+  { key: 'imobiliaria', label: 'Imobiliária' },
+  { key: 'creci', label: 'CRECI' },
+  { key: 'cargo', label: 'Cargo' },
+  { key: 'superior', label: 'Superior hierárquico' },
+  { key: 'telas', label: 'Telas liberadas' }
+];
+
 export const CARGOS: Cargo[] = [
   'Administrador',
   'Diretor',

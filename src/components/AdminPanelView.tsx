@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ShieldCheck, RefreshCw, Check, X, Pencil, Ban, PlayCircle, Trash2 } from 'lucide-react';
 import { PerfilUsuario, Cargo, StatusConta } from '../types';
 import { authService } from '../services/authService';
-import { TELAS_APP, CARGOS, TELAS_PADRAO_POR_CARGO } from '../config/telasApp';
+import { TELAS_APP, CARGOS, TELAS_PADRAO_POR_CARGO, CAMPOS_EDITAVEIS_EQUIPE } from '../config/telasApp';
 
 interface AdminPanelViewProps {
   onShowToast: (message: string) => void;
@@ -51,6 +51,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
   const [edSuperiorId, setEdSuperiorId] = useState<string | null>(null);
   const [edTelas, setEdTelas] = useState<Set<string>>(new Set());
   const [edVerEquipe, setEdVerEquipe] = useState(false);
+  const [edCamposEditaveis, setEdCamposEditaveis] = useState<Set<string>>(new Set());
   const [edNomeCompleto, setEdNomeCompleto] = useState('');
   const [edTelefone, setEdTelefone] = useState('');
   const [edCpf, setEdCpf] = useState('');
@@ -118,6 +119,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
     setEdSuperiorId(u.superiorId);
     setEdTelas(new Set(u.telasLiberadas));
     setEdVerEquipe(u.verPropostasEquipe);
+    setEdCamposEditaveis(new Set(u.camposEditaveisEquipe));
     setEdNomeCompleto(u.nomeCompleto);
     setEdTelefone(u.telefone);
     setEdCpf(u.cpf);
@@ -141,7 +143,8 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
       telefone: edTelefone.trim(),
       cpf: edCpf.trim(),
       imobiliaria: edImobiliaria.trim(),
-      creci: edCreci.trim() || undefined
+      creci: edCreci.trim() || undefined,
+      camposEditaveisEquipe: Array.from(edCamposEditaveis)
     });
     setProcessandoId(null);
     if (res.success) {
@@ -470,6 +473,34 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
                       className="w-4 h-4 accent-sky-600"
                     />
                     {t.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <p className="text-[11px] font-bold text-slate-500 mb-1">Pode editar o cadastro da equipe</p>
+              <p className="text-[11px] text-slate-400 mb-2">
+                Se esta pessoa for Diretor(a) ou Gerente, marque aqui os campos que ela mesma pode corrigir no cadastro
+                de quem está abaixo dela na hierarquia — direto pela tela de Simulações Salvas, sem precisar do
+                Administrador. Deixe tudo desmarcado para não conceder nenhuma edição.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {CAMPOS_EDITAVEIS_EQUIPE.map(c => (
+                  <label key={c.key} className="flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={edCamposEditaveis.has(c.key)}
+                      onChange={e => {
+                        setEdCamposEditaveis(prev => {
+                          const novo = new Set(prev);
+                          if (e.target.checked) novo.add(c.key); else novo.delete(c.key);
+                          return novo;
+                        });
+                      }}
+                      className="w-4 h-4 accent-sky-600"
+                    />
+                    {c.label}
                   </label>
                 ))}
               </div>

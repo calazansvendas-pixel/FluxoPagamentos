@@ -161,6 +161,11 @@ export interface PerfilUsuario {
   // Permissão à parte (não é uma tela): enxergar, além das próprias, as
   // propostas/simulações salvas de quem está abaixo dele na hierarquia.
   verPropostasEquipe: boolean;
+  // Chaves de CAMPOS_EDITAVEIS_EQUIPE (src/config/telasApp.ts) que este
+  // usuário está autorizado a editar no cadastro de quem está abaixo dele na
+  // hierarquia (ex.: um Gerente autorizado a corrigir telefone/imobiliária
+  // dos próprios corretores, sem precisar do Administrador pra isso).
+  camposEditaveisEquipe: string[];
   createdAt?: string;
 }
 
