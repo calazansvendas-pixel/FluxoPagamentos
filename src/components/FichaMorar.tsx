@@ -153,7 +153,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const [isEditingItbiPosVal, setIsEditingItbiPosVal] = useState<boolean>(false);
   const [itbiPosValText, setItbiPosValText] = useState<string>('');
 
-  
+  // Edição do "Valor Líquido Morar" de cada faixa de Obra/Pós-Obra — igual ao
+  // padrão dos outros campos de moeda da ficha (buffer de texto cru enquanto
+  // edita, formata só ao sair do campo). Sem isso, o campo reformatava a cada
+  // tecla digitada e o cursor pulava, dando a impressão de campo travado.
+  const [editandoValorObraIdx, setEditandoValorObraIdx] = useState<number | null>(null);
+  const [valorObraEditText, setValorObraEditText] = useState<string>('');
+  const [editandoValorPosIdx, setEditandoValorPosIdx] = useState<number | null>(null);
+  const [valorPosEditText, setValorPosEditText] = useState<string>('');
+
+
 
   // Sincronizar isFirstHomeLocal
   useEffect(() => {
@@ -2476,11 +2485,20 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         <div className="col-span-5">
                           <input
                             type="text"
-                            value={valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : '')}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => {
+                            value={editandoValorObraIdx === originalIndex ? valorObraEditText : (valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : ''))}
+                            onFocus={(e) => {
+                              setEditandoValorObraIdx(originalIndex);
+                              setValorObraEditText(valorLiquido > 0 ? formatForEdit(valorLiquido) : '');
+                              e.target.select();
+                            }}
+                            onChange={(e) => setValorObraEditText(e.target.value)}
+                            onBlur={(e) => {
+                              setEditandoValorObraIdx(null);
                               const parsed = parseCurrency(e.target.value);
                               handleUpdateFaixaObra(originalIndex, 'valor', isNaN(parsed) ? 0 : parsed);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             }}
                             placeholder="R$ 0,00"
                             className="morar-input w-full bg-white hover:bg-slate-100 focus:bg-white px-2 py-1 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-right text-xs focus:outline-none focus:border-sky-500 transition-all"
@@ -2611,11 +2629,20 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         <div className="col-span-5">
                           <input
                             type="text"
-                            value={valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : '')}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => {
+                            value={editandoValorPosIdx === originalIndex ? valorPosEditText : (valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : ''))}
+                            onFocus={(e) => {
+                              setEditandoValorPosIdx(originalIndex);
+                              setValorPosEditText(valorLiquido > 0 ? formatForEdit(valorLiquido) : '');
+                              e.target.select();
+                            }}
+                            onChange={(e) => setValorPosEditText(e.target.value)}
+                            onBlur={(e) => {
+                              setEditandoValorPosIdx(null);
                               const parsed = parseCurrency(e.target.value);
                               handleUpdateFaixaPos(originalIndex, 'valor', isNaN(parsed) ? 0 : parsed);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             }}
                             placeholder="R$ 0,00"
                             className="morar-input w-full bg-white hover:bg-slate-100 focus:bg-white px-2 py-1 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-right text-xs focus:outline-none focus:border-indigo-500 transition-all"
