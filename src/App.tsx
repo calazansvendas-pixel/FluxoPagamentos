@@ -21,6 +21,7 @@ const ImportTableView = lazy(() => import('./components/ImportTableView').then(m
 const NewProductModal = lazy(() => import('./components/NewProductModal').then(m => ({ default: m.NewProductModal })));
 const SavedSimulationsView = lazy(() => import('./components/SavedSimulationsView').then(m => ({ default: m.SavedSimulationsView })));
 const PdfExportSettingsView = lazy(() => import('./components/PdfExportSettingsView').then(m => ({ default: m.PdfExportSettingsView })));
+const TelaVisibilitySettingsView = lazy(() => import('./components/TelaVisibilitySettingsView').then(m => ({ default: m.TelaVisibilitySettingsView })));
 
 const ViewLoadingFallback = () => (
   <div className="flex items-center justify-center py-24 text-sm text-slate-400">
@@ -687,6 +688,10 @@ export default function App({ perfil, onSair }: AppProps) {
 
           {activeTab === 'pdf-settings' && (
             <PdfExportSettingsView onShowToast={showToast} podeEditar={ehAdministrador} />
+          )}
+
+          {activeTab === 'tela-settings' && (
+            <TelaVisibilitySettingsView onShowToast={showToast} podeEditar={ehAdministrador} />
           )}
 
           {activeTab === 'import-table' && (

@@ -17,11 +17,13 @@ import {
   Save,
   Loader2
 } from 'lucide-react';
-import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData } from '../types';
+import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
+import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
 import { pdfPermissoesService } from '../services/pdfPermissoesService';
+import { telaVisibilidadeService } from '../services/telaVisibilidadeService';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -109,6 +111,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     let cancelado = false;
     pdfPermissoesService.carregarConfiguracaoParaExportar(cargoUsuario, 'sinal-morar')
       .then(settings => { if (!cancelado) setPdfSettings(settings); });
+    return () => { cancelado = true; };
+  }, [cargoUsuario]);
+
+  // O que este cargo pode ver NA TELA (independente do PDF) — definido pelo
+  // Administrador em "Configurar Visibilidade dos Quadros".
+  const [telaSettings, setTelaSettings] = useState<TelaVisibilitySettings>(DEFAULT_TELA_VISIBILITY_SETTINGS);
+  useEffect(() => {
+    let cancelado = false;
+    telaVisibilidadeService.carregarConfiguracaoParaTela(cargoUsuario, 'sinal-morar')
+      .then(settings => { if (!cancelado) setTelaSettings(settings); });
     return () => { cancelado = true; };
   }, [cargoUsuario]);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
@@ -2015,6 +2027,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         
         {/* ================= COLUNA DA ESQUERDA: DADOS DA APROVAÇÃO DE CRÉDITO ================= */}
         <div className="space-y-4">
+          {telaSettings.mostrarBloco1 && (
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
@@ -2127,8 +2140,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </strong>
             </div>
           </div>
+          )}
 
           {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO */}
+          {telaSettings.mostrarBloco4 && (
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
             {/* Cabeçalho de Bases Compartilhadas */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
@@ -2307,9 +2322,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </div>
             </div>
           </div>
+          )}
 
           {/* GRÁFICO: COMPROMETIMENTO POR SÉRIE (PARCELA / RENDA) */}
-          {hasUnitSelected && (
+          {hasUnitSelected && telaSettings.mostrarBloco2 && (
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-4 tracking-wide">Comprometimento por Série (Parcela / Renda)</h4>
               <div className="h-64">
@@ -2335,7 +2351,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         {/* ================= COLUNA DA DIREITA: FLUXO DE ENTRADA C/ CONSTRUTORA & FAIXAS MORAR ================= */}
         <div className="space-y-4">
           
-          {/* BLOCO 2: FLUXO DE ENTRADA C/ CONSTRUTORA (COMPONENTE PADRONIZADO) */}
+          {/* BLOCO 3: PERÍODO DE PAGAMENTOS (ATO + CORREÇÃO INCC/IPCA/IGPM E ITBI) */}
+          {telaSettings.mostrarBloco3 && (
+          <>
           <FluxoEntradaConstrutora
             title="2. FLUXO DE ENTRADA C/ CONSTRUTORA"
             onLimpar={limparFluxoPagamento}
@@ -2765,6 +2783,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </div>
             </div>
           </div>
+          </>
+          )}
 
         </div>
 

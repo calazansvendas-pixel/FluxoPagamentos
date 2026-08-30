@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { FileOutput, Eye, EyeOff, ShieldAlert, Save, Loader2 } from 'lucide-react';
-import { Cargo, PdfConditionKind, PdfExportSettings, PdfExportSettingsByKind } from '../types';
-import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
-import { pdfPermissoesService } from '../services/pdfPermissoesService';
+import { LayoutGrid, ShieldAlert, Save, Loader2 } from 'lucide-react';
+import { Cargo, PdfConditionKind, TelaVisibilitySettings, TelaVisibilitySettingsByKind } from '../types';
+import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
+import { telaVisibilidadeService } from '../services/telaVisibilidadeService';
 import { CARGOS } from '../config/telasApp';
 import { KIND_META } from '../config/blocosMeta';
 
-interface PdfExportSettingsViewProps {
+interface TelaVisibilitySettingsViewProps {
   onShowToast: (message: string) => void;
   // Só o Administrador consegue de fato gravar (o banco também barra — ver
-  // RLS em pdfPermissoesService.ts); aqui é só pra já mostrar a tela como
+  // RLS em telaVisibilidadeService.ts); aqui é só pra já mostrar a tela como
   // somente-leitura pra quem não pode editar, sem precisar tentar salvar.
   podeEditar: boolean;
 }
@@ -49,9 +49,9 @@ const SettingRow: React.FC<{
   </div>
 );
 
-export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ onShowToast, podeEditar }) => {
+export const TelaVisibilitySettingsView: React.FC<TelaVisibilitySettingsViewProps> = ({ onShowToast, podeEditar }) => {
   const [carregando, setCarregando] = useState(true);
-  const [todasConfiguracoes, setTodasConfiguracoes] = useState<Partial<Record<Cargo, PdfExportSettingsByKind>>>({});
+  const [todasConfiguracoes, setTodasConfiguracoes] = useState<Partial<Record<Cargo, TelaVisibilitySettingsByKind>>>({});
   const [activeCargo, setActiveCargo] = useState<Cargo>('Corretor');
   const [activeKind, setActiveKind] = useState<PdfConditionKind>('banco-direto');
   const [salvando, setSalvando] = useState(false);
@@ -60,14 +60,14 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
   useEffect(() => {
     (async () => {
       setCarregando(true);
-      const dados = await pdfPermissoesService.carregarTodasAsConfiguracoes();
+      const dados = await telaVisibilidadeService.carregarTodasAsConfiguracoes();
       setTodasConfiguracoes(dados);
       setCarregando(false);
     })();
   }, []);
 
   const activeMeta = KIND_META.find(m => m.kind === activeKind)!;
-  const activeSettings: PdfExportSettings = todasConfiguracoes[activeCargo]?.[activeKind] ?? DEFAULT_PDF_EXPORT_SETTINGS;
+  const activeSettings: TelaVisibilitySettings = todasConfiguracoes[activeCargo]?.[activeKind] ?? DEFAULT_TELA_VISIBILITY_SETTINGS;
 
   const trocarCargo = (cargo: Cargo) => {
     setActiveCargo(cargo);
@@ -79,12 +79,12 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
     setAlteracoesPendentes(false);
   };
 
-  const updateSetting = (field: keyof PdfExportSettings, value: boolean) => {
+  const updateSetting = (field: keyof TelaVisibilitySettings, value: boolean) => {
     if (!podeEditar) return;
-    const novoSettings: PdfExportSettings = { ...activeSettings, [field]: value };
+    const novoSettings: TelaVisibilitySettings = { ...activeSettings, [field]: value };
     setTodasConfiguracoes(prev => ({
       ...prev,
-      [activeCargo]: { ...(prev[activeCargo] || {}), [activeKind]: novoSettings } as PdfExportSettingsByKind
+      [activeCargo]: { ...(prev[activeCargo] || {}), [activeKind]: novoSettings } as TelaVisibilitySettingsByKind
     }));
     setAlteracoesPendentes(true);
   };
@@ -92,11 +92,11 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
   const handleSalvar = async () => {
     if (!podeEditar) return;
     setSalvando(true);
-    const res = await pdfPermissoesService.salvarConfiguracaoDoCargo(activeCargo, activeKind, activeSettings);
+    const res = await telaVisibilidadeService.salvarConfiguracaoDoCargo(activeCargo, activeKind, activeSettings);
     setSalvando(false);
     if (res.success) {
       setAlteracoesPendentes(false);
-      onShowToast(`Configuração de PDF salva para ${activeCargo}.`);
+      onShowToast(`Configuração de tela salva para ${activeCargo}.`);
     } else {
       onShowToast(`Erro ao salvar: ${res.error || 'erro desconhecido'}`);
     }
@@ -107,12 +107,12 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
       {/* CABEÇALHO */}
       <div className="flex items-center gap-3">
         <div className="p-2.5 rounded-xl bg-sky-100 text-sky-700">
-          <FileOutput className="w-5 h-5" />
+          <LayoutGrid className="w-5 h-5" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-slate-900">Configurar Exportação de PDF</h1>
+          <h1 className="text-lg font-bold text-slate-900">Configurar Visibilidade dos Quadros</h1>
           <p className="text-xs text-slate-500 font-medium">
-            Escolha, por cargo e por condição comercial, o que a ficha exportada em PDF deve conter e apresentar.
+            Escolha, por cargo e por condição comercial, quais quadros aparecem NA TELA durante a simulação — independente do que sai no PDF exportado.
           </p>
         </div>
       </div>
@@ -163,72 +163,10 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
         <div className="p-10 text-center text-sm text-slate-400">Carregando configurações...</div>
       ) : (
         <>
-          {/* AVISO: VALORES OCULTOS */}
-          <div
-            className={`p-3.5 rounded-xl border flex items-start gap-2.5 text-xs ${
-              activeSettings.mostrarValores
-                ? 'bg-slate-50 border-slate-200 text-slate-600'
-                : 'bg-amber-50 border-amber-200 text-amber-800'
-            }`}
-          >
-            {activeSettings.mostrarValores ? (
-              <Eye className="w-4 h-4 shrink-0 mt-0.5" />
-            ) : (
-              <EyeOff className="w-4 h-4 shrink-0 mt-0.5" />
-            )}
-            <span>
-              {activeSettings.mostrarValores
-                ? `Todos os valores em R$ aparecem normalmente na ficha exportada por ${activeCargo} nesta condição.`
-                : `Os valores em R$ ficam ocultos (substituídos por "—") na ficha exportada por ${activeCargo} nesta condição.`}
-            </span>
-          </div>
-
-          {/* BLOCO: VALORES */}
+          {/* BLOCO: SEÇÕES DA TELA */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="px-3.5 pt-3 pb-1">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Valores</h2>
-            </div>
-            <SettingRow
-              title="Mostrar valores em R$"
-              description='Quando desligado, gera a ficha "sem valores" — todos os campos de moeda aparecem como "—".'
-              checked={activeSettings.mostrarValores}
-              onChange={() => updateSetting('mostrarValores', !activeSettings.mostrarValores)}
-              disabled={!podeEditar}
-            />
-          </div>
-
-          {/* BLOCO: CABEÇALHO */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="px-3.5 pt-3 pb-1">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Cabeçalho</h2>
-            </div>
-            <SettingRow
-              title="Nome do cliente"
-              description='Exibe a linha "Cliente: ..." no topo da ficha.'
-              checked={activeSettings.mostrarCliente}
-              onChange={() => updateSetting('mostrarCliente', !activeSettings.mostrarCliente)}
-              disabled={!podeEditar}
-            />
-            <SettingRow
-              title="Nome da imobiliária"
-              description='Exibe a linha "Imobiliária: ..." no topo da ficha.'
-              checked={activeSettings.mostrarImobiliaria}
-              onChange={() => updateSetting('mostrarImobiliaria', !activeSettings.mostrarImobiliaria)}
-              disabled={!podeEditar}
-            />
-            <SettingRow
-              title="Data da simulação"
-              description="Exibe o selo com a data em que a simulação foi gerada."
-              checked={activeSettings.mostrarDataSimulacao}
-              onChange={() => updateSetting('mostrarDataSimulacao', !activeSettings.mostrarDataSimulacao)}
-              disabled={!podeEditar}
-            />
-          </div>
-
-          {/* BLOCO: SEÇÕES DA FICHA */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="px-3.5 pt-3 pb-1">
-              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Seções da Ficha</h2>
+              <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quadros na Tela</h2>
             </div>
             <SettingRow
               title={activeMeta.bloco1.title}
@@ -264,7 +202,7 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
             <div className="flex items-center justify-between gap-3 pt-1 px-1">
               <p className="text-[11px] text-slate-400">
                 {alteracoesPendentes
-                  ? 'Você tem alterações não salvas nesta ficha.'
+                  ? 'Você tem alterações não salvas nesta tela.'
                   : `Configuração salva para o cargo ${activeCargo} nesta condição comercial.`}
               </p>
               <button
