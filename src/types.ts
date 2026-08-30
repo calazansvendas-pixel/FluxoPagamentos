@@ -166,6 +166,12 @@ export interface PerfilUsuario {
   // hierarquia (ex.: um Gerente autorizado a corrigir telefone/imobiliária
   // dos próprios corretores, sem precisar do Administrador pra isso).
   camposEditaveisEquipe: string[];
+  // Existe no máximo UM usuário com proprietario=true no sistema inteiro (trava
+  // por índice único no banco). É quem "é dono" do aplicativo — mesmo sendo
+  // Administrador como qualquer outro, só ele mesmo pode se rebaixar de cargo,
+  // se pausar ou se excluir; nenhum outro Administrador consegue tocar nesse
+  // cadastro. Passa adiante só via "Transferir propriedade" (ver AdminPanelView).
+  proprietario: boolean;
   createdAt?: string;
 }
 

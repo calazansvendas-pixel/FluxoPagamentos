@@ -709,7 +709,7 @@ export default function App({ perfil, onSair }: AppProps) {
           )}
 
           {activeTab === 'admin-panel' && (
-            <AdminPanelView onShowToast={showToast} />
+            <AdminPanelView onShowToast={showToast} usuarioAtualId={perfil.id} />
           )}
           </Suspense>
         </main>

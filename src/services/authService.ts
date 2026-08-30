@@ -234,6 +234,78 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * GRANT EXECUTE ON FUNCTION public.editar_cadastro_subordinado(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, TEXT, UUID, BOOLEAN, TEXT[]) TO authenticated;
  * GRANT EXECUTE ON FUNCTION public.dados_equipe_para_edicao(UUID) TO authenticated;
  *
+ * -- 6e) Proprietário: existe no máximo UM usuário com proprietario=true no
+ * --     sistema inteiro (índice único abaixo garante isso no banco, não só na
+ * --     tela). É quem "é dono" do aplicativo — mesmo sendo Administrador como
+ * --     qualquer outro, só ele mesmo pode editar, pausar ou excluir o próprio
+ * --     cadastro; nenhum outro Administrador consegue tocar nele. A troca de
+ * --     dono só acontece pela função transferir_propriedade, nunca por um
+ * --     UPDATE comum — o gatilho abaixo BLOQUEIA qualquer tentativa de mudar
+ * --     essa coluna fora dessa função, mesmo vinda do próprio dono editando a
+ * --     si mesmo por engano.
+ * ALTER TABLE perfis ADD COLUMN IF NOT EXISTS proprietario BOOLEAN NOT NULL DEFAULT false;
+ * CREATE UNIQUE INDEX IF NOT EXISTS um_unico_proprietario ON perfis ((proprietario)) WHERE proprietario = true;
+ *
+ * -- Defina o dono inicial (troque o e-mail abaixo se não for o seu):
+ * UPDATE perfis SET proprietario = true WHERE email = 'calazansvendas@gmail.com';
+ *
+ * CREATE OR REPLACE FUNCTION public.protege_coluna_proprietario()
+ * RETURNS TRIGGER LANGUAGE plpgsql AS $$
+ * BEGIN
+ *   IF NEW.proprietario IS DISTINCT FROM OLD.proprietario
+ *      AND COALESCE(current_setting('app.permitir_transferencia', true), '') <> 'true' THEN
+ *     NEW.proprietario := OLD.proprietario;
+ *   END IF;
+ *   RETURN NEW;
+ * END;
+ * $$;
+ * DROP TRIGGER IF EXISTS trg_protege_proprietario ON perfis;
+ * CREATE TRIGGER trg_protege_proprietario
+ *   BEFORE UPDATE ON perfis
+ *   FOR EACH ROW EXECUTE FUNCTION public.protege_coluna_proprietario();
+ *
+ * -- Substitui as policies de UPDATE/DELETE de `perfis` (item 6 acima) para que
+ * -- nenhum Administrador comum consiga editar ou excluir a linha do dono —
+ * -- exceto o próprio dono editando a si mesmo.
+ * DROP POLICY IF EXISTS "admin_atualiza_qualquer_perfil" ON perfis;
+ * CREATE POLICY "admin_atualiza_perfil_exceto_dono_alheio" ON perfis
+ *   FOR UPDATE USING (public.is_admin(auth.uid()) AND (auth.uid() = id OR NOT proprietario));
+ * DROP POLICY IF EXISTS "admin_exclui_qualquer_perfil" ON perfis;
+ * CREATE POLICY "admin_exclui_perfil_exceto_dono" ON perfis
+ *   FOR DELETE USING (public.is_admin(auth.uid()) AND NOT proprietario);
+ *
+ * -- Única forma de trocar o dono: o dono atual chama esta função apontando
+ * -- para outro Administrador ativo. Ela mesma libera, só durante a própria
+ * -- transação, a trava do gatilho acima (set_config com is_local=true — a
+ * -- liberação desaparece sozinha ao fim da transação, nunca vaza para outras
+ * -- chamadas).
+ * CREATE OR REPLACE FUNCTION public.transferir_propriedade(novo_proprietario_id UUID)
+ * RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+ * DECLARE
+ *   sou_dono BOOLEAN;
+ *   alvo_valido BOOLEAN;
+ * BEGIN
+ *   SELECT proprietario INTO sou_dono FROM perfis WHERE id = auth.uid();
+ *   IF NOT COALESCE(sou_dono, false) THEN
+ *     RAISE EXCEPTION 'Só o proprietário atual pode transferir a propriedade.';
+ *   END IF;
+ *   IF novo_proprietario_id = auth.uid() THEN
+ *     RAISE EXCEPTION 'Escolha outra pessoa para receber a propriedade.';
+ *   END IF;
+ *   SELECT (cargo = 'Administrador' AND status = 'ativo') INTO alvo_valido FROM perfis WHERE id = novo_proprietario_id;
+ *   IF NOT COALESCE(alvo_valido, false) THEN
+ *     RAISE EXCEPTION 'O novo proprietário precisa ser um Administrador ativo.';
+ *   END IF;
+ *
+ *   PERFORM set_config('app.permitir_transferencia', 'true', true);
+ *   UPDATE perfis SET proprietario = false WHERE id = auth.uid();
+ *   UPDATE perfis SET proprietario = true WHERE id = novo_proprietario_id;
+ *
+ *   RETURN TRUE;
+ * END;
+ * $$;
+ * GRANT EXECUTE ON FUNCTION public.transferir_propriedade(UUID) TO authenticated;
+ *
  * ┌───────────────────────────────────────────────────────────────────────┐
  * │ PARTE 2 — NÃO RODAR AINDA. Só execute isto no exato momento em que o  │
  * │ merge deste PR for para produção (ou logo em seguida). `empreendimen- │
@@ -291,6 +363,7 @@ interface PerfilRow {
   telas_liberadas: string[] | null;
   ver_propostas_equipe: boolean | null;
   campos_editaveis_equipe: string[] | null;
+  proprietario: boolean | null;
   created_at?: string;
 }
 
@@ -309,6 +382,7 @@ function rowParaPerfil(row: PerfilRow): PerfilUsuario {
     telasLiberadas: row.telas_liberadas || [],
     verPropostasEquipe: !!row.ver_propostas_equipe,
     camposEditaveisEquipe: row.campos_editaveis_equipe || [],
+    proprietario: !!row.proprietario,
     createdAt: row.created_at
   };
 }
@@ -505,6 +579,16 @@ export const authService = {
   // mesmo e-mail para um cadastro novo do zero, isso pede esse passo extra.
   async excluirUsuario(id: string) {
     const { error } = await supabase.from('perfis').delete().eq('id', id);
+    return { success: !error, error: error?.message };
+  },
+
+  // --- Propriedade do aplicativo ---------------------------------------
+
+  // Só quem já é o proprietário atual consegue chamar com sucesso (a função
+  // no banco revalida isso de novo, por dentro — ver transferir_propriedade
+  // no SQL acima). `novoProprietarioId` precisa ser um Administrador ativo.
+  async transferirPropriedade(novoProprietarioId: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.rpc('transferir_propriedade', { novo_proprietario_id: novoProprietarioId });
     return { success: !error, error: error?.message };
   }
 };
