@@ -717,8 +717,24 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const somaTotalParceladoMorar = Math.round((somaTotalObra + somaTotalPos) * 100) / 100;
 
   // SOMA TOTAL DO ITBI PARCELADO E TOTAIS POR FASE C/ ITBI
-  const somaITBIObra = itbiObraTotalMeses * itbiParcelaObraValor;
-  const somaITBIPos = itbiPosTotalMeses * itbiParcelaPosValor;
+  // A parcela mensal é sempre um valor arredondado (ex.: R$ 594,25); somando
+  // essa parcela arredondada pelos 36 meses ela fecha uns centavos ACIMA ou
+  // ABAIXO do ITBI/Registro Total nominal (ex.: 12x594,25 + 24x594,25 =
+  // R$21.393,00, mas o nominal é R$21.392,92) — foi essa sobra de 8 centavos
+  // que fazia "Total com ITBI" e "Distribuído" nunca fecharem no mesmo valor.
+  // Sem edição manual de nenhuma das duas fases, a última fase com parcelas
+  // (Pós-Obra, ou Obra se não houver Pós-Obra) absorve essa sobra/falta, de
+  // forma que o total pareado dos dois nunca destoe do nominal.
+  const semEdicaoManualITBI = itbiObraValorManual === null && itbiPosValorManual === null;
+  let somaITBIObra = Math.round((itbiObraTotalMeses * itbiParcelaObraValor) * 100) / 100;
+  let somaITBIPos = Math.round((itbiPosTotalMeses * itbiParcelaPosValor) * 100) / 100;
+  if (semEdicaoManualITBI) {
+    if (itbiPosTotalMeses > 0) {
+      somaITBIPos = Math.round((saldoITBI - somaITBIObra) * 100) / 100;
+    } else if (itbiObraTotalMeses > 0) {
+      somaITBIObra = Math.round(saldoITBI * 100) / 100;
+    }
+  }
   const somaTotalITBI = Math.round((somaITBIObra + somaITBIPos) * 100) / 100;
 
   // TOTAIS EFETIVOS RECALCULADOS APÓS CASCATA
