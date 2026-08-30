@@ -404,6 +404,30 @@ export const imoveisService = {
     }
   },
 
+  // Atualiza uma simulação já existente (usado pelo salvamento automático: em
+  // vez de criar uma linha nova a cada ajuste que a pessoa faz na mesma
+  // simulação, atualiza a mesma linha até ela mudar de torre/unidade/cliente).
+  async atualizarSimulacao(id: string, dadosProposta: { cliente_nome?: string; renda?: number; empreendimento_id?: string; dados: any }) {
+    try {
+      const payload: any = {
+        cliente_nome: dadosProposta.cliente_nome || 'Cliente Não Informado',
+        renda: Number(dadosProposta.renda || 0),
+        dados: dadosProposta.dados
+      };
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dadosProposta.empreendimento_id || '');
+      if (isUUID) {
+        payload.empreendimento_id = dadosProposta.empreendimento_id;
+      }
+      const { data, error } = await supabase.from('simulacoes').update(payload).eq('id', id).select();
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, data };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Erro de conexão' };
+    }
+  },
+
   // Lista todas as simulações salvas (mais recentes primeiro). A ordenação é feita
   // no cliente por dados.salvo_em (sempre presente em toda simulação salva pela
   // Ficha Sinal c/ Morar ou Sinal c/ Banco Direto), já que o esquema da tabela

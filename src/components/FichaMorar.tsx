@@ -1593,57 +1593,77 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
   const [isSavingSimulation, setIsSavingSimulation] = useState<boolean>(false);
 
-  const handleSaveSimulation = async () => {
-    if (!currentProd) return;
-    setIsSavingSimulation(true);
-    try {
-      const dadosCompletos = {
-        empreendimento_id: currentProd.id,
-        empreendimento_nome: currentProd.name,
-        condicao_id: currentCond?.id || '',
-        condicao_nome: currentCond?.name || '',
-        torre: selectedTorre || 'Não Selecionada',
-        unidade: selectedUnidade || 'Não Selecionada',
-        simulation_data: simulationData,
-        cliente_nome: simulationData.clientName || 'Cliente Não Informado',
-        renda: income,
-        preco_tabela: price,
-        avaliacao_bancaria: evaluation,
-        itbi_total: itbiValTabela,
-        financiamento_maximo: maxFinancEfetivo,
-        subsidio: subsidyEfetivo,
-        fgts: fgtsEfetivo,
-        recurso_proprio: simulationData.ownResource || 0,
-        ato_bruto: valorAtoEfetivo,
-        desconto_ato_premiado: descontoAto,
-        ato_liquido: valorAtoEfetivo - descontoAto,
-        itbi_no_ato: atoITBIValidado,
-        total_obra: totalFaseObraComITBI,
-        total_pos_obra: totalFasePosComITBI,
-        pro_soluto_total: totalFaseObraComITBI + totalFasePosComITBI,
-        faixas_obra: faixasObra,
-        faixas_pos: faixasPos,
-        salvo_em: new Date().toISOString()
-      };
+  // Monta o snapshot completo da simulação no formato salvo em `simulacoes`.
+  const montarDadosCompletos = () => ({
+    empreendimento_id: currentProd?.id || '',
+    empreendimento_nome: currentProd?.name || '',
+    condicao_id: currentCond?.id || '',
+    condicao_nome: currentCond?.name || '',
+    torre: selectedTorre || 'Não Selecionada',
+    unidade: selectedUnidade || 'Não Selecionada',
+    simulation_data: simulationData,
+    cliente_nome: simulationData.clientName || 'Cliente Não Informado',
+    renda: income,
+    preco_tabela: price,
+    avaliacao_bancaria: evaluation,
+    itbi_total: itbiValTabela,
+    financiamento_maximo: maxFinancEfetivo,
+    subsidio: subsidyEfetivo,
+    fgts: fgtsEfetivo,
+    recurso_proprio: simulationData.ownResource || 0,
+    ato_bruto: valorAtoEfetivo,
+    desconto_ato_premiado: descontoAto,
+    ato_liquido: valorAtoEfetivo - descontoAto,
+    itbi_no_ato: atoITBIValidado,
+    total_obra: totalFaseObraComITBI,
+    total_pos_obra: totalFasePosComITBI,
+    pro_soluto_total: totalFaseObraComITBI + totalFasePosComITBI,
+    faixas_obra: faixasObra,
+    faixas_pos: faixasPos,
+    salvo_em: new Date().toISOString()
+  });
 
-      const res = await imoveisService.salvarSimulacao({
+  // Registro (id) já salvo automaticamente para a simulação atual — enquanto
+  // a pessoa continua na mesma torre/unidade, novos ajustes ATUALIZAM essa
+  // mesma linha em vez de criar uma nova a cada salvamento automático. Muda
+  // de torre/unidade/empreendimento/cliente → vira uma simulação nova.
+  const autoSavedIdRef = useRef<string | null>(null);
+  const autoSaveKeyRef = useRef<string>('');
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Salva (ou atualiza, se já havia sido salva automaticamente) a simulação.
+  // `silencioso` evita toast e o estado de "Salvando..." do botão — usado
+  // pelo salvamento automático em segundo plano.
+  const persistirSimulacao = async (silencioso: boolean) => {
+    if (!currentProd) return;
+    const dadosCompletos = montarDadosCompletos();
+    if (!silencioso) setIsSavingSimulation(true);
+    try {
+      const payload = {
         cliente_nome: simulationData.clientName || 'Cliente Não Informado',
         renda: income,
         empreendimento_id: currentProd.id,
         dados: dadosCompletos
-      });
+      };
+      const res = autoSavedIdRef.current
+        ? await imoveisService.atualizarSimulacao(autoSavedIdRef.current, payload)
+        : await imoveisService.salvarSimulacao(payload);
 
       if (res.success) {
-        onShowToast(`Proposta de ${simulationData.clientName || 'simulação'} salva no Supabase com sucesso!`);
-      } else {
+        const novoId = (res.data as any[])?.[0]?.id;
+        if (novoId) autoSavedIdRef.current = novoId;
+        if (!silencioso) onShowToast(`Proposta de ${simulationData.clientName || 'simulação'} salva no Supabase com sucesso!`);
+      } else if (!silencioso) {
         onShowToast(`Proposta registrada: ${res.error || 'Aviso de sincronização'}`);
       }
     } catch (e: any) {
-      onShowToast(`Erro ao salvar simulação: ${e?.message || 'Falha na conexão'}`);
+      if (!silencioso) onShowToast(`Erro ao salvar simulação: ${e?.message || 'Falha na conexão'}`);
     } finally {
-      setIsSavingSimulation(false);
+      if (!silencioso) setIsSavingSimulation(false);
     }
   };
+
+  const handleSaveSimulation = () => persistirSimulacao(false);
 
   const isFieldDefined = (val: number | null | undefined): boolean => {
     return val !== null && val !== undefined && !isNaN(val) && val >= 0;
@@ -1655,6 +1675,35 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const isFgtsValid = isFieldDefined(simulationData.fgts);
 
   const isSimulationComplete = isIncomeValid && isFinancingValid && isSubsidyValid && isFgtsValid;
+
+  // Salvamento automático: toda simulação completa (renda/financiamento/
+  // subsídio/FGTS preenchidos e uma unidade selecionada) fica registrada em
+  // Simulações Salvas, mesmo que a pessoa nunca clique em "Salvar Simulação".
+  // Espera 2,5s sem mudanças antes de gravar, pra não criar uma gravação a
+  // cada tecla digitada.
+  useEffect(() => {
+    const chaveAtual = `${currentProd?.id || ''}|${currentCond?.id || ''}|${selectedTorre}|${selectedUnidade}`;
+    if (chaveAtual !== autoSaveKeyRef.current) {
+      autoSaveKeyRef.current = chaveAtual;
+      autoSavedIdRef.current = null;
+    }
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    if (!currentProd || !hasUnitSelected || !isSimulationComplete) return;
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      persistirSimulacao(true);
+    }, 2500);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentProd?.id, currentCond?.id, selectedTorre, selectedUnidade, hasUnitSelected, isSimulationComplete,
+    simulationData, income, price, evaluation, itbiValTabela, maxFinancEfetivo, subsidyEfetivo, fgtsEfetivo,
+    valorAtoEfetivo, descontoAto, atoITBIValidado, totalFaseObraComITBI, totalFasePosComITBI
+  ]);
 
   if (!isSimulationComplete) {
     return (
