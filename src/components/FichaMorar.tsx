@@ -17,9 +17,13 @@ import {
   Save,
   Loader2
 } from 'lucide-react';
-import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
+import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre } from '../utils/calculations';
+import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
+import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
+import { pdfPermissoesService } from '../services/pdfPermissoesService';
+import { telaVisibilidadeService } from '../services/telaVisibilidadeService';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -39,6 +43,10 @@ interface FichaMorarProps {
   onBackToSimulator: () => void;
   onNavigateToImport: (productId: string) => void;
   onShowToast: (message: string) => void;
+  // Cargo de quem está logado — decide o que aparece no PDF exportado,
+  // conforme a política que o Administrador definiu em "Configurar
+  // Exportação de PDF" (ver pdfPermissoesService.ts).
+  cargoUsuario: Cargo;
 }
 
 export const FichaMorar: React.FC<FichaMorarProps> = ({
@@ -52,7 +60,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   onUnitSelectChange,
   onBackToSimulator,
   onNavigateToImport,
-  onShowToast
+  onShowToast,
+  cargoUsuario
 }) => {
   // Produto e Condição atuais com fallback para o primeiro disponível
   const currentProd = useMemo(() => {
@@ -93,6 +102,27 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     currentCond?.serie6Meses ?? 12
   ], [currentCond]);
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
+
+  // O que este cargo pode ver no PDF exportado — definido pelo Administrador
+  // em "Configurar Exportação de PDF". Começa mostrando tudo até a busca
+  // terminar, pra nunca travar a exportação.
+  const [pdfSettings, setPdfSettings] = useState<PdfExportSettings>(DEFAULT_PDF_EXPORT_SETTINGS);
+  useEffect(() => {
+    let cancelado = false;
+    pdfPermissoesService.carregarConfiguracaoParaExportar(cargoUsuario, 'sinal-morar')
+      .then(settings => { if (!cancelado) setPdfSettings(settings); });
+    return () => { cancelado = true; };
+  }, [cargoUsuario]);
+
+  // O que este cargo pode ver NA TELA (independente do PDF) — definido pelo
+  // Administrador em "Configurar Visibilidade dos Quadros".
+  const [telaSettings, setTelaSettings] = useState<TelaVisibilitySettings>(DEFAULT_TELA_VISIBILITY_SETTINGS);
+  useEffect(() => {
+    let cancelado = false;
+    telaVisibilidadeService.carregarConfiguracaoParaTela(cargoUsuario, 'sinal-morar')
+      .then(settings => { if (!cancelado) setTelaSettings(settings); });
+    return () => { cancelado = true; };
+  }, [cargoUsuario]);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
 
@@ -137,23 +167,26 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const [isEditingPosTotal, setIsEditingPosTotal] = useState<boolean>(false);
   const [isManualPos, setIsManualPos] = useState<boolean>(false);
 
-  // Taxas e Registro (IGPM+1%)
+  // Taxas e Registro (IGPM+1%) — o total de ITBI não é editável pela tela,
+  // sempre o calculado a partir do preço/tabela (despCartoriasCalculadas
+  // mais abaixo); `itbiTotalManual` continua existindo só porque o cálculo
+  // ainda o consulta, mas sem nenhum campo de tela chamando o setter, fica
+  // sempre `null`.
   const [dataITBI, setDataITBI] = useState<string>('setembro, 2026');
   const [itbiTotalManual, setItbiTotalManual] = useState<number | null>(null);
-  const [isEditingITBITotal, setIsEditingITBITotal] = useState<boolean>(false);
-  const [itbiInputText, setItbiInputText] = useState<string>('');
 
-  const [itbiObraQtd, setItbiObraQtd] = useState<number>(33);
+  // Nada neste bloco é editável pela tela — a quantidade de parcelas do ITBI
+  // sempre acompanha a quantidade real de parcelas de Obra/Pós-Obra
+  // (itbiObraTotalMeses/itbiPosTotalMeses, calculados mais abaixo a partir de
+  // totalParcObra/totalParcPos), e o valor de cada parcela é sempre o que o
+  // aplicativo calcula (itbiParcelaObraValor/itbiParcelaPosValor).
+  // `itbiObraValorManual`/`itbiPosValorManual` continuam existindo só porque
+  // o cálculo abaixo ainda os consulta; sem nenhum campo de tela chamando os
+  // setters, ficam sempre `null`.
   const [itbiObraValorManual, setItbiObraValorManual] = useState<number | null>(null);
-  const [isEditingItbiObraVal, setIsEditingItbiObraVal] = useState<boolean>(false);
-  const [itbiObraValText, setItbiObraValText] = useState<string>('');
-
-  const [itbiPosQtd, setItbiPosQtd] = useState<number>(27);
   const [itbiPosValorManual, setItbiPosValorManual] = useState<number | null>(null);
-  const [isEditingItbiPosVal, setIsEditingItbiPosVal] = useState<boolean>(false);
-  const [itbiPosValText, setItbiPosValText] = useState<string>('');
 
-  
+
 
   // Sincronizar isFirstHomeLocal
   useEffect(() => {
@@ -689,9 +722,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // então o excedente nunca ultrapassa a 3ª Etapa (FGTS).
   const subsidyEfetivo = subsidy;
 
-  // RATEIO DO ITBI/REGISTRO
-  const itbiObraTotalMeses = itbiObraQtd > 0 ? itbiObraQtd : (totalParcObra > 0 ? totalParcObra : 33);
-  const itbiPosTotalMeses = itbiPosQtd !== undefined ? itbiPosQtd : (totalParcPos >= 0 ? totalParcPos : 0);
+  // RATEIO DO ITBI/REGISTRO — a quantidade de meses sempre acompanha a
+  // quantidade real de parcelas de Obra/Pós-Obra, sem controle próprio.
+  const itbiObraTotalMeses = totalParcObra > 0 ? totalParcObra : 33;
+  const itbiPosTotalMeses = totalParcPos;
   const itbiTotalMeses = itbiObraTotalMeses + itbiPosTotalMeses;
 
   const itbiCalculadoMes = (hasUnitSelected && itbiTotalMeses > 0 && saldoITBI > 0)
@@ -932,8 +966,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setAtoInputText(formatCurrency(engineResult.atoResidual));
     setItbiObraValorManual(engineResult.parcelaMensalITBI);
     setItbiPosValorManual(mesesPosParam === 0 ? 0 : engineResult.parcelaMensalITBI);
-    setItbiObraQtd(mObraArr.reduce((a, b) => a + b.qtd, 0));
-    setItbiPosQtd(mesesPosParam === 0 ? 0 : mPosArr.reduce((a, b) => a + b.qtd, 0));
     setIsManualObra(false);
     setIsManualPos(false);
   };
@@ -1008,8 +1040,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setFaixasPos(mPosArr);
     setItbiObraValorManual(engineResult.parcelaMensalITBI);
     setItbiPosValorManual(mesesPosParam === 0 ? 0 : engineResult.parcelaMensalITBI);
-    setItbiObraQtd(mObraArr.reduce((a, b) => a + b.qtd, 0));
-    setItbiPosQtd(mesesPosParam === 0 ? 0 : mPosArr.reduce((a, b) => a + b.qtd, 0));
     setIsManualObra(false);
     setIsManualPos(false);
 
@@ -1202,8 +1232,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       setAtoInputText(formatCurrency(engineResult.atoResidual));
       setItbiObraValorManual(engineResult.parcelaMensalITBI);
       setItbiPosValorManual(engineResult.parcelaMensalITBI);
-      setItbiObraQtd(mObraArr.reduce((a, b) => a + b.qtd, 0));
-      setItbiPosQtd(mPosArr.reduce((a, b) => a + b.qtd, 0));
     }
   }, [sinalLiquidoTotalEfetivo, hasUnitSelected, isManualObra, isManualPos, valAtoManual, sinalMinimoVal, currentCond, income, despCartoriasEfetivas, atoITBIValidado, price, evaluation, maxFinanc, subsidy, fgts, isAtoPremiadoEnabled]);
 
@@ -1246,8 +1274,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     if (novoTotalObra < mesesObraPadraoPolitica) {
       // 1. Zerar o período de Pós-Obra
       // 2. Concentração Total do ITBI na Obra
-      setItbiObraQtd(novoTotalObra);
-      setItbiPosQtd(0);
       setItbiObraValorManual(null);
       setItbiPosValorManual(0);
 
@@ -1293,8 +1319,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     } else {
       // Regra 2: Usuário restaurou o padrão da política ou ampliou
       const novoPos = totalParcPos > 0 ? totalParcPos : mesesPosPadraoPolitica;
-      setItbiObraQtd(novoTotalObra);
-      setItbiPosQtd(novoPos);
       setItbiObraValorManual(null);
       setItbiPosValorManual(null);
 
@@ -1353,8 +1377,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
     const mesesObraAtual = totalParcObra > 0 ? totalParcObra : mesesObraPadraoPolitica;
 
-    setItbiObraQtd(mesesObraAtual);
-    setItbiPosQtd(novoTotalPos);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
 
@@ -1574,7 +1596,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
     const pushFase = (fase: { qtd: number; parcelaBrutaFinal: number }, sufixo: string) => {
       if (fase.qtd <= 0) return;
-      const parcelaBruta = fase.parcelaBrutaFinal;
+      // `morarEngineBase` é o motor "base/sugerido" (sem considerar Ato manual
+      // nem Pagamento à Vista) — quando o Ato já cobre o Pró-Soluto inteiro
+      // (saldoProSolutoRestante <= 0), não sobra parcela nenhuma de verdade,
+      // então a parcela bruta some daqui também, e não só nos cards de Obra/
+      // Pós-Obra que já respeitavam isso.
+      const parcelaBruta = saldoProSolutoRestante <= 0 ? 0 : fase.parcelaBrutaFinal;
       const subtotalBruto = fase.qtd * parcelaBruta;
       const percBase = baseLiquidaComITBI > 0 ? (subtotalBruto / baseLiquidaComITBI) * 100 : 0;
       const percRenda = income > 0 ? (parcelaBruta / income) * 100 : 0;
@@ -2000,6 +2027,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         
         {/* ================= COLUNA DA ESQUERDA: DADOS DA APROVAÇÃO DE CRÉDITO ================= */}
         <div className="space-y-4">
+          {telaSettings.mostrarBloco1 && (
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
@@ -2112,8 +2140,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </strong>
             </div>
           </div>
+          )}
 
           {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO */}
+          {telaSettings.mostrarBloco4 && (
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
             {/* Cabeçalho de Bases Compartilhadas */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
@@ -2292,9 +2322,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               </div>
             </div>
           </div>
+          )}
 
           {/* GRÁFICO: COMPROMETIMENTO POR SÉRIE (PARCELA / RENDA) */}
-          {hasUnitSelected && (
+          {hasUnitSelected && telaSettings.mostrarBloco2 && (
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <h4 className="text-sm font-semibold text-slate-800 uppercase text-center mb-4 tracking-wide">Comprometimento por Série (Parcela / Renda)</h4>
               <div className="h-64">
@@ -2320,7 +2351,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         {/* ================= COLUNA DA DIREITA: FLUXO DE ENTRADA C/ CONSTRUTORA & FAIXAS MORAR ================= */}
         <div className="space-y-4">
           
-          {/* BLOCO 2: FLUXO DE ENTRADA C/ CONSTRUTORA (COMPONENTE PADRONIZADO) */}
+          {/* BLOCO 3: PERÍODO DE PAGAMENTOS (ATO + CORREÇÃO INCC/IPCA/IGPM E ITBI) */}
+          {telaSettings.mostrarBloco3 && (
+          <>
           <FluxoEntradaConstrutora
             title="2. FLUXO DE ENTRADA C/ CONSTRUTORA"
             onLimpar={limparFluxoPagamento}
@@ -2469,18 +2502,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         </div>
 
                         <div className="col-span-5">
-                          <input
-                            type="text"
-                            value={valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : '')}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => {
-                              const parsed = parseCurrency(e.target.value);
-                              handleUpdateFaixaObra(originalIndex, 'valor', isNaN(parsed) ? 0 : parsed);
-                            }}
-                            placeholder="R$ 0,00"
-                            className="morar-input w-full bg-white hover:bg-slate-100 focus:bg-white px-2 py-1 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-right text-xs focus:outline-none focus:border-sky-500 transition-all"
-                            title="Valor Líquido Morar"
-                          />
+                          <div
+                            className="w-full px-2 py-1 rounded border border-slate-200 bg-slate-100 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                            title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                          >
+                            {valorLiquido > 0 ? formatCurrency(valorLiquido) : 'R$ 0,00'}
+                          </div>
                         </div>
 
                         <div className="col-span-3 text-right">
@@ -2604,18 +2631,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         </div>
 
                         <div className="col-span-5">
-                          <input
-                            type="text"
-                            value={valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : '')}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => {
-                              const parsed = parseCurrency(e.target.value);
-                              handleUpdateFaixaPos(originalIndex, 'valor', isNaN(parsed) ? 0 : parsed);
-                            }}
-                            placeholder="R$ 0,00"
-                            className="morar-input w-full bg-white hover:bg-slate-100 focus:bg-white px-2 py-1 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-right text-xs focus:outline-none focus:border-indigo-500 transition-all"
-                            title="Valor Líquido Morar"
-                          />
+                          <div
+                            className="w-full px-2 py-1 rounded border border-slate-200 bg-slate-100 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                            title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                          >
+                            {valorLiquido > 0 ? formatCurrency(valorLiquido) : 'R$ 0,00'}
+                          </div>
                         </div>
 
                         <div className="col-span-3 text-right">
@@ -2687,31 +2708,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   </div>
                 </div>
                 <div className="w-36 text-right">
-                  <input
-                    type="text"
-                    value={isEditingITBITotal ? itbiInputText : (despCartoriasEfetivas > 0 ? formatCurrency(despCartoriasEfetivas) : '')}
-                    onFocus={(e) => {
-                      setIsEditingITBITotal(true);
-                      setItbiInputText(despCartoriasEfetivas > 0 ? formatForEdit(despCartoriasEfetivas) : '');
-                      e.target.select();
-                    }}
-                    onChange={(e) => setItbiInputText(e.target.value)}
-                    onBlur={(e) => {
-                      setIsEditingITBITotal(false);
-                      const parsed = parseCurrency(e.target.value);
-                      if (!isNaN(parsed) && parsed >= 0) {
-                        setItbiTotalManual(parsed);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="R$ 0,00"
-                    className="morar-input w-full bg-white hover:bg-emerald-50/50 focus:bg-white px-2 py-1 rounded border border-dashed border-emerald-300 font-black text-emerald-800 text-right text-xs sm:text-sm transition-all focus:outline-none"
-                    title="Valor Total de ITBI e Registro"
-                  />
+                  <div
+                    className="w-full bg-emerald-50 px-2 py-1 rounded border border-emerald-100 font-black text-emerald-800 text-right text-xs sm:text-sm cursor-not-allowed"
+                    title="Valor calculado automaticamente a partir do preço/tabela — não editável."
+                  >
+                    {despCartoriasEfetivas > 0 ? formatCurrency(despCartoriasEfetivas) : 'R$ 0,00'}
+                  </div>
                 </div>
               </div>
 
@@ -2740,39 +2742,19 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     <span className="text-[10px] text-slate-400 font-medium">{itbiObraTotalMeses} meses</span>
                   </div>
                   <div className="flex items-center justify-center gap-1.5">
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={itbiObraQtd}
-                      onChange={(e) => setItbiObraQtd(parseInt(e.target.value, 10) || 1)}
-                      className="morar-input w-10 bg-white hover:bg-slate-100 focus:bg-white px-1 py-0.5 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-center text-xs focus:outline-none"
-                    />
+                    <div
+                      className="w-10 bg-slate-100 px-1 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-center text-xs cursor-not-allowed"
+                      title="Sempre igual à quantidade de parcelas de Obra — não editável."
+                    >
+                      {itbiObraTotalMeses}
+                    </div>
                     <span className="text-xs font-bold text-slate-600">X de</span>
-                    <input
-                      type="text"
-                      value={isEditingItbiObraVal ? itbiObraValText : (itbiParcelaObraValor > 0 ? formatCurrency(itbiParcelaObraValor) : 'R$ 0,00')}
-                      onFocus={(e) => {
-                        setIsEditingItbiObraVal(true);
-                        setItbiObraValText(itbiParcelaObraValor > 0 ? formatForEdit(itbiParcelaObraValor) : '');
-                        e.target.select();
-                      }}
-                      onChange={(e) => setItbiObraValText(e.target.value)}
-                      onBlur={(e) => {
-                        setIsEditingItbiObraVal(false);
-                        const parsed = parseCurrency(e.target.value);
-                        if (!isNaN(parsed) && parsed >= 0) {
-                          setItbiObraValorManual(parsed);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      placeholder="R$ 0,00"
-                      className="morar-input w-24 bg-white hover:bg-slate-100 focus:bg-white px-1.5 py-0.5 rounded border border-dashed border-slate-300 font-bold text-slate-900 text-right text-xs focus:outline-none"
-                    />
+                    <div
+                      className="w-24 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                      title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                    >
+                      {itbiParcelaObraValor > 0 ? formatCurrency(itbiParcelaObraValor) : 'R$ 0,00'}
+                    </div>
                   </div>
                 </div>
 
@@ -2783,44 +2765,26 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     <span className="text-[10px] text-slate-400 font-medium">{itbiPosTotalMeses} meses</span>
                   </div>
                   <div className="flex items-center justify-center gap-1.5">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={itbiPosQtd}
-                      onChange={(e) => setItbiPosQtd(parseInt(e.target.value, 10) || 0)}
-                      className="morar-input w-10 bg-white hover:bg-slate-100 focus:bg-white px-1 py-0.5 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-center text-xs focus:outline-none"
-                    />
+                    <div
+                      className="w-10 bg-slate-100 px-1 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-center text-xs cursor-not-allowed"
+                      title="Sempre igual à quantidade de parcelas de Pós-Obra — não editável."
+                    >
+                      {itbiPosTotalMeses}
+                    </div>
                     <span className="text-xs font-bold text-slate-600">X de</span>
-                    <input
-                      type="text"
-                      value={isEditingItbiPosVal ? itbiPosValText : (itbiParcelaPosValor > 0 ? formatCurrency(itbiParcelaPosValor) : 'R$ 0,00')}
-                      onFocus={(e) => {
-                        setIsEditingItbiPosVal(true);
-                        setItbiPosValText(itbiParcelaPosValor > 0 ? formatForEdit(itbiParcelaPosValor) : '');
-                        e.target.select();
-                      }}
-                      onChange={(e) => setItbiPosValText(e.target.value)}
-                      onBlur={(e) => {
-                        setIsEditingItbiPosVal(false);
-                        const parsed = parseCurrency(e.target.value);
-                        if (!isNaN(parsed) && parsed >= 0) {
-                          setItbiPosValorManual(parsed);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      placeholder="R$ 0,00"
-                      className="morar-input w-24 bg-white hover:bg-slate-100 focus:bg-white px-1.5 py-0.5 rounded border border-dashed border-slate-300 font-bold text-slate-900 text-right text-xs focus:outline-none"
-                    />
+                    <div
+                      className="w-24 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                      title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                    >
+                      {itbiParcelaPosValor > 0 ? formatCurrency(itbiParcelaPosValor) : 'R$ 0,00'}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+          </>
+          )}
 
         </div>
 
@@ -2831,6 +2795,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         <PdfExportModalMorar
           isOpen={isPdfModalOpen}
           onClose={() => setIsPdfModalOpen(false)}
+          pdfSettings={pdfSettings}
           product={currentProd}
           condition={currentCond}
           simulationData={simulationData}
@@ -2862,9 +2827,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           faixasPos={faixasPos}
           dataITBI={dataITBI}
           valorITBI={despCartoriasEfetivas}
-          itbiObraQtd={itbiObraQtd}
+          itbiObraQtd={itbiObraTotalMeses}
           itbiObraValor={itbiParcelaObraValor}
-          itbiPosQtd={itbiPosQtd}
+          itbiPosQtd={itbiPosTotalMeses}
           itbiPosValor={itbiParcelaPosValor}
           isAtoPremiadoEnabled={isAtoPremiadoEnabled}
           baseLiquidaComITBI={baseLiquidaComITBI}

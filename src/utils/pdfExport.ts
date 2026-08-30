@@ -2,7 +2,7 @@
 // PdfExportModalMorar) para tornar a captura via html2canvas-pro robusta
 // mesmo em conexões lentas ou navegadores mais carregados.
 
-import { PdfConditionKind, PdfExportSettings, PdfExportSettingsByKind } from '../types';
+import { PdfExportSettings, PdfExportSettingsByKind } from '../types';
 
 // Configuração do que cada ficha em PDF deve conter e apresentar, editável na
 // página "Configurar Exportação de PDF" — uma por tipo de condição comercial.
@@ -23,37 +23,9 @@ export const DEFAULT_PDF_EXPORT_SETTINGS_BY_KIND: PdfExportSettingsByKind = {
   'parcelamento-morar': { ...DEFAULT_PDF_EXPORT_SETTINGS },
 };
 
-const PDF_EXPORT_SETTINGS_STORAGE_KEY = 'pdf_export_settings_by_kind';
-
-/** Lê a configuração de exportação de PDF salva (com fallback para o padrão em qualquer campo/condição ausente). */
-export function loadPdfExportSettingsByKind(): PdfExportSettingsByKind {
-  try {
-    const raw = localStorage.getItem(PDF_EXPORT_SETTINGS_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_PDF_EXPORT_SETTINGS_BY_KIND };
-    const parsed = JSON.parse(raw);
-    const merged = { ...DEFAULT_PDF_EXPORT_SETTINGS_BY_KIND } as PdfExportSettingsByKind;
-    (Object.keys(merged) as PdfConditionKind[]).forEach(kind => {
-      merged[kind] = { ...DEFAULT_PDF_EXPORT_SETTINGS, ...(parsed?.[kind] || {}) };
-    });
-    return merged;
-  } catch {
-    return { ...DEFAULT_PDF_EXPORT_SETTINGS_BY_KIND };
-  }
-}
-
-export function savePdfExportSettingsByKind(settings: PdfExportSettingsByKind): void {
-  try {
-    localStorage.setItem(PDF_EXPORT_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch {
-    // Armazenamento indisponível (ex.: modo privado) — a configuração
-    // simplesmente não persiste entre sessões, sem quebrar a exportação.
-  }
-}
-
-/** Atalho para ler a configuração de apenas um tipo de condição comercial. */
-export function getPdfExportSettingsForKind(kind: PdfConditionKind): PdfExportSettings {
-  return loadPdfExportSettingsByKind()[kind];
-}
+// A configuração em si (quem pode editar o quê, por cargo) mora no banco —
+// ver src/services/pdfPermissoesService.ts. Os padrões acima (tudo visível)
+// são o que vale enquanto o Administrador não configurar um cargo específico.
 
 /**
  * Espera pelo menos dois frames de animação (garante que o navegador

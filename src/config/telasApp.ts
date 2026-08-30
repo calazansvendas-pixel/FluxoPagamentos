@@ -1,4 +1,4 @@
-import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins, FileOutput, ShieldCheck } from 'lucide-react';
+import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins, FileOutput, LayoutGrid, ShieldCheck } from 'lucide-react';
 import { ActiveTab, Cargo } from '../types';
 import { ConditionKind } from '../utils/calculations';
 
@@ -23,6 +23,7 @@ export const TELAS_APP: TelaApp[] = [
   { key: 'parcelamento-morar', label: 'Parcelamento Morar', icon: Coins, tab: 'details', variant: 'parcelamento-morar' },
   { key: 'policies', label: 'Políticas & Empreendimentos', icon: Building2, tab: 'policies' },
   { key: 'pdf-settings', label: 'Configurar Exportação PDF', icon: FileOutput, tab: 'pdf-settings' },
+  { key: 'tela-settings', label: 'Configurar Visibilidade dos Quadros', icon: LayoutGrid, tab: 'tela-settings' },
   { key: 'import-table', label: 'Importar Tabela (Excel)', icon: FileSpreadsheet, tab: 'import-table' },
   { key: 'saved-simulations', label: 'Simulações Salvas', icon: ClipboardList, tab: 'saved-simulations' },
   { key: 'admin-panel', label: 'Painel do Administrador', icon: ShieldCheck, tab: 'admin-panel' }
@@ -52,6 +53,7 @@ export const CARGOS: Cargo[] = [
   'Administrador',
   'Diretor',
   'Gerente',
+  'Coordenador de Vendas',
   'Analista de Vendas',
   'Analista de Crédito',
   'Assistente de Vendas',
@@ -73,6 +75,7 @@ export const TELAS_PADRAO_POR_CARGO: Record<Cargo, string[]> = {
   'Administrador': TELAS_PADRAO_BASE,
   'Diretor': TELAS_PADRAO_BASE,
   'Gerente': TELAS_PADRAO_BASE,
+  'Coordenador de Vendas': TELAS_PADRAO_BASE,
   'Analista de Vendas': TELAS_PADRAO_BASE,
   'Analista de Crédito': TELAS_PADRAO_BASE,
   'Assistente de Vendas': TELAS_PADRAO_BASE,

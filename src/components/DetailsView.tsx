@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
-import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
+import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
+import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
+import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
+import { pdfPermissoesService } from '../services/pdfPermissoesService';
+import { telaVisibilidadeService } from '../services/telaVisibilidadeService';
 import { PdfExportModal } from './PdfExportModal';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -23,6 +27,10 @@ interface DetailsViewProps {
   onBackToSimulator: () => void;
   onNavigateToImport: (productId: string) => void;
   onShowToast: (message: string) => void;
+  // Cargo de quem está logado — decide o que aparece no PDF exportado,
+  // conforme a política que o Administrador definiu em "Configurar
+  // Exportação de PDF" (ver pdfPermissoesService.ts).
+  cargoUsuario: Cargo;
 }
 
 export const DetailsView: React.FC<DetailsViewProps> = ({
@@ -37,7 +45,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   onUnitSelectChange,
   onBackToSimulator,
   onNavigateToImport,
-  onShowToast
+  onShowToast,
+  cargoUsuario
 }) => {
   const currentProd = useMemo(() => {
     if (product) return product;
@@ -106,6 +115,28 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // lineares de obra, intermediárias semestrais, parcela final (chaves) e
   // parcelamento pós-obra, todos calculados a partir da política de crédito.
   const isParcelamentoMorar = getConditionKind(currentCond?.name) === 'parcelamento-morar';
+
+  // O que este cargo pode ver no PDF exportado — definido pelo Administrador
+  // em "Configurar Exportação de PDF". Busca de novo sempre que o cargo ou a
+  // condição (Banco Direto x Parcelamento Morar) mudar; começa mostrando tudo
+  // até a busca terminar, pra nunca travar a exportação.
+  const [pdfSettings, setPdfSettings] = useState<PdfExportSettings>(DEFAULT_PDF_EXPORT_SETTINGS);
+  useEffect(() => {
+    let cancelado = false;
+    pdfPermissoesService.carregarConfiguracaoParaExportar(cargoUsuario, isParcelamentoMorar ? 'parcelamento-morar' : 'banco-direto')
+      .then(settings => { if (!cancelado) setPdfSettings(settings); });
+    return () => { cancelado = true; };
+  }, [cargoUsuario, isParcelamentoMorar]);
+
+  // O que este cargo pode ver NA TELA (independente do PDF) — definido pelo
+  // Administrador em "Configurar Visibilidade dos Quadros".
+  const [telaSettings, setTelaSettings] = useState<TelaVisibilitySettings>(DEFAULT_TELA_VISIBILITY_SETTINGS);
+  useEffect(() => {
+    let cancelado = false;
+    telaVisibilidadeService.carregarConfiguracaoParaTela(cargoUsuario, isParcelamentoMorar ? 'parcelamento-morar' : 'banco-direto')
+      .then(settings => { if (!cancelado) setTelaSettings(settings); });
+    return () => { cancelado = true; };
+  }, [cargoUsuario, isParcelamentoMorar]);
 
   // Todos os campos da condição "Parcelamento Morar" (quantidade e valor de
   // cada bloco) partem de uma sugestão calculada pela política de crédito, mas
@@ -1646,6 +1677,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         <div className="space-y-4">
           
           {/* BLOCO 1: DADOS DA APROVAÇÃO DE CRÉDITO */}
+          {telaSettings.mostrarBloco1 && (
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
@@ -1712,11 +1744,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
             </div>
           </div>
+          )}
 
           {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO (REPOSICIONADO NA COLUNA ESQUERDA) —
               no Parcelamento Morar, substituído pelo gráfico "Percentuais de Comprometimento"
               logo abaixo, que já cobre Mensal de Obra/Renda e Subtotal Até as Chaves. */}
-          {!isParcelamentoMorar && (
+          {!isParcelamentoMorar && telaSettings.mostrarBloco4 && (
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
             {/* Cabeçalho de Bases Compartilhadas */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
@@ -1810,7 +1843,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           )}
 
           {/* GRÁFICO: PERCENTUAIS DE COMPROMETIMENTO POR GRUPO (SINAL, MENSAIS, INTERMEDIÁRIAS, CHAVES, PÓS-OBRA) */}
-          {pmComprometimentoData.length > 0 && (
+          {pmComprometimentoData.length > 0 && telaSettings.mostrarBloco4 && (
             <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5">
                 Percentuais de Comprometimento
@@ -1843,6 +1876,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         <div className="space-y-4">
           
           {/* BLOCO 2: FLUXO DE ENTRADA C/ CONSTRUTORA (COMPONENTE PADRONIZADO) */}
+          {telaSettings.mostrarBloco2 && (
           <FluxoEntradaConstrutora
             title="2. FLUXO DE ENTRADA C/ CONSTRUTORA"
             onLimpar={limparFluxoPagamento}
@@ -1988,9 +2022,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             </div>
 
           </FluxoEntradaConstrutora>
+          )}
 
           {/* BLOCO 3: PARCELAMENTO PRÓ-SOLUTO / BANCO DIRETO — OU PARCELAMENTO MORAR */}
-          {isParcelamentoMorar ? (
+          {telaSettings.mostrarBloco3 && (isParcelamentoMorar ? (
             <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                 <div className="flex items-center gap-2">
@@ -2313,7 +2348,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 </div>
               </div>
             </div>
-          )}
+          ))}
 
         </div>
 
@@ -2329,6 +2364,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         <PdfExportModal
           isOpen={isPdfModalOpen}
           onClose={() => setIsPdfModalOpen(false)}
+          pdfSettings={pdfSettings}
           product={currentProd}
           condition={currentCond}
           simulationData={simulationData}

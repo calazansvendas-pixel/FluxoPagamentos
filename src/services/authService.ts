@@ -215,6 +215,12 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * --     lista vazia, mesmo que tente chamar a função direto — é uma segunda
  * --     camada de proteção, além da tela só mostrar a seção pra quem tem
  * --     `camposEditaveisEquipe` não vazio.
+ * -- Atenção: como esta função é `plpgsql` e usa RETURNS TABLE(id UUID, ...),
+ * -- o Postgres declara `id` como variável interna automaticamente — uma
+ * -- referência a `id` sem qualificar a tabela (ex.: `WHERE id = usuario_id`)
+ * -- fica ambígua entre a coluna `perfis.id` e essa variável, e a função falha
+ * -- (com erro) toda vez que é chamada. Por isso o alias `pf` abaixo é
+ * -- obrigatório, não cosmético.
  * CREATE OR REPLACE FUNCTION public.dados_equipe_para_edicao(usuario_id UUID)
  * RETURNS TABLE(id UUID, nome_completo TEXT, telefone TEXT, cpf TEXT, imobiliaria TEXT, creci TEXT, cargo TEXT, superior_id UUID, telas_liberadas TEXT[])
  * LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -222,7 +228,7 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *   IF usuario_id <> auth.uid() THEN
  *     RAISE EXCEPTION 'Só é possível consultar a própria equipe.';
  *   END IF;
- *   IF NOT EXISTS (SELECT 1 FROM perfis WHERE id = usuario_id AND array_length(campos_editaveis_equipe, 1) > 0) THEN
+ *   IF NOT EXISTS (SELECT 1 FROM perfis pf WHERE pf.id = usuario_id AND array_length(pf.campos_editaveis_equipe, 1) > 0) THEN
  *     RETURN;
  *   END IF;
  *   RETURN QUERY
@@ -521,26 +527,45 @@ export const authService = {
     return { success: !error, error: error?.message };
   },
 
+  // Aplica a mesma política de permissões (telas liberadas, ver propostas da
+  // equipe, campos editáveis da equipe) para TODO MUNDO que tem este cargo
+  // hoje (ativo ou pausado) — sobrescrevendo qualquer ajuste individual que
+  // essas pessoas já tivessem. Dados pessoais (nome, CPF, superior etc.) não
+  // entram aqui, só ficam mesmo na edição individual. Retorna quantas contas
+  // foram de fato afetadas.
+  async aplicarPermissoesPorCargo(cargo: Cargo, ajustes: {
+    telasLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
+  }): Promise<{ success: boolean; error?: string; afetados?: number }> {
+    const { data, error } = await supabase.from('perfis').update({
+      telas_liberadas: ajustes.telasLiberadas,
+      ver_propostas_equipe: ajustes.verPropostasEquipe,
+      campos_editaveis_equipe: ajustes.camposEditaveisEquipe
+    }).eq('cargo', cargo).in('status', ['ativo', 'pausado']).select('id');
+    return { success: !error, error: error?.message, afetados: data?.length ?? 0 };
+  },
+
   // --- Edição do cadastro da equipe (Diretor/Gerente autorizado) -----------
 
   // Lista os subordinados de `usuarioId` com os dados necessários para montar
   // o formulário de edição — só retorna algo se o próprio usuário logado tiver
   // ao menos um campo autorizado em `camposEditaveisEquipe` (ver função
   // `dados_equipe_para_edicao` no SQL acima).
-  async listarEquipeParaEdicao(usuarioId: string): Promise<MembroEquipeEditavel[]> {
+  async listarEquipeParaEdicao(usuarioId: string): Promise<{ dados: MembroEquipeEditavel[]; error?: string }> {
     const { data, error } = await supabase.rpc('dados_equipe_para_edicao', { usuario_id: usuarioId });
-    if (error || !data) return [];
-    return (data as any[]).map(row => ({
-      id: row.id,
-      nomeCompleto: row.nome_completo,
-      telefone: row.telefone,
-      cpf: row.cpf,
-      imobiliaria: row.imobiliaria,
-      creci: row.creci || undefined,
-      cargo: row.cargo,
-      superiorId: row.superior_id,
-      telasLiberadas: row.telas_liberadas || []
-    }));
+    if (error) return { dados: [], error: error.message };
+    return {
+      dados: ((data as any[]) || []).map(row => ({
+        id: row.id,
+        nomeCompleto: row.nome_completo,
+        telefone: row.telefone,
+        cpf: row.cpf,
+        imobiliaria: row.imobiliaria,
+        creci: row.creci || undefined,
+        cargo: row.cargo,
+        superiorId: row.superior_id,
+        telasLiberadas: row.telas_liberadas || []
+      }))
+    };
   },
 
   // Aplica a edição de um subordinado, campo a campo — só os campos

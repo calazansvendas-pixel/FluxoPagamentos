@@ -123,7 +123,7 @@ export interface SelectedUnit {
   unidade: string;
 }
 
-export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table' | 'saved-simulations' | 'pdf-settings' | 'admin-panel';
+export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table' | 'saved-simulations' | 'pdf-settings' | 'tela-settings' | 'admin-panel';
 
 // ---------------------------------------------------------------------------
 // Acesso & Permissões (login, cadastro, hierarquia e Painel do Administrador)
@@ -133,6 +133,7 @@ export type Cargo =
   | 'Administrador'
   | 'Diretor'
   | 'Gerente'
+  | 'Coordenador de Vendas'
   | 'Analista de Vendas'
   | 'Analista de Crédito'
   | 'Assistente de Vendas'
@@ -192,3 +193,16 @@ export interface PdfExportSettings {
 }
 
 export type PdfExportSettingsByKind = Record<PdfConditionKind, PdfExportSettings>;
+
+// Configuração do que cada cargo enxerga NA TELA durante a simulação — os
+// mesmos 4 blocos de conteúdo das telas "Sinal c/ Banco Direto"/"Sinal c/
+// Morar"/"Parcelamento Morar", mas independente da configuração de PDF acima
+// (esconder um bloco na tela não esconde ele do PDF, e vice-versa).
+export interface TelaVisibilitySettings {
+  mostrarBloco1: boolean;
+  mostrarBloco2: boolean;
+  mostrarBloco3: boolean;
+  mostrarBloco4: boolean;
+}
+
+export type TelaVisibilitySettingsByKind = Record<PdfConditionKind, TelaVisibilitySettings>;
