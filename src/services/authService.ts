@@ -4,10 +4,14 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
 /*
  * SQL DE CRIAÇÃO DO BANCO DE DADOS — ACESSO & PERMISSÕES
  * =======================================================
- * Execute este script no SQL Editor do seu projeto Supabase (uma única vez)
- * para habilitar o login. Ele NÃO altera nem apaga nenhuma tabela existente
- * (empreendimentos, unidades, simulacoes) — só adiciona a tabela de perfis, uma
- * coluna nova em `simulacoes`, e as regras de segurança (RLS) necessárias.
+ * Execute no SQL Editor do seu projeto Supabase, em DUAS ETAPAS SEPARADAS —
+ * elas têm janelas de risco diferentes para quem já usa o app hoje, sem login.
+ *
+ * ┌───────────────────────────────────────────────────────────────────────┐
+ * │ PARTE 1 — pode rodar A QUALQUER MOMENTO, inclusive antes do merge.     │
+ * │ Só cria coisas novas (tabela, coluna, funções) que o app de hoje nem   │
+ * │ sabe que existem — não muda nada do que já está no ar.                │
+ * └───────────────────────────────────────────────────────────────────────┘
  *
  * -- 1) Tabela de perfis (dados de negócio de cada usuário; a senha em si fica
  * --    guardada, criptografada, pelo próprio Supabase Auth — nunca aqui).
@@ -73,6 +77,18 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *   FOR UPDATE USING (public.is_admin(auth.uid()));
  * CREATE POLICY "admin_exclui_qualquer_perfil" ON perfis
  *   FOR DELETE USING (public.is_admin(auth.uid()));
+ * -- (RLS na tabela `perfis` é segura de ligar já: o app de hoje, no ar, nunca
+ * -- lê nem grava nessa tabela — só o código deste PR usa ela.)
+ *
+ * ┌───────────────────────────────────────────────────────────────────────┐
+ * │ PARTE 2 — NÃO RODAR AINDA. Só execute isto no exato momento em que o  │
+ * │ merge deste PR for para produção (ou logo em seguida). `empreendimen- │
+ * │ tos`, `unidades` e `simulacoes` são usadas pelo app QUE JÁ ESTÁ NO AR, │
+ * │ sem login — os usuários de hoje acessam essas tabelas sem autenticar. │
+ * │ Ligar aqui "exige estar logado" antes do código novo estar publicado  │
+ * │ derruba, na hora, o Simulador e as Políticas & Empreendimentos para   │
+ * │ todo mundo que usa o app agora.                                       │
+ * └───────────────────────────────────────────────────────────────────────┘
  *
  * -- 6) Segurança por linha da tabela de simulações: cada um vê as próprias;
  * --    Administrador vê todas; quem tem "ver_propostas_equipe" ligado também
