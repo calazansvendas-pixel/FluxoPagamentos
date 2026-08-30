@@ -450,14 +450,20 @@ export const imoveisService = {
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData?.user?.id;
       if (uid) {
-        const { data: meuPerfil } = await supabase.from('perfis').select('id, cargo, ver_propostas_equipe').eq('id', uid).maybeSingle();
+        const { data: meuPerfil, error: perfilError } = await supabase.from('perfis').select('id, cargo, ver_propostas_equipe').eq('id', uid).maybeSingle();
+        if (perfilError) {
+          console.warn('Aviso: não foi possível confirmar o perfil de quem está logado ao listar simulações (mostrando só as próprias, por segurança):', perfilError);
+        }
         if (!meuPerfil) {
           // Não deu pra confirmar quem é: por segurança, só mostra as próprias.
           visiveis = visiveis.filter((s: any) => s.criado_por === uid);
         } else if (meuPerfil.cargo !== 'Administrador') {
           const idsPermitidos = new Set<string>([uid]);
           if (meuPerfil.ver_propostas_equipe) {
-            const { data: subordinados } = await supabase.rpc('subordinados_de', { usuario_id: uid });
+            const { data: subordinados, error: rpcError } = await supabase.rpc('subordinados_de', { usuario_id: uid });
+            if (rpcError) {
+              console.warn('Aviso: não foi possível buscar os subordinados ao listar simulações (a pessoa vai ver só as próprias propostas por enquanto):', rpcError);
+            }
             (subordinados || []).forEach((s: any) => idsPermitidos.add(s.id));
           }
           visiveis = visiveis.filter((s: any) => s.criado_por && idsPermitidos.has(s.criado_por));
