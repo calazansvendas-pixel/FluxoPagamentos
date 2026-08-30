@@ -31,11 +31,41 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *   created_at TIMESTAMPTZ DEFAULT now()
  * );
  *
- * -- 2) Coluna de "dono" em cada simulação salva, para saber quem criou e
+ * -- 2) Gatilho: assim que uma conta é criada no Supabase Auth (signUp), cria
+ * --    automaticamente a linha correspondente em `perfis`, lendo os dados do
+ * --    cadastro (nome, CPF, cargo etc.) que o app manda como metadata. É o
+ * --    banco fazendo essa gravação por dentro (SECURITY DEFINER), então não
+ * --    esbarra na regra de segurança que só libera o próprio usuário depois
+ * --    que ele confirma o e-mail (nesse momento inicial ainda não há sessão).
+ * CREATE OR REPLACE FUNCTION public.handle_new_user()
+ * RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+ * BEGIN
+ *   INSERT INTO public.perfis (id, email, nome_completo, telefone, cpf, imobiliaria, creci, cargo, status, telas_liberadas, ver_propostas_equipe)
+ *   VALUES (
+ *     NEW.id,
+ *     NEW.email,
+ *     COALESCE(NEW.raw_user_meta_data->>'nome_completo', ''),
+ *     COALESCE(NEW.raw_user_meta_data->>'telefone', ''),
+ *     COALESCE(NEW.raw_user_meta_data->>'cpf', ''),
+ *     COALESCE(NEW.raw_user_meta_data->>'imobiliaria', ''),
+ *     NEW.raw_user_meta_data->>'creci',
+ *     COALESCE(NEW.raw_user_meta_data->>'cargo', 'Corretor'),
+ *     'pendente',
+ *     '{}',
+ *     false
+ *   );
+ *   RETURN NEW;
+ * END;
+ * $$;
+ * CREATE TRIGGER on_auth_user_created
+ *   AFTER INSERT ON auth.users
+ *   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+ *
+ * -- 3) Coluna de "dono" em cada simulação salva, para saber quem criou e
  * --    permitir a visão por hierarquia (Gerente/Diretor vendo a equipe).
  * ALTER TABLE simulacoes ADD COLUMN IF NOT EXISTS criado_por UUID REFERENCES auth.users(id) ON DELETE SET NULL;
  *
- * -- 3) Função auxiliar: este usuário é um Administrador ativo? Precisa ser
+ * -- 4) Função auxiliar: este usuário é um Administrador ativo? Precisa ser
  * --    SECURITY DEFINER para não cair em recursão infinita quando usada
  * --    dentro de uma policy da própria tabela `perfis`.
  * CREATE OR REPLACE FUNCTION public.is_admin(usuario_id UUID)
@@ -45,7 +75,7 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *   );
  * $$;
  *
- * -- 4) Função auxiliar: lista os ids de todos os subordinados (diretos e
+ * -- 5) Função auxiliar: lista os ids de todos os subordinados (diretos e
  * --    indiretos) de um usuário, sem expor nome/CPF/telefone de ninguém —
  * --    é o que permite Gerente/Diretor verem as propostas da equipe. O limite
  * --    de profundidade (20 níveis) é só uma proteção contra um ciclo acidental
@@ -64,7 +94,7 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * GRANT EXECUTE ON FUNCTION public.is_admin(UUID) TO authenticated;
  * GRANT EXECUTE ON FUNCTION public.subordinados_de(UUID) TO authenticated;
  *
- * -- 5) Segurança por linha (RLS) da tabela de perfis.
+ * -- 6) Segurança por linha (RLS) da tabela de perfis.
  * ALTER TABLE perfis ENABLE ROW LEVEL SECURITY;
  * CREATE POLICY "ver_proprio_perfil_ou_admin_ve_todos" ON perfis
  *   FOR SELECT USING (auth.uid() = id OR public.is_admin(auth.uid()));
@@ -90,7 +120,7 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * │ todo mundo que usa o app agora.                                       │
  * └───────────────────────────────────────────────────────────────────────┘
  *
- * -- 6) Segurança por linha da tabela de simulações: cada um vê as próprias;
+ * -- 7) Segurança por linha da tabela de simulações: cada um vê as próprias;
  * --    Administrador vê todas; quem tem "ver_propostas_equipe" ligado também
  * --    vê as de toda a equipe abaixo dele na hierarquia.
  * ALTER TABLE simulacoes ENABLE ROW LEVEL SECURITY;
@@ -110,7 +140,7 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * -- Atenção: simulações salvas ANTES desta migração não têm criado_por (ficam
  * -- NULL) — elas continuam visíveis só para o Administrador até lá.
  *
- * -- 7) Trava as tabelas de empreendimentos/unidades para exigir login (hoje
+ * -- 8) Trava as tabelas de empreendimentos/unidades para exigir login (hoje
  * --    qualquer pessoa com a chave pública do projeto conseguia ler/gravar
  * --    direto, sem passar pelo app). Deixamos a checagem fina de "quem edita
  * --    Políticas" a cargo do app (aba só aparece pra quem tem a tela liberada);
@@ -169,34 +199,34 @@ export interface DadosCadastro {
 }
 
 export const authService = {
-  // Cria o usuário no Supabase Auth (dispara o e-mail de confirmação) e, na
-  // sequência, cria a linha correspondente em `perfis` já como pendente.
+  // Cria o usuário no Supabase Auth (dispara o e-mail de confirmação). Os
+  // dados do cadastro (nome, CPF, cargo etc.) vão junto como metadata do
+  // próprio usuário do Auth — é o gatilho `handle_new_user` (ver SQL acima)
+  // que cria a linha em `perfis` a partir daí, direto no banco. Isso evita
+  // depender do app tentar gravar em `perfis` logo em seguida: nesse momento
+  // ainda não existe sessão (o Supabase só libera sessão após a confirmação
+  // do e-mail), então uma gravação feita pelo app aqui esbarraria sempre nas
+  // regras de segurança (RLS) da tabela.
   async cadastrar(dados: DadosCadastro): Promise<{ success: boolean; error?: string }> {
     try {
       const { data, error } = await supabase.auth.signUp({
         email: dados.email,
-        password: dados.senha
+        password: dados.senha,
+        options: {
+          data: {
+            nome_completo: dados.nomeCompleto,
+            telefone: dados.telefone,
+            cpf: dados.cpf,
+            imobiliaria: dados.imobiliaria,
+            creci: dados.creci || null,
+            cargo: dados.cargo
+          }
+        }
       });
       if (error) return { success: false, error: error.message };
-      const userId = data.user?.id;
-      if (!userId) {
+      if (!data.user) {
         return { success: false, error: 'Não foi possível criar o usuário. Tente novamente.' };
       }
-
-      const { error: perfilError } = await supabase.from('perfis').insert([{
-        id: userId,
-        email: dados.email,
-        nome_completo: dados.nomeCompleto,
-        telefone: dados.telefone,
-        cpf: dados.cpf,
-        imobiliaria: dados.imobiliaria,
-        creci: dados.creci || null,
-        cargo: dados.cargo,
-        status: 'pendente',
-        telas_liberadas: [],
-        ver_propostas_equipe: false
-      }]);
-      if (perfilError) return { success: false, error: perfilError.message };
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e?.message || 'Erro ao criar o cadastro.' };
