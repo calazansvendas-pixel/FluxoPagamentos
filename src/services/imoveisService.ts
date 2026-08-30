@@ -363,17 +363,36 @@ export const imoveisService = {
         dados: dadosProposta.dados
       };
 
+      // Marca quem criou a proposta — é o que permite, junto das regras de
+      // segurança (RLS) do Supabase, cada usuário ver as próprias simulações
+      // e (quando liberado) as da equipe abaixo dele na hierarquia.
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user?.id) {
+        payload.criado_por = userData.user.id;
+      }
+
       // Validar se o empreendimento_id é um UUID válido para o Supabase
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dadosProposta.empreendimento_id || '');
       if (isUUID) {
         payload.empreendimento_id = dadosProposta.empreendimento_id;
       }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('simulacoes')
         .insert([payload])
         .select();
-      
+
+      // Se a coluna criado_por ainda não existir (usuário não rodou a
+      // migração de Acesso & Permissões), grava ao menos sem o dono, para não
+      // perder a simulação enquanto isso.
+      if (error && (error.code === 'PGRST204' || /criado_por/i.test(String(error.message || '')))) {
+        console.warn('Aviso: coluna criado_por não encontrada em `simulacoes`. Rode o SQL indicado em authService.ts para habilitar a visão de propostas por hierarquia. Salvando sem o dono por enquanto.');
+        const { criado_por, ...payloadSemDono } = payload;
+        const res2 = await supabase.from('simulacoes').insert([payloadSemDono]).select();
+        data = res2.data;
+        error = res2.error;
+      }
+
       if (error) {
         console.error('Erro ao salvar no Supabase, salvando apenas no console/storage:', error);
         return { success: false, error: error.message };
@@ -381,6 +400,30 @@ export const imoveisService = {
       return { success: true, data };
     } catch (e: any) {
       console.warn('Simulação salva em modo offline (Mock):', dadosProposta);
+      return { success: false, error: e?.message || 'Erro de conexão' };
+    }
+  },
+
+  // Atualiza uma simulação já existente (usado pelo salvamento automático: em
+  // vez de criar uma linha nova a cada ajuste que a pessoa faz na mesma
+  // simulação, atualiza a mesma linha até ela mudar de torre/unidade/cliente).
+  async atualizarSimulacao(id: string, dadosProposta: { cliente_nome?: string; renda?: number; empreendimento_id?: string; dados: any }) {
+    try {
+      const payload: any = {
+        cliente_nome: dadosProposta.cliente_nome || 'Cliente Não Informado',
+        renda: Number(dadosProposta.renda || 0),
+        dados: dadosProposta.dados
+      };
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dadosProposta.empreendimento_id || '');
+      if (isUUID) {
+        payload.empreendimento_id = dadosProposta.empreendimento_id;
+      }
+      const { data, error } = await supabase.from('simulacoes').update(payload).eq('id', id).select();
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, data };
+    } catch (e: any) {
       return { success: false, error: e?.message || 'Erro de conexão' };
     }
   },
@@ -396,7 +439,83 @@ export const imoveisService = {
         console.error('Erro ao listar simulações do Supabase:', error);
         return { success: false, error: error.message, data: [] as any[] };
       }
-      const ordenadas = (data || []).slice().sort((a: any, b: any) => {
+
+      // Filtra por hierarquia aqui no app (a mesma regra que a Parte 2 do SQL
+      // reforça direto no banco quando for ligada, no dia do lançamento —
+      // até lá, essa é a única camada que impede um Corretor de ver a
+      // simulação de outro). Administrador vê tudo; cada um vê as próprias;
+      // quem tem "ver propostas da equipe" ligado também vê as de quem está
+      // de fato abaixo dele na hierarquia (via a função subordinados_de).
+      interface InfoCriador { nome: string; cargo: string; imobiliaria: string; superiorId: string | null }
+      let visiveis = data || [];
+      let infoPorId: Record<string, InfoCriador> = {};
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id;
+      if (uid) {
+        const { data: meuPerfil, error: perfilError } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria, superior_id, ver_propostas_equipe').eq('id', uid).maybeSingle();
+        if (perfilError) {
+          console.warn('Aviso: não foi possível confirmar o perfil de quem está logado ao listar simulações (mostrando só as próprias, por segurança):', perfilError);
+        }
+        if (!meuPerfil) {
+          // Não deu pra confirmar quem é: por segurança, só mostra as próprias.
+          visiveis = visiveis.filter((s: any) => s.criado_por === uid);
+        } else if (meuPerfil.cargo === 'Administrador') {
+          // Administrador já tem leitura livre de `perfis` pela RLS — busca
+          // os dados direto, é mais simples e cobre qualquer criador.
+          const idsCriadores = Array.from(new Set(visiveis.map((s: any) => s.criado_por).filter(Boolean)));
+          if (idsCriadores.length > 0) {
+            const { data: perfis } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria, superior_id').in('id', idsCriadores);
+            infoPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, { nome: p.nome_completo, cargo: p.cargo, imobiliaria: p.imobiliaria, superiorId: p.superior_id }]));
+
+            // Busca também o nome de quem é superior de algum criador, caso
+            // esse superior não tenha feito nenhuma simulação (por isso não
+            // estaria na lista acima) — é o que permite o filtro "Gerente
+            // responsável" encontrar o Gerente mesmo que ele mesmo nunca
+            // tenha salvo uma proposta.
+            const idsSuperioresFaltando = Array.from(new Set(
+              Object.values(infoPorId).map(i => i.superiorId).filter((sid): sid is string => !!sid && !infoPorId[sid])
+            ));
+            if (idsSuperioresFaltando.length > 0) {
+              const { data: superiores } = await supabase.from('perfis').select('id, nome_completo, cargo, imobiliaria, superior_id').in('id', idsSuperioresFaltando);
+              (superiores || []).forEach((p: any) => {
+                infoPorId[p.id] = { nome: p.nome_completo, cargo: p.cargo, imobiliaria: p.imobiliaria, superiorId: p.superior_id };
+              });
+            }
+          }
+        } else {
+          // Quem não é Administrador não tem permissão de ler o perfil de
+          // outras pessoas direto na tabela — por isso os dados da equipe vêm
+          // da função nomes_subordinados_de (só id/nome/cargo/imobiliária/
+          // superior, nada de CPF/telefone/e-mail).
+          infoPorId = { [uid]: { nome: meuPerfil.nome_completo, cargo: meuPerfil.cargo, imobiliaria: meuPerfil.imobiliaria, superiorId: meuPerfil.superior_id } };
+          const idsPermitidos = new Set<string>([uid]);
+          if (meuPerfil.ver_propostas_equipe) {
+            const { data: subordinados, error: rpcError } = await supabase.rpc('nomes_subordinados_de', { usuario_id: uid });
+            if (rpcError) {
+              console.warn('Aviso: não foi possível buscar os subordinados ao listar simulações (a pessoa vai ver só as próprias propostas por enquanto):', rpcError);
+            }
+            (subordinados || []).forEach((s: any) => {
+              idsPermitidos.add(s.id);
+              infoPorId[s.id] = { nome: s.nome_completo, cargo: s.cargo, imobiliaria: s.imobiliaria, superiorId: s.superior_id };
+            });
+          }
+          visiveis = visiveis.filter((s: any) => s.criado_por && idsPermitidos.has(s.criado_por));
+        }
+      }
+
+      const comCriador = visiveis.map((s: any) => {
+        const info = s.criado_por ? infoPorId[s.criado_por] : null;
+        const gerenteInfo = info?.superiorId ? infoPorId[info.superiorId] : null;
+        return {
+          ...s,
+          criado_por_nome: info?.nome || null,
+          criado_por_cargo: info?.cargo || null,
+          criado_por_imobiliaria: info?.imobiliaria || null,
+          criado_por_gerente_nome: gerenteInfo?.nome || null
+        };
+      });
+
+      const ordenadas = comCriador.slice().sort((a: any, b: any) => {
         const dataA = a?.dados?.salvo_em || '';
         const dataB = b?.dados?.salvo_em || '';
         return dataB.localeCompare(dataA);

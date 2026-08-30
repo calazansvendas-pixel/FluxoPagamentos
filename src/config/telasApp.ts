@@ -1,0 +1,81 @@
+import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins, FileOutput, ShieldCheck } from 'lucide-react';
+import { ActiveTab, Cargo } from '../types';
+import { ConditionKind } from '../utils/calculations';
+
+export interface TelaApp {
+  // Chave estável gravada em PerfilUsuario.telasLiberadas — nunca renomear uma
+  // chave existente (perfis já aprovados referenciam essas chaves no banco).
+  key: string;
+  label: string;
+  icon: typeof Calculator;
+  tab: ActiveTab;
+  variant?: ConditionKind;
+}
+
+// Fonte única das telas do sistema. O menu de Navegação (Sidebar) e o painel
+// "Editar cargo e permissões" (AdminPanelView) leem esta mesma lista — uma aba
+// nova só precisa ser adicionada aqui para aparecer automaticamente nos dois
+// lugares, liberável para qualquer cargo pelo Administrador.
+export const TELAS_APP: TelaApp[] = [
+  { key: 'simulator', label: 'Simulador de Crédito', icon: Calculator, tab: 'simulator' },
+  { key: 'banco-direto', label: 'Sinal c/ Banco Direto', icon: FileCheck2, tab: 'details', variant: 'banco-direto' },
+  { key: 'sinal-morar', label: 'Sinal c/ Morar', icon: FileCheck2, tab: 'ficha-morar' },
+  { key: 'parcelamento-morar', label: 'Parcelamento Morar', icon: Coins, tab: 'details', variant: 'parcelamento-morar' },
+  { key: 'policies', label: 'Políticas & Empreendimentos', icon: Building2, tab: 'policies' },
+  { key: 'pdf-settings', label: 'Configurar Exportação PDF', icon: FileOutput, tab: 'pdf-settings' },
+  { key: 'import-table', label: 'Importar Tabela (Excel)', icon: FileSpreadsheet, tab: 'import-table' },
+  { key: 'saved-simulations', label: 'Simulações Salvas', icon: ClipboardList, tab: 'saved-simulations' },
+  { key: 'admin-panel', label: 'Painel do Administrador', icon: ShieldCheck, tab: 'admin-panel' }
+];
+
+// Campos do cadastro de um usuário que o Administrador pode autorizar um
+// Diretor/Gerente a editar nos cadastros de quem está abaixo dele na
+// hierarquia (ver PerfilUsuario.camposEditaveisEquipe). Chave estável — nunca
+// renomear uma já existente.
+export interface CampoEditavelEquipe {
+  key: string;
+  label: string;
+}
+
+export const CAMPOS_EDITAVEIS_EQUIPE: CampoEditavelEquipe[] = [
+  { key: 'nome', label: 'Nome completo' },
+  { key: 'telefone', label: 'Telefone' },
+  { key: 'cpf', label: 'CPF' },
+  { key: 'imobiliaria', label: 'Imobiliária' },
+  { key: 'creci', label: 'CRECI' },
+  { key: 'cargo', label: 'Cargo' },
+  { key: 'superior', label: 'Superior hierárquico' },
+  { key: 'telas', label: 'Telas liberadas' }
+];
+
+export const CARGOS: Cargo[] = [
+  'Administrador',
+  'Diretor',
+  'Gerente',
+  'Analista de Vendas',
+  'Analista de Crédito',
+  'Assistente de Vendas',
+  'Assistente de Crédito',
+  'Corretor'
+];
+
+// Sugestão inicial de telas liberadas por cargo, usada só para pré-preencher a
+// tela de aprovação de cadastros pendentes — o Administrador sempre pode
+// ajustar livremente antes (ou depois) de aprovar.
+// Pacote básico igual para todo mundo: as 4 fichas de simulação + o histórico
+// de propostas. Telas mais sensíveis (Políticas & Empreendimentos, Configurar
+// Exportação PDF, Importar Tabela, Painel do Administrador) ficam de fora do
+// padrão — o Administrador libera na mão, pessoa por pessoa, quando fizer
+// sentido, seja na aprovação do cadastro ou depois em "Editar".
+const TELAS_PADRAO_BASE = ['simulator', 'banco-direto', 'sinal-morar', 'parcelamento-morar', 'saved-simulations'];
+
+export const TELAS_PADRAO_POR_CARGO: Record<Cargo, string[]> = {
+  'Administrador': TELAS_PADRAO_BASE,
+  'Diretor': TELAS_PADRAO_BASE,
+  'Gerente': TELAS_PADRAO_BASE,
+  'Analista de Vendas': TELAS_PADRAO_BASE,
+  'Analista de Crédito': TELAS_PADRAO_BASE,
+  'Assistente de Vendas': TELAS_PADRAO_BASE,
+  'Assistente de Crédito': TELAS_PADRAO_BASE,
+  'Corretor': TELAS_PADRAO_BASE
+};

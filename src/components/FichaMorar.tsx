@@ -717,17 +717,37 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const somaTotalParceladoMorar = Math.round((somaTotalObra + somaTotalPos) * 100) / 100;
 
   // SOMA TOTAL DO ITBI PARCELADO E TOTAIS POR FASE C/ ITBI
-  const somaITBIObra = itbiObraTotalMeses * itbiParcelaObraValor;
-  const somaITBIPos = itbiPosTotalMeses * itbiParcelaPosValor;
+  // A parcela mensal é sempre um valor arredondado (ex.: R$ 594,25); somando
+  // essa parcela arredondada pelos 36 meses ela fecha uns centavos ACIMA ou
+  // ABAIXO do ITBI/Registro Total nominal (ex.: 12x594,25 + 24x594,25 =
+  // R$21.393,00, mas o nominal é R$21.392,92) — foi essa sobra de 8 centavos
+  // que fazia "Total com ITBI" e "Distribuído" nunca fecharem no mesmo valor.
+  // Sem edição manual de nenhuma das duas fases, a última fase com parcelas
+  // (Pós-Obra, ou Obra se não houver Pós-Obra) absorve essa sobra/falta, de
+  // forma que o total pareado dos dois nunca destoe do nominal.
+  const semEdicaoManualITBI = itbiObraValorManual === null && itbiPosValorManual === null;
+  let somaITBIObra = Math.round((itbiObraTotalMeses * itbiParcelaObraValor) * 100) / 100;
+  let somaITBIPos = Math.round((itbiPosTotalMeses * itbiParcelaPosValor) * 100) / 100;
+  if (semEdicaoManualITBI) {
+    if (itbiPosTotalMeses > 0) {
+      somaITBIPos = Math.round((saldoITBI - somaITBIObra) * 100) / 100;
+    } else if (itbiObraTotalMeses > 0) {
+      somaITBIObra = Math.round(saldoITBI * 100) / 100;
+    }
+  }
   const somaTotalITBI = Math.round((somaITBIObra + somaITBIPos) * 100) / 100;
-  const itbiTotalEfetivo = Math.round(((Number(atoITBIValidado) || 0) + somaTotalITBI) * 100) / 100;
 
   // TOTAIS EFETIVOS RECALCULADOS APÓS CASCATA
   const totalNegocEfetivo = hasUnitSelected ? Math.round((maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo) * 100) / 100 : 0;
   const sinalTotalSemITBIEfetivo = hasUnitSelected ? Math.max(0, Math.round((price - totalNegocEfetivo) * 100) / 100) : 0;
   const sinalLiquidoTotalEfetivo = hasUnitSelected ? Math.max(0, Math.round((sinalTotalSemITBIEfetivo - descontoAto) * 100) / 100) : 0;
-  const sinalTotalComITBIEfetivo = hasUnitSelected 
-    ? Math.round((sinalTotalSemITBIEfetivo + (itbiTotalEfetivo > 0 ? itbiTotalEfetivo : despCartoriasEfetivas)) * 100) / 100 
+  // Usa sempre despCartoriasEfetivas (o total nominal, o mesmo número editável
+  // no card "Correção IGPM+1%") em vez da soma das parcelas de ITBI já
+  // arredondadas mês a mês — somar parcelas arredondadas pode fechar alguns
+  // centavos acima/abaixo do nominal, o que fazia esse mesmo "ITBI / Registro
+  // Total" aparecer com dois valores ligeiramente diferentes na mesma ficha.
+  const sinalTotalComITBIEfetivo = hasUnitSelected
+    ? Math.round((sinalTotalSemITBIEfetivo + despCartoriasEfetivas) * 100) / 100
     : 0;
 
   // PARCELAS LÍQUIDAS EFETIVAS DA CONSTRUTORA
@@ -1593,57 +1613,78 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
   const [isSavingSimulation, setIsSavingSimulation] = useState<boolean>(false);
 
-  const handleSaveSimulation = async () => {
-    if (!currentProd) return;
-    setIsSavingSimulation(true);
-    try {
-      const dadosCompletos = {
-        empreendimento_id: currentProd.id,
-        empreendimento_nome: currentProd.name,
-        condicao_id: currentCond?.id || '',
-        condicao_nome: currentCond?.name || '',
-        torre: selectedTorre || 'Não Selecionada',
-        unidade: selectedUnidade || 'Não Selecionada',
-        simulation_data: simulationData,
-        cliente_nome: simulationData.clientName || 'Cliente Não Informado',
-        renda: income,
-        preco_tabela: price,
-        avaliacao_bancaria: evaluation,
-        itbi_total: itbiValTabela,
-        financiamento_maximo: maxFinancEfetivo,
-        subsidio: subsidyEfetivo,
-        fgts: fgtsEfetivo,
-        recurso_proprio: simulationData.ownResource || 0,
-        ato_bruto: valorAtoEfetivo,
-        desconto_ato_premiado: descontoAto,
-        ato_liquido: valorAtoEfetivo - descontoAto,
-        itbi_no_ato: atoITBIValidado,
-        total_obra: totalFaseObraComITBI,
-        total_pos_obra: totalFasePosComITBI,
-        pro_soluto_total: totalFaseObraComITBI + totalFasePosComITBI,
-        faixas_obra: faixasObra,
-        faixas_pos: faixasPos,
-        salvo_em: new Date().toISOString()
-      };
+  // Monta o snapshot completo da simulação no formato salvo em `simulacoes`.
+  const montarDadosCompletos = () => ({
+    empreendimento_id: currentProd?.id || '',
+    empreendimento_nome: currentProd?.name || '',
+    condicao_id: currentCond?.id || '',
+    condicao_nome: currentCond?.name || '',
+    torre: selectedTorre || 'Não Selecionada',
+    unidade: selectedUnidade || 'Não Selecionada',
+    tipologia: hasUnitSelected ? tipologia : null,
+    simulation_data: simulationData,
+    cliente_nome: simulationData.clientName || 'Cliente Não Informado',
+    renda: income,
+    preco_tabela: price,
+    avaliacao_bancaria: evaluation,
+    itbi_total: itbiValTabela,
+    financiamento_maximo: maxFinancEfetivo,
+    subsidio: subsidyEfetivo,
+    fgts: fgtsEfetivo,
+    recurso_proprio: simulationData.ownResource || 0,
+    ato_bruto: valorAtoEfetivo,
+    desconto_ato_premiado: descontoAto,
+    ato_liquido: valorAtoEfetivo - descontoAto,
+    itbi_no_ato: atoITBIValidado,
+    total_obra: totalFaseObraComITBI,
+    total_pos_obra: totalFasePosComITBI,
+    pro_soluto_total: totalFaseObraComITBI + totalFasePosComITBI,
+    faixas_obra: faixasObra,
+    faixas_pos: faixasPos,
+    salvo_em: new Date().toISOString()
+  });
 
-      const res = await imoveisService.salvarSimulacao({
+  // Registro (id) já salvo automaticamente para a simulação atual — enquanto
+  // a pessoa continua na mesma torre/unidade, novos ajustes ATUALIZAM essa
+  // mesma linha em vez de criar uma nova a cada salvamento automático. Muda
+  // de torre/unidade/empreendimento/cliente → vira uma simulação nova.
+  const autoSavedIdRef = useRef<string | null>(null);
+  const autoSaveKeyRef = useRef<string>('');
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Salva (ou atualiza, se já havia sido salva automaticamente) a simulação.
+  // `silencioso` evita toast e o estado de "Salvando..." do botão — usado
+  // pelo salvamento automático em segundo plano.
+  const persistirSimulacao = async (silencioso: boolean) => {
+    if (!currentProd) return;
+    const dadosCompletos = montarDadosCompletos();
+    if (!silencioso) setIsSavingSimulation(true);
+    try {
+      const payload = {
         cliente_nome: simulationData.clientName || 'Cliente Não Informado',
         renda: income,
         empreendimento_id: currentProd.id,
         dados: dadosCompletos
-      });
+      };
+      const res = autoSavedIdRef.current
+        ? await imoveisService.atualizarSimulacao(autoSavedIdRef.current, payload)
+        : await imoveisService.salvarSimulacao(payload);
 
       if (res.success) {
-        onShowToast(`Proposta de ${simulationData.clientName || 'simulação'} salva no Supabase com sucesso!`);
-      } else {
+        const novoId = (res.data as any[])?.[0]?.id;
+        if (novoId) autoSavedIdRef.current = novoId;
+        if (!silencioso) onShowToast(`Proposta de ${simulationData.clientName || 'simulação'} salva no Supabase com sucesso!`);
+      } else if (!silencioso) {
         onShowToast(`Proposta registrada: ${res.error || 'Aviso de sincronização'}`);
       }
     } catch (e: any) {
-      onShowToast(`Erro ao salvar simulação: ${e?.message || 'Falha na conexão'}`);
+      if (!silencioso) onShowToast(`Erro ao salvar simulação: ${e?.message || 'Falha na conexão'}`);
     } finally {
-      setIsSavingSimulation(false);
+      if (!silencioso) setIsSavingSimulation(false);
     }
   };
+
+  const handleSaveSimulation = () => persistirSimulacao(false);
 
   const isFieldDefined = (val: number | null | undefined): boolean => {
     return val !== null && val !== undefined && !isNaN(val) && val >= 0;
@@ -1655,6 +1696,35 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const isFgtsValid = isFieldDefined(simulationData.fgts);
 
   const isSimulationComplete = isIncomeValid && isFinancingValid && isSubsidyValid && isFgtsValid;
+
+  // Salvamento automático: toda simulação completa (renda/financiamento/
+  // subsídio/FGTS preenchidos e uma unidade selecionada) fica registrada em
+  // Simulações Salvas, mesmo que a pessoa nunca clique em "Salvar Simulação".
+  // Espera 2,5s sem mudanças antes de gravar, pra não criar uma gravação a
+  // cada tecla digitada.
+  useEffect(() => {
+    const chaveAtual = `${currentProd?.id || ''}|${currentCond?.id || ''}|${selectedTorre}|${selectedUnidade}`;
+    if (chaveAtual !== autoSaveKeyRef.current) {
+      autoSaveKeyRef.current = chaveAtual;
+      autoSavedIdRef.current = null;
+    }
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    if (!currentProd || !hasUnitSelected || !isSimulationComplete) return;
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      persistirSimulacao(true);
+    }, 2500);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentProd?.id, currentCond?.id, selectedTorre, selectedUnidade, hasUnitSelected, isSimulationComplete,
+    simulationData, income, price, evaluation, itbiValTabela, maxFinancEfetivo, subsidyEfetivo, fgtsEfetivo,
+    valorAtoEfetivo, descontoAto, atoITBIValidado, totalFaseObraComITBI, totalFasePosComITBI
+  ]);
 
   if (!isSimulationComplete) {
     return (
@@ -2006,7 +2076,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             <div className="space-y-1.5 pt-1 text-xs">
               <div className="flex justify-between items-center px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200/80">
                 <span className="text-slate-600 font-medium">ITBI / Registro Total:</span>
-                <strong className="text-emerald-700 font-bold">{formatCurrency(itbiTotalEfetivo > 0 ? itbiTotalEfetivo : despCartoriasEfetivas)}</strong>
+                <strong className="text-emerald-700 font-bold">{formatCurrency(despCartoriasEfetivas)}</strong>
               </div>
               <div className="flex justify-between items-center px-3 py-1.5 bg-emerald-50/60 rounded-lg border border-emerald-100">
                 <span className="text-emerald-900 font-bold">Total com ITBI:</span>
@@ -2791,7 +2861,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           totalParcPos={totalParcPos}
           faixasPos={faixasPos}
           dataITBI={dataITBI}
-          valorITBI={itbiTotalEfetivo > 0 ? itbiTotalEfetivo : despCartoriasEfetivas}
+          valorITBI={despCartoriasEfetivas}
           itbiObraQtd={itbiObraQtd}
           itbiObraValor={itbiParcelaObraValor}
           itbiPosQtd={itbiPosQtd}
