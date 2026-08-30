@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { X, Calendar, Download, Loader2, AlertCircle, Building2 } from 'lucide-react';
-import { CommercialCondition, Product, SimulationData } from '../types';
+import { CommercialCondition, PdfExportSettings, Product, SimulationData } from '../types';
 import { formatCurrency, formatDateBr } from '../utils/formatters';
-import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets, getPdfExportSettingsForKind } from '../utils/pdfExport';
+import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets } from '../utils/pdfExport';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
@@ -28,6 +28,7 @@ export interface MorarFaixa {
 interface PdfExportModalMorarProps {
   isOpen: boolean;
   onClose: () => void;
+  pdfSettings: PdfExportSettings;
   product: Product;
   condition: CommercialCondition;
   simulationData: SimulationData;
@@ -80,6 +81,7 @@ interface PdfExportModalMorarProps {
 export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
   isOpen,
   onClose,
+  pdfSettings,
   product,
   condition,
   simulationData,
@@ -133,9 +135,6 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
 
   if (!isOpen) return null;
 
-  // Configuração de exportação de PDF definida na página "Configurar
-  // Exportação de PDF" para a condição "Sinal c/ Morar".
-  const pdfSettings = getPdfExportSettingsForKind('sinal-morar');
   const fmt = (val: number) => (pdfSettings.mostrarValores ? formatCurrency(val) : '—');
 
   const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, payload }: any) => {

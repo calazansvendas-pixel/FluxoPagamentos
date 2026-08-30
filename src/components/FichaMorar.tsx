@@ -17,9 +17,11 @@ import {
   Save,
   Loader2
 } from 'lucide-react';
-import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
+import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre } from '../utils/calculations';
+import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
+import { pdfPermissoesService } from '../services/pdfPermissoesService';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -39,6 +41,10 @@ interface FichaMorarProps {
   onBackToSimulator: () => void;
   onNavigateToImport: (productId: string) => void;
   onShowToast: (message: string) => void;
+  // Cargo de quem está logado — decide o que aparece no PDF exportado,
+  // conforme a política que o Administrador definiu em "Configurar
+  // Exportação de PDF" (ver pdfPermissoesService.ts).
+  cargoUsuario: Cargo;
 }
 
 export const FichaMorar: React.FC<FichaMorarProps> = ({
@@ -52,7 +58,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   onUnitSelectChange,
   onBackToSimulator,
   onNavigateToImport,
-  onShowToast
+  onShowToast,
+  cargoUsuario
 }) => {
   // Produto e Condição atuais com fallback para o primeiro disponível
   const currentProd = useMemo(() => {
@@ -93,6 +100,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     currentCond?.serie6Meses ?? 12
   ], [currentCond]);
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
+
+  // O que este cargo pode ver no PDF exportado — definido pelo Administrador
+  // em "Configurar Exportação de PDF". Começa mostrando tudo até a busca
+  // terminar, pra nunca travar a exportação.
+  const [pdfSettings, setPdfSettings] = useState<PdfExportSettings>(DEFAULT_PDF_EXPORT_SETTINGS);
+  useEffect(() => {
+    let cancelado = false;
+    pdfPermissoesService.carregarConfiguracaoParaExportar(cargoUsuario, 'sinal-morar')
+      .then(settings => { if (!cancelado) setPdfSettings(settings); });
+    return () => { cancelado = true; };
+  }, [cargoUsuario]);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
 
@@ -2757,6 +2775,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         <PdfExportModalMorar
           isOpen={isPdfModalOpen}
           onClose={() => setIsPdfModalOpen(false)}
+          pdfSettings={pdfSettings}
           product={currentProd}
           condition={currentCond}
           simulationData={simulationData}

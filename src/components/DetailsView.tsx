@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
-import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
+import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
+import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
+import { pdfPermissoesService } from '../services/pdfPermissoesService';
 import { PdfExportModal } from './PdfExportModal';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
@@ -23,6 +25,10 @@ interface DetailsViewProps {
   onBackToSimulator: () => void;
   onNavigateToImport: (productId: string) => void;
   onShowToast: (message: string) => void;
+  // Cargo de quem está logado — decide o que aparece no PDF exportado,
+  // conforme a política que o Administrador definiu em "Configurar
+  // Exportação de PDF" (ver pdfPermissoesService.ts).
+  cargoUsuario: Cargo;
 }
 
 export const DetailsView: React.FC<DetailsViewProps> = ({
@@ -37,7 +43,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   onUnitSelectChange,
   onBackToSimulator,
   onNavigateToImport,
-  onShowToast
+  onShowToast,
+  cargoUsuario
 }) => {
   const currentProd = useMemo(() => {
     if (product) return product;
@@ -106,6 +113,18 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // lineares de obra, intermediárias semestrais, parcela final (chaves) e
   // parcelamento pós-obra, todos calculados a partir da política de crédito.
   const isParcelamentoMorar = getConditionKind(currentCond?.name) === 'parcelamento-morar';
+
+  // O que este cargo pode ver no PDF exportado — definido pelo Administrador
+  // em "Configurar Exportação de PDF". Busca de novo sempre que o cargo ou a
+  // condição (Banco Direto x Parcelamento Morar) mudar; começa mostrando tudo
+  // até a busca terminar, pra nunca travar a exportação.
+  const [pdfSettings, setPdfSettings] = useState<PdfExportSettings>(DEFAULT_PDF_EXPORT_SETTINGS);
+  useEffect(() => {
+    let cancelado = false;
+    pdfPermissoesService.carregarConfiguracaoParaExportar(cargoUsuario, isParcelamentoMorar ? 'parcelamento-morar' : 'banco-direto')
+      .then(settings => { if (!cancelado) setPdfSettings(settings); });
+    return () => { cancelado = true; };
+  }, [cargoUsuario, isParcelamentoMorar]);
 
   // Todos os campos da condição "Parcelamento Morar" (quantidade e valor de
   // cada bloco) partem de uma sugestão calculada pela política de crédito, mas
@@ -2329,6 +2348,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         <PdfExportModal
           isOpen={isPdfModalOpen}
           onClose={() => setIsPdfModalOpen(false)}
+          pdfSettings={pdfSettings}
           product={currentProd}
           condition={currentCond}
           simulationData={simulationData}

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { X, Calendar, FileText, Download, Loader2, AlertCircle } from 'lucide-react';
-import { CommercialCondition, Product, SimulationData } from '../types';
+import { CommercialCondition, PdfExportSettings, Product, SimulationData } from '../types';
 import { formatCurrency, formatDateBr } from '../utils/formatters';
-import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets, getPdfExportSettingsForKind } from '../utils/pdfExport';
+import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets } from '../utils/pdfExport';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, Cell, LabelList } from 'recharts';
@@ -22,6 +22,7 @@ export interface PdfComprometimentoDatum {
 interface PdfExportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  pdfSettings: PdfExportSettings;
   product: Product;
   condition: CommercialCondition;
   simulationData: SimulationData;
@@ -84,6 +85,7 @@ interface PdfExportModalProps {
 export const PdfExportModal: React.FC<PdfExportModalProps> = ({
   isOpen,
   onClose,
+  pdfSettings,
   product,
   condition,
   simulationData,
@@ -143,10 +145,6 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Configuração de exportação de PDF definida na página "Configurar
-  // Exportação de PDF" — uma por tipo de condição comercial. Este modal
-  // atende tanto "Sinal c/ Banco Direto" quanto "Parcelamento Morar".
-  const pdfSettings = getPdfExportSettingsForKind(isParcelamentoMorar ? 'parcelamento-morar' : 'banco-direto');
   const fmt = (val: number) => (pdfSettings.mostrarValores ? formatCurrency(val) : '—');
 
   // Sanitizador de nome de arquivo para download

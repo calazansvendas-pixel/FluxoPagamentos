@@ -639,6 +639,7 @@ export default function App({ perfil, onSair }: AppProps) {
                 window.scrollTo(0, 0);
               }}
               onShowToast={showToast}
+              cargoUsuario={perfil.cargo}
             />
           )}
 
@@ -664,6 +665,7 @@ export default function App({ perfil, onSair }: AppProps) {
                 window.scrollTo(0, 0);
               }}
               onShowToast={showToast}
+              cargoUsuario={perfil.cargo}
             />
           )}
 
@@ -684,7 +686,7 @@ export default function App({ perfil, onSair }: AppProps) {
           )}
 
           {activeTab === 'pdf-settings' && (
-            <PdfExportSettingsView />
+            <PdfExportSettingsView onShowToast={showToast} podeEditar={ehAdministrador} />
           )}
 
           {activeTab === 'import-table' && (
