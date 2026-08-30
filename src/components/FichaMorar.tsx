@@ -143,24 +143,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const [isEditingITBITotal, setIsEditingITBITotal] = useState<boolean>(false);
   const [itbiInputText, setItbiInputText] = useState<string>('');
 
+  // Quantidade de parcelas ainda é editável (recalcula o valor automático);
+  // o valor de cada parcela em si não é mais editável pela tela — sempre o
+  // que o aplicativo calcula (ver itbiParcelaObraValor/itbiParcelaPosValor
+  // mais abaixo). `itbiObraValorManual`/`itbiPosValorManual` continuam
+  // existindo só porque o cálculo abaixo ainda os consulta; sem nenhum campo
+  // de tela chamando os setters, ficam sempre `null`.
   const [itbiObraQtd, setItbiObraQtd] = useState<number>(33);
   const [itbiObraValorManual, setItbiObraValorManual] = useState<number | null>(null);
-  const [isEditingItbiObraVal, setIsEditingItbiObraVal] = useState<boolean>(false);
-  const [itbiObraValText, setItbiObraValText] = useState<string>('');
 
   const [itbiPosQtd, setItbiPosQtd] = useState<number>(27);
   const [itbiPosValorManual, setItbiPosValorManual] = useState<number | null>(null);
-  const [isEditingItbiPosVal, setIsEditingItbiPosVal] = useState<boolean>(false);
-  const [itbiPosValText, setItbiPosValText] = useState<string>('');
-
-  // Edição do "Valor Líquido Morar" de cada faixa de Obra/Pós-Obra — igual ao
-  // padrão dos outros campos de moeda da ficha (buffer de texto cru enquanto
-  // edita, formata só ao sair do campo). Sem isso, o campo reformatava a cada
-  // tecla digitada e o cursor pulava, dando a impressão de campo travado.
-  const [editandoValorObraIdx, setEditandoValorObraIdx] = useState<number | null>(null);
-  const [valorObraEditText, setValorObraEditText] = useState<string>('');
-  const [editandoValorPosIdx, setEditandoValorPosIdx] = useState<number | null>(null);
-  const [valorPosEditText, setValorPosEditText] = useState<string>('');
 
 
 
@@ -2483,27 +2476,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         </div>
 
                         <div className="col-span-5">
-                          <input
-                            type="text"
-                            value={editandoValorObraIdx === originalIndex ? valorObraEditText : (valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : ''))}
-                            onFocus={(e) => {
-                              setEditandoValorObraIdx(originalIndex);
-                              setValorObraEditText(valorLiquido > 0 ? formatForEdit(valorLiquido) : '');
-                              e.target.select();
-                            }}
-                            onChange={(e) => setValorObraEditText(e.target.value)}
-                            onBlur={(e) => {
-                              setEditandoValorObraIdx(null);
-                              const parsed = parseCurrency(e.target.value);
-                              handleUpdateFaixaObra(originalIndex, 'valor', isNaN(parsed) ? 0 : parsed);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                            }}
-                            placeholder="R$ 0,00"
-                            className="morar-input w-full bg-white hover:bg-slate-100 focus:bg-white px-2 py-1 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-right text-xs focus:outline-none focus:border-sky-500 transition-all"
-                            title="Valor Líquido Morar"
-                          />
+                          <div
+                            className="w-full px-2 py-1 rounded border border-slate-200 bg-slate-100 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                            title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                          >
+                            {valorLiquido > 0 ? formatCurrency(valorLiquido) : 'R$ 0,00'}
+                          </div>
                         </div>
 
                         <div className="col-span-3 text-right">
@@ -2627,27 +2605,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         </div>
 
                         <div className="col-span-5">
-                          <input
-                            type="text"
-                            value={editandoValorPosIdx === originalIndex ? valorPosEditText : (valorLiquido > 0 ? formatCurrency(valorLiquido) : (saldoProSolutoRestante <= 0 ? 'R$ 0,00' : ''))}
-                            onFocus={(e) => {
-                              setEditandoValorPosIdx(originalIndex);
-                              setValorPosEditText(valorLiquido > 0 ? formatForEdit(valorLiquido) : '');
-                              e.target.select();
-                            }}
-                            onChange={(e) => setValorPosEditText(e.target.value)}
-                            onBlur={(e) => {
-                              setEditandoValorPosIdx(null);
-                              const parsed = parseCurrency(e.target.value);
-                              handleUpdateFaixaPos(originalIndex, 'valor', isNaN(parsed) ? 0 : parsed);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                            }}
-                            placeholder="R$ 0,00"
-                            className="morar-input w-full bg-white hover:bg-slate-100 focus:bg-white px-2 py-1 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-right text-xs focus:outline-none focus:border-indigo-500 transition-all"
-                            title="Valor Líquido Morar"
-                          />
+                          <div
+                            className="w-full px-2 py-1 rounded border border-slate-200 bg-slate-100 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                            title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                          >
+                            {valorLiquido > 0 ? formatCurrency(valorLiquido) : 'R$ 0,00'}
+                          </div>
                         </div>
 
                         <div className="col-span-3 text-right">
@@ -2781,30 +2744,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                       className="morar-input w-10 bg-white hover:bg-slate-100 focus:bg-white px-1 py-0.5 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-center text-xs focus:outline-none"
                     />
                     <span className="text-xs font-bold text-slate-600">X de</span>
-                    <input
-                      type="text"
-                      value={isEditingItbiObraVal ? itbiObraValText : (itbiParcelaObraValor > 0 ? formatCurrency(itbiParcelaObraValor) : 'R$ 0,00')}
-                      onFocus={(e) => {
-                        setIsEditingItbiObraVal(true);
-                        setItbiObraValText(itbiParcelaObraValor > 0 ? formatForEdit(itbiParcelaObraValor) : '');
-                        e.target.select();
-                      }}
-                      onChange={(e) => setItbiObraValText(e.target.value)}
-                      onBlur={(e) => {
-                        setIsEditingItbiObraVal(false);
-                        const parsed = parseCurrency(e.target.value);
-                        if (!isNaN(parsed) && parsed >= 0) {
-                          setItbiObraValorManual(parsed);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      placeholder="R$ 0,00"
-                      className="morar-input w-24 bg-white hover:bg-slate-100 focus:bg-white px-1.5 py-0.5 rounded border border-dashed border-slate-300 font-bold text-slate-900 text-right text-xs focus:outline-none"
-                    />
+                    <div
+                      className="w-24 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                      title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                    >
+                      {itbiParcelaObraValor > 0 ? formatCurrency(itbiParcelaObraValor) : 'R$ 0,00'}
+                    </div>
                   </div>
                 </div>
 
@@ -2824,30 +2769,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                       className="morar-input w-10 bg-white hover:bg-slate-100 focus:bg-white px-1 py-0.5 rounded border border-dashed border-slate-300 font-bold text-slate-800 text-center text-xs focus:outline-none"
                     />
                     <span className="text-xs font-bold text-slate-600">X de</span>
-                    <input
-                      type="text"
-                      value={isEditingItbiPosVal ? itbiPosValText : (itbiParcelaPosValor > 0 ? formatCurrency(itbiParcelaPosValor) : 'R$ 0,00')}
-                      onFocus={(e) => {
-                        setIsEditingItbiPosVal(true);
-                        setItbiPosValText(itbiParcelaPosValor > 0 ? formatForEdit(itbiParcelaPosValor) : '');
-                        e.target.select();
-                      }}
-                      onChange={(e) => setItbiPosValText(e.target.value)}
-                      onBlur={(e) => {
-                        setIsEditingItbiPosVal(false);
-                        const parsed = parseCurrency(e.target.value);
-                        if (!isNaN(parsed) && parsed >= 0) {
-                          setItbiPosValorManual(parsed);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      placeholder="R$ 0,00"
-                      className="morar-input w-24 bg-white hover:bg-slate-100 focus:bg-white px-1.5 py-0.5 rounded border border-dashed border-slate-300 font-bold text-slate-900 text-right text-xs focus:outline-none"
-                    />
+                    <div
+                      className="w-24 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                      title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                    >
+                      {itbiParcelaPosValor > 0 ? formatCurrency(itbiParcelaPosValor) : 'R$ 0,00'}
+                    </div>
                   </div>
                 </div>
               </div>
