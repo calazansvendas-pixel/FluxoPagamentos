@@ -91,8 +91,24 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *   )
  *   SELECT id FROM arvore;
  * $$;
+ *
+ * -- 5b) Igual à de cima, mas também traz o NOME de cada subordinado — é o que
+ * --     permite mostrar "Feito por: <nome>" pra um Gerente/Diretor nas
+ * --     propostas da equipe, sem dar acesso ao perfil completo (CPF,
+ * --     telefone, e-mail) de quem está abaixo dele.
+ * CREATE OR REPLACE FUNCTION public.nomes_subordinados_de(usuario_id UUID)
+ * RETURNS TABLE(id UUID, nome_completo TEXT) LANGUAGE SQL SECURITY DEFINER SET search_path = public AS $$
+ *   WITH RECURSIVE arvore AS (
+ *     SELECT p.id, 1 AS profundidade FROM perfis p WHERE p.superior_id = usuario_id
+ *     UNION ALL
+ *     SELECT p.id, a.profundidade + 1 FROM perfis p INNER JOIN arvore a ON p.superior_id = a.id
+ *     WHERE a.profundidade < 20
+ *   )
+ *   SELECT p.id, p.nome_completo FROM perfis p WHERE p.id IN (SELECT id FROM arvore);
+ * $$;
  * GRANT EXECUTE ON FUNCTION public.is_admin(UUID) TO authenticated;
  * GRANT EXECUTE ON FUNCTION public.subordinados_de(UUID) TO authenticated;
+ * GRANT EXECUTE ON FUNCTION public.nomes_subordinados_de(UUID) TO authenticated;
  *
  * -- 6) Segurança por linha (RLS) da tabela de perfis.
  * ALTER TABLE perfis ENABLE ROW LEVEL SECURITY;

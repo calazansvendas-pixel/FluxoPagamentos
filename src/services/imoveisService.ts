@@ -447,39 +447,46 @@ export const imoveisService = {
       // quem tem "ver propostas da equipe" ligado também vê as de quem está
       // de fato abaixo dele na hierarquia (via a função subordinados_de).
       let visiveis = data || [];
+      let nomesPorId: Record<string, string> = {};
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData?.user?.id;
       if (uid) {
-        const { data: meuPerfil, error: perfilError } = await supabase.from('perfis').select('id, cargo, ver_propostas_equipe').eq('id', uid).maybeSingle();
+        const { data: meuPerfil, error: perfilError } = await supabase.from('perfis').select('id, nome_completo, cargo, ver_propostas_equipe').eq('id', uid).maybeSingle();
         if (perfilError) {
           console.warn('Aviso: não foi possível confirmar o perfil de quem está logado ao listar simulações (mostrando só as próprias, por segurança):', perfilError);
         }
         if (!meuPerfil) {
           // Não deu pra confirmar quem é: por segurança, só mostra as próprias.
           visiveis = visiveis.filter((s: any) => s.criado_por === uid);
-        } else if (meuPerfil.cargo !== 'Administrador') {
+        } else if (meuPerfil.cargo === 'Administrador') {
+          // Administrador já tem leitura livre de `perfis` pela RLS — busca
+          // os nomes direto, é mais simples e cobre qualquer criador.
+          const idsCriadores = Array.from(new Set(visiveis.map((s: any) => s.criado_por).filter(Boolean)));
+          if (idsCriadores.length > 0) {
+            const { data: perfis } = await supabase.from('perfis').select('id, nome_completo').in('id', idsCriadores);
+            nomesPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, p.nome_completo]));
+          }
+        } else {
+          // Quem não é Administrador não tem permissão de ler o perfil de
+          // outras pessoas direto na tabela — por isso os nomes da equipe
+          // vêm da função nomes_subordinados_de (só id + nome, nada de
+          // CPF/telefone/e-mail).
+          nomesPorId = { [uid]: meuPerfil.nome_completo };
           const idsPermitidos = new Set<string>([uid]);
           if (meuPerfil.ver_propostas_equipe) {
-            const { data: subordinados, error: rpcError } = await supabase.rpc('subordinados_de', { usuario_id: uid });
+            const { data: subordinados, error: rpcError } = await supabase.rpc('nomes_subordinados_de', { usuario_id: uid });
             if (rpcError) {
               console.warn('Aviso: não foi possível buscar os subordinados ao listar simulações (a pessoa vai ver só as próprias propostas por enquanto):', rpcError);
             }
-            (subordinados || []).forEach((s: any) => idsPermitidos.add(s.id));
+            (subordinados || []).forEach((s: any) => {
+              idsPermitidos.add(s.id);
+              nomesPorId[s.id] = s.nome_completo;
+            });
           }
           visiveis = visiveis.filter((s: any) => s.criado_por && idsPermitidos.has(s.criado_por));
         }
       }
 
-      // Busca o nome de quem criou cada simulação visível. `criado_por`
-      // referencia auth.users (não perfis diretamente), então não dá pra
-      // pedir isso junto num só embed do PostgREST — faz-se uma segunda
-      // consulta com os ids únicos.
-      const idsCriadores = Array.from(new Set(visiveis.map((s: any) => s.criado_por).filter(Boolean)));
-      let nomesPorId: Record<string, string> = {};
-      if (idsCriadores.length > 0) {
-        const { data: perfis } = await supabase.from('perfis').select('id, nome_completo').in('id', idsCriadores);
-        nomesPorId = Object.fromEntries((perfis || []).map((p: any) => [p.id, p.nome_completo]));
-      }
       const comCriador = visiveis.map((s: any) => ({
         ...s,
         criado_por_nome: s.criado_por ? (nomesPorId[s.criado_por] || null) : null
