@@ -132,6 +132,10 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
   };
 
   const alternarPausa = async (u: PerfilUsuario) => {
+    if (u.cargo === 'Administrador' && u.status === 'ativo') {
+      onShowToast('Administradores não podem ser pausados por aqui. Mude o cargo da pessoa antes, se for o caso.');
+      return;
+    }
     const novoStatus: StatusConta = u.status === 'ativo' ? 'pausado' : 'ativo';
     setProcessandoId(u.id);
     const res = await authService.definirStatus(u.id, novoStatus);
@@ -145,6 +149,11 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
   };
 
   const confirmarExcluir = async (u: PerfilUsuario) => {
+    if (u.cargo === 'Administrador') {
+      onShowToast('Administradores não podem ser excluídos por aqui. Mude o cargo da pessoa antes, se for o caso.');
+      setConfirmandoExclusao(null);
+      return;
+    }
     setProcessandoId(u.id);
     const res = await authService.excluirUsuario(u.id);
     setProcessandoId(null);
@@ -323,22 +332,31 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
                             <button type="button" onClick={() => abrirEdicao(u)} className="px-2.5 py-1.5 border border-sky-200 text-sky-700 hover:bg-sky-50 font-bold rounded-lg flex items-center gap-1 cursor-pointer">
                               <Pencil className="w-3.5 h-3.5" /> Editar
                             </button>
-                            <button
-                              type="button"
-                              disabled={processandoId === u.id}
-                              onClick={() => alternarPausa(u)}
-                              className={`px-2.5 py-1.5 font-bold rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-60 ${u.status === 'ativo' ? 'border border-slate-300 text-slate-500 hover:border-rose-300 hover:text-rose-600' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
-                            >
-                              {u.status === 'ativo' ? <><Ban className="w-3.5 h-3.5" /> Pausar</> : <><PlayCircle className="w-3.5 h-3.5" /> Reativar</>}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmandoExclusao(u.id)}
-                              className="px-2.5 py-1.5 border border-slate-300 text-slate-500 hover:border-rose-300 hover:text-rose-600 font-bold rounded-lg flex items-center gap-1 cursor-pointer"
-                              title="Excluir conta"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Excluir
-                            </button>
+                            {(() => {
+                              const bloqueado = u.cargo === 'Administrador';
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={processandoId === u.id || (bloqueado && u.status === 'ativo')}
+                                    onClick={() => alternarPausa(u)}
+                                    title={bloqueado && u.status === 'ativo' ? 'Administradores não podem ser pausados por aqui' : undefined}
+                                    className={`px-2.5 py-1.5 font-bold rounded-lg flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed ${bloqueado && u.status === 'ativo' ? '' : 'cursor-pointer'} ${u.status === 'ativo' ? 'border border-slate-300 text-slate-500 hover:border-rose-300 hover:text-rose-600' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                                  >
+                                    {u.status === 'ativo' ? <><Ban className="w-3.5 h-3.5" /> Pausar</> : <><PlayCircle className="w-3.5 h-3.5" /> Reativar</>}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={bloqueado}
+                                    onClick={() => setConfirmandoExclusao(u.id)}
+                                    className="px-2.5 py-1.5 border border-slate-300 text-slate-500 hover:border-rose-300 hover:text-rose-600 font-bold rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-slate-300 disabled:hover:text-slate-500"
+                                    title={bloqueado ? 'Administradores não podem ser excluídos por aqui' : 'Excluir conta'}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" /> Excluir
+                                  </button>
+                                </>
+                              );
+                            })()}
                           </div>
                         )}
                       </td>
@@ -350,7 +368,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast }) =
           </div>
         )}
         <p className="px-5 py-3 text-[11px] text-slate-400 border-t border-slate-100">
-          "Editar" muda o cargo, o superior hierárquico e as telas liberadas de qualquer pessoa — Administrador, Diretor, Gerente, Analista, Assistente ou Corretor — a qualquer momento. "Pausar" bloqueia o acesso sem apagar os dados; "Excluir" remove a conta em definitivo.
+          "Editar" muda o cargo, o superior hierárquico e as telas liberadas de qualquer pessoa — Administrador, Diretor, Gerente, Analista, Assistente ou Corretor — a qualquer momento. "Pausar" bloqueia o acesso sem apagar os dados; "Excluir" remove a conta em definitivo. Por segurança, quem tem cargo Administrador não pode ser pausado nem excluído por aqui — mude o cargo primeiro em "Editar", se for realmente necessário.
         </p>
       </div>
 
