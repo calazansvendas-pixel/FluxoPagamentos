@@ -1574,7 +1574,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
     const pushFase = (fase: { qtd: number; parcelaBrutaFinal: number }, sufixo: string) => {
       if (fase.qtd <= 0) return;
-      const parcelaBruta = fase.parcelaBrutaFinal;
+      // `morarEngineBase` é o motor "base/sugerido" (sem considerar Ato manual
+      // nem Pagamento à Vista) — quando o Ato já cobre o Pró-Soluto inteiro
+      // (saldoProSolutoRestante <= 0), não sobra parcela nenhuma de verdade,
+      // então a parcela bruta some daqui também, e não só nos cards de Obra/
+      // Pós-Obra que já respeitavam isso.
+      const parcelaBruta = saldoProSolutoRestante <= 0 ? 0 : fase.parcelaBrutaFinal;
       const subtotalBruto = fase.qtd * parcelaBruta;
       const percBase = baseLiquidaComITBI > 0 ? (subtotalBruto / baseLiquidaComITBI) * 100 : 0;
       const percRenda = income > 0 ? (parcelaBruta / income) * 100 : 0;
