@@ -720,14 +720,18 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const somaITBIObra = itbiObraTotalMeses * itbiParcelaObraValor;
   const somaITBIPos = itbiPosTotalMeses * itbiParcelaPosValor;
   const somaTotalITBI = Math.round((somaITBIObra + somaITBIPos) * 100) / 100;
-  const itbiTotalEfetivo = Math.round(((Number(atoITBIValidado) || 0) + somaTotalITBI) * 100) / 100;
 
   // TOTAIS EFETIVOS RECALCULADOS APÓS CASCATA
   const totalNegocEfetivo = hasUnitSelected ? Math.round((maxFinancEfetivo + subsidyEfetivo + fgtsEfetivo) * 100) / 100 : 0;
   const sinalTotalSemITBIEfetivo = hasUnitSelected ? Math.max(0, Math.round((price - totalNegocEfetivo) * 100) / 100) : 0;
   const sinalLiquidoTotalEfetivo = hasUnitSelected ? Math.max(0, Math.round((sinalTotalSemITBIEfetivo - descontoAto) * 100) / 100) : 0;
-  const sinalTotalComITBIEfetivo = hasUnitSelected 
-    ? Math.round((sinalTotalSemITBIEfetivo + (itbiTotalEfetivo > 0 ? itbiTotalEfetivo : despCartoriasEfetivas)) * 100) / 100 
+  // Usa sempre despCartoriasEfetivas (o total nominal, o mesmo número editável
+  // no card "Correção IGPM+1%") em vez da soma das parcelas de ITBI já
+  // arredondadas mês a mês — somar parcelas arredondadas pode fechar alguns
+  // centavos acima/abaixo do nominal, o que fazia esse mesmo "ITBI / Registro
+  // Total" aparecer com dois valores ligeiramente diferentes na mesma ficha.
+  const sinalTotalComITBIEfetivo = hasUnitSelected
+    ? Math.round((sinalTotalSemITBIEfetivo + despCartoriasEfetivas) * 100) / 100
     : 0;
 
   // PARCELAS LÍQUIDAS EFETIVAS DA CONSTRUTORA
@@ -2056,7 +2060,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             <div className="space-y-1.5 pt-1 text-xs">
               <div className="flex justify-between items-center px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200/80">
                 <span className="text-slate-600 font-medium">ITBI / Registro Total:</span>
-                <strong className="text-emerald-700 font-bold">{formatCurrency(itbiTotalEfetivo > 0 ? itbiTotalEfetivo : despCartoriasEfetivas)}</strong>
+                <strong className="text-emerald-700 font-bold">{formatCurrency(despCartoriasEfetivas)}</strong>
               </div>
               <div className="flex justify-between items-center px-3 py-1.5 bg-emerald-50/60 rounded-lg border border-emerald-100">
                 <span className="text-emerald-900 font-bold">Total com ITBI:</span>
@@ -2841,7 +2845,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           totalParcPos={totalParcPos}
           faixasPos={faixasPos}
           dataITBI={dataITBI}
-          valorITBI={itbiTotalEfetivo > 0 ? itbiTotalEfetivo : despCartoriasEfetivas}
+          valorITBI={despCartoriasEfetivas}
           itbiObraQtd={itbiObraQtd}
           itbiObraValor={itbiParcelaObraValor}
           itbiPosQtd={itbiPosQtd}
