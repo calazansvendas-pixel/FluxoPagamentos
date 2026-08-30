@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileOutput, FileCheck2, Coins, Eye, EyeOff, ShieldAlert } from 'lucide-react';
+import { FileOutput, FileCheck2, Coins, Eye, EyeOff, ShieldAlert, Save, Loader2 } from 'lucide-react';
 import { Cargo, PdfConditionKind, PdfExportSettings, PdfExportSettingsByKind } from '../types';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
 import { pdfPermissoesService } from '../services/pdfPermissoesService';
@@ -98,6 +98,8 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
   const [todasConfiguracoes, setTodasConfiguracoes] = useState<Partial<Record<Cargo, PdfExportSettingsByKind>>>({});
   const [activeCargo, setActiveCargo] = useState<Cargo>('Corretor');
   const [activeKind, setActiveKind] = useState<PdfConditionKind>('banco-direto');
+  const [salvando, setSalvando] = useState(false);
+  const [alteracoesPendentes, setAlteracoesPendentes] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -111,17 +113,35 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
   const activeMeta = KIND_META.find(m => m.kind === activeKind)!;
   const activeSettings: PdfExportSettings = todasConfiguracoes[activeCargo]?.[activeKind] ?? DEFAULT_PDF_EXPORT_SETTINGS;
 
-  const updateSetting = async (field: keyof PdfExportSettings, value: boolean) => {
+  const trocarCargo = (cargo: Cargo) => {
+    setActiveCargo(cargo);
+    setAlteracoesPendentes(false);
+  };
+
+  const trocarCondicao = (kind: PdfConditionKind) => {
+    setActiveKind(kind);
+    setAlteracoesPendentes(false);
+  };
+
+  const updateSetting = (field: keyof PdfExportSettings, value: boolean) => {
     if (!podeEditar) return;
-    const anterior = todasConfiguracoes;
     const novoSettings: PdfExportSettings = { ...activeSettings, [field]: value };
     setTodasConfiguracoes(prev => ({
       ...prev,
       [activeCargo]: { ...(prev[activeCargo] || {}), [activeKind]: novoSettings } as PdfExportSettingsByKind
     }));
-    const res = await pdfPermissoesService.salvarConfiguracaoDoCargo(activeCargo, activeKind, novoSettings);
-    if (!res.success) {
-      setTodasConfiguracoes(anterior);
+    setAlteracoesPendentes(true);
+  };
+
+  const handleSalvar = async () => {
+    if (!podeEditar) return;
+    setSalvando(true);
+    const res = await pdfPermissoesService.salvarConfiguracaoDoCargo(activeCargo, activeKind, activeSettings);
+    setSalvando(false);
+    if (res.success) {
+      setAlteracoesPendentes(false);
+      onShowToast(`Configuração de PDF salva para ${activeCargo}.`);
+    } else {
       onShowToast(`Erro ao salvar: ${res.error || 'erro desconhecido'}`);
     }
   };
@@ -153,7 +173,7 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
         <label className="block text-[11px] font-bold text-slate-500 mb-1.5 px-1">Cargo</label>
         <select
           value={activeCargo}
-          onChange={e => setActiveCargo(e.target.value as Cargo)}
+          onChange={e => trocarCargo(e.target.value as Cargo)}
           className="w-full sm:w-64 px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white shadow-xs"
         >
           {CARGOS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -169,7 +189,7 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
             <button
               key={meta.kind}
               type="button"
-              onClick={() => setActiveKind(meta.kind)}
+              onClick={() => trocarCondicao(meta.kind)}
               className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 isActive
                   ? 'bg-sky-50 text-sky-700 border border-sky-200 shadow-2xs'
@@ -284,9 +304,24 @@ export const PdfExportSettingsView: React.FC<PdfExportSettingsViewProps> = ({ on
             />
           </div>
 
-          <p className="text-[11px] text-slate-400 px-1">
-            As alterações são salvas para todo mundo com o cargo {activeCargo} e passam a valer na próxima ficha exportada por eles para esta condição comercial.
-          </p>
+          {podeEditar && (
+            <div className="flex items-center justify-between gap-3 pt-1 px-1">
+              <p className="text-[11px] text-slate-400">
+                {alteracoesPendentes
+                  ? 'Você tem alterações não salvas nesta ficha.'
+                  : `Configuração salva para o cargo ${activeCargo} nesta condição comercial.`}
+              </p>
+              <button
+                type="button"
+                onClick={handleSalvar}
+                disabled={salvando || !alteracoesPendentes}
+                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                <span>{salvando ? 'Salvando...' : 'Salvar Alterações'}</span>
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
