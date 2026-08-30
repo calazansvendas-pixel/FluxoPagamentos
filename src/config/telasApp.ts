@@ -42,13 +42,20 @@ export const CARGOS: Cargo[] = [
 // Sugestão inicial de telas liberadas por cargo, usada só para pré-preencher a
 // tela de aprovação de cadastros pendentes — o Administrador sempre pode
 // ajustar livremente antes (ou depois) de aprovar.
+// Pacote básico igual para todo mundo: as 4 fichas de simulação + o histórico
+// de propostas. Telas mais sensíveis (Políticas & Empreendimentos, Configurar
+// Exportação PDF, Importar Tabela, Painel do Administrador) ficam de fora do
+// padrão — o Administrador libera na mão, pessoa por pessoa, quando fizer
+// sentido, seja na aprovação do cadastro ou depois em "Editar".
+const TELAS_PADRAO_BASE = ['simulator', 'banco-direto', 'sinal-morar', 'parcelamento-morar', 'saved-simulations'];
+
 export const TELAS_PADRAO_POR_CARGO: Record<Cargo, string[]> = {
-  'Administrador': TELAS_APP.map(t => t.key),
-  'Diretor': ['simulator', 'banco-direto', 'sinal-morar', 'parcelamento-morar', 'policies', 'saved-simulations'],
-  'Gerente': ['simulator', 'banco-direto', 'sinal-morar', 'parcelamento-morar', 'saved-simulations'],
-  'Analista de Vendas': ['simulator', 'banco-direto', 'sinal-morar', 'parcelamento-morar', 'saved-simulations'],
-  'Analista de Crédito': ['simulator', 'policies', 'saved-simulations'],
-  'Assistente de Vendas': ['simulator', 'saved-simulations'],
-  'Assistente de Crédito': ['simulator'],
-  'Corretor': ['simulator', 'saved-simulations']
+  'Administrador': TELAS_PADRAO_BASE,
+  'Diretor': TELAS_PADRAO_BASE,
+  'Gerente': TELAS_PADRAO_BASE,
+  'Analista de Vendas': TELAS_PADRAO_BASE,
+  'Analista de Crédito': TELAS_PADRAO_BASE,
+  'Assistente de Vendas': TELAS_PADRAO_BASE,
+  'Assistente de Crédito': TELAS_PADRAO_BASE,
+  'Corretor': TELAS_PADRAO_BASE
 };
