@@ -133,6 +133,7 @@ export type Cargo =
   | 'Administrador'
   | 'Diretor'
   | 'Gerente'
+  | 'Coordenador de Vendas'
   | 'Analista de Vendas'
   | 'Analista de Crédito'
   | 'Assistente de Vendas'

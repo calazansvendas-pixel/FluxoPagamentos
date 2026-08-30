@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, RefreshCw, Check, X, Pencil, Ban, PlayCircle, Trash2, Crown, ArrowLeftRight } from 'lucide-react';
+import { ShieldCheck, RefreshCw, Check, X, Pencil, Ban, PlayCircle, Trash2, Crown, ArrowLeftRight, Filter, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { PerfilUsuario, Cargo, StatusConta } from '../types';
 import { authService } from '../services/authService';
 import { TELAS_APP, CARGOS, TELAS_PADRAO_POR_CARGO, CAMPOS_EDITAVEIS_EQUIPE } from '../config/telasApp';
@@ -14,7 +14,7 @@ interface AdminPanelViewProps {
 
 // Cargos que, por padrão, enxergam a proposta da equipe abaixo deles quando
 // aprovados — o Administrador pode ligar/desligar isso livremente depois.
-const CARGOS_COM_EQUIPE: Cargo[] = ['Administrador', 'Diretor', 'Gerente'];
+const CARGOS_COM_EQUIPE: Cargo[] = ['Administrador', 'Diretor', 'Gerente', 'Coordenador de Vendas'];
 
 // Calcula, a partir da lista já carregada em memória, todos os descendentes
 // (diretos e indiretos) de um usuário — usado só para não deixar o próprio
@@ -35,6 +35,44 @@ function descendentesDe(id: string, todos: PerfilUsuario[]): Set<string> {
   return resultado;
 }
 
+// Filtro do cadastro de usuários, usado tanto em "Cadastros pendentes" quanto
+// em "Usuários ativos" — mesmos campos, um estado (rascunho/aplicado) por
+// tabela, exatamente como o filtro de "Simulações Salvas".
+interface FiltrosUsuarios {
+  busca: string;
+  cargo: string;
+  imobiliaria: string;
+  equipeDeId: string;
+  dataDe: string;
+  dataAte: string;
+}
+
+const FILTROS_USUARIOS_VAZIOS: FiltrosUsuarios = {
+  busca: '', cargo: '', imobiliaria: '', equipeDeId: '', dataDe: '', dataAte: ''
+};
+
+const contarFiltrosAtivos = (f: FiltrosUsuarios): number => Object.values(f).filter(v => v !== '').length;
+
+// "Equipe de": pertence quem É a raiz, quem responde direto a ela, ou quem
+// responde a alguém que já é descendente dela — funciona tanto pra quem já
+// está em `ativos` (a árvore de hierarquia em si) quanto pra um cadastro
+// ainda "pendente" (que só tem um superior indicado, não faz parte da árvore
+// ainda).
+function passaFiltroUsuario(u: PerfilUsuario, f: FiltrosUsuarios, equipeDescendentes: Set<string> | null): boolean {
+  if (f.busca && !`${u.nomeCompleto} ${u.email}`.toLowerCase().includes(f.busca.toLowerCase())) return false;
+  if (f.cargo && u.cargo !== f.cargo) return false;
+  if (f.imobiliaria && u.imobiliaria !== f.imobiliaria) return false;
+  if (f.equipeDeId) {
+    const pertence = u.id === f.equipeDeId
+      || u.superiorId === f.equipeDeId
+      || (u.superiorId != null && (equipeDescendentes?.has(u.superiorId) ?? false));
+    if (!pertence) return false;
+  }
+  if (f.dataDe && (!u.createdAt || u.createdAt.slice(0, 10) < f.dataDe)) return false;
+  if (f.dataAte && (!u.createdAt || u.createdAt.slice(0, 10) > f.dataAte)) return false;
+  return true;
+}
+
 export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usuarioAtualId }) => {
   const [pendentes, setPendentes] = useState<PerfilUsuario[]>([]);
   const [ativos, setAtivos] = useState<PerfilUsuario[]>([]);
@@ -45,6 +83,16 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   const [ajustePendente, setAjustePendente] = useState<Record<string, { cargo: Cargo; superiorId: string | null }>>({});
   const [processandoId, setProcessandoId] = useState<string | null>(null);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<string | null>(null);
+
+  // Filtro de "Cadastros pendentes" e de "Usuários ativos" — independentes um
+  // do outro, mesmo padrão rascunho/aplicado (só filtra de fato ao clicar em
+  // "Filtrar") do filtro de Simulações Salvas.
+  const [filtrosPendAbertos, setFiltrosPendAbertos] = useState(false);
+  const [filtrosPendRascunho, setFiltrosPendRascunho] = useState<FiltrosUsuarios>(FILTROS_USUARIOS_VAZIOS);
+  const [filtrosPendAplicados, setFiltrosPendAplicados] = useState<FiltrosUsuarios>(FILTROS_USUARIOS_VAZIOS);
+  const [filtrosAtivAbertos, setFiltrosAtivAbertos] = useState(false);
+  const [filtrosAtivRascunho, setFiltrosAtivRascunho] = useState<FiltrosUsuarios>(FILTROS_USUARIOS_VAZIOS);
+  const [filtrosAtivAplicados, setFiltrosAtivAplicados] = useState<FiltrosUsuarios>(FILTROS_USUARIOS_VAZIOS);
 
   // Transferência de propriedade: só o próprio proprietário vê o botão, na
   // própria linha (ver seção "USUÁRIOS ATIVOS" abaixo).
@@ -93,6 +141,35 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     () => ativos.filter(u => u.status === 'ativo'),
     [ativos]
   );
+
+  const opcoesImobiliariaPend = useMemo(
+    () => Array.from(new Set<string>(pendentes.map(u => u.imobiliaria).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [pendentes]
+  );
+  const opcoesImobiliariaAtiv = useMemo(
+    () => Array.from(new Set<string>(ativos.map(u => u.imobiliaria).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [ativos]
+  );
+
+  const setCampoFiltroPend = <K extends keyof FiltrosUsuarios>(campo: K, valor: FiltrosUsuarios[K]) =>
+    setFiltrosPendRascunho(prev => ({ ...prev, [campo]: valor }));
+  const aplicarFiltrosPend = () => { setFiltrosPendAplicados(filtrosPendRascunho); setFiltrosPendAbertos(false); };
+  const limparFiltrosPend = () => { setFiltrosPendRascunho(FILTROS_USUARIOS_VAZIOS); setFiltrosPendAplicados(FILTROS_USUARIOS_VAZIOS); };
+
+  const setCampoFiltroAtiv = <K extends keyof FiltrosUsuarios>(campo: K, valor: FiltrosUsuarios[K]) =>
+    setFiltrosAtivRascunho(prev => ({ ...prev, [campo]: valor }));
+  const aplicarFiltrosAtiv = () => { setFiltrosAtivAplicados(filtrosAtivRascunho); setFiltrosAtivAbertos(false); };
+  const limparFiltrosAtiv = () => { setFiltrosAtivRascunho(FILTROS_USUARIOS_VAZIOS); setFiltrosAtivAplicados(FILTROS_USUARIOS_VAZIOS); };
+
+  const pendentesFiltrados = useMemo(() => {
+    const desc = filtrosPendAplicados.equipeDeId ? descendentesDe(filtrosPendAplicados.equipeDeId, ativos) : null;
+    return pendentes.filter(u => passaFiltroUsuario(u, filtrosPendAplicados, desc));
+  }, [pendentes, filtrosPendAplicados, ativos]);
+
+  const ativosFiltrados = useMemo(() => {
+    const desc = filtrosAtivAplicados.equipeDeId ? descendentesDe(filtrosAtivAplicados.equipeDeId, ativos) : null;
+    return ativos.filter(u => passaFiltroUsuario(u, filtrosAtivAplicados, desc));
+  }, [ativos, filtrosAtivAplicados]);
 
   const handleAprovar = async (u: PerfilUsuario) => {
     const ajuste = ajustePendente[u.id] || { cargo: u.cargo, superiorId: null };
@@ -262,13 +339,46 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
 
       {/* CADASTROS PENDENTES */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="px-5 pt-4 pb-2 text-sm font-bold text-slate-800">
-          Cadastros pendentes <span className="text-xs font-semibold text-slate-400">({pendentes.length})</span>
+        <div className="px-5 pt-4 pb-2 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm font-bold text-slate-800">
+            Cadastros pendentes{' '}
+            <span className="text-xs font-semibold text-slate-400">
+              ({pendentesFiltrados.length}{pendentesFiltrados.length !== pendentes.length ? ` de ${pendentes.length}` : ''})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiltrosPendAbertos(v => !v)}
+            className={`px-3 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer border ${filtrosPendAbertos || contarFiltrosAtivos(filtrosPendAplicados) > 0 ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'}`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filtros{contarFiltrosAtivos(filtrosPendAplicados) > 0 ? ` (${contarFiltrosAtivos(filtrosPendAplicados)})` : ''}</span>
+            {filtrosPendAbertos ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
         </div>
+
+        <PainelFiltroUsuarios
+          aberto={filtrosPendAbertos}
+          rascunho={filtrosPendRascunho}
+          setCampo={setCampoFiltroPend}
+          opcoesCargo={CARGOS}
+          opcoesImobiliaria={opcoesImobiliariaPend}
+          opcoesEquipeDe={superioresDisponiveis}
+          onFiltrar={aplicarFiltrosPend}
+          onLimpar={limparFiltrosPend}
+        />
+
         {carregando ? (
           <div className="p-8 text-center text-sm text-slate-400">Carregando...</div>
         ) : pendentes.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-400">Nenhum cadastro esperando aprovação.</div>
+        ) : pendentesFiltrados.length === 0 ? (
+          <div className="p-8 text-center space-y-2">
+            <p className="text-sm text-slate-500">Nenhum cadastro pendente bate com os filtros escolhidos.</p>
+            <button type="button" onClick={limparFiltrosPend} className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
+              Limpar filtros
+            </button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[720px]">
@@ -282,7 +392,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                 </tr>
               </thead>
               <tbody>
-                {pendentes.map(u => {
+                {pendentesFiltrados.map(u => {
                   const ajuste = ajustePendente[u.id] || { cargo: u.cargo, superiorId: null };
                   return (
                     <tr key={u.id} className="border-b border-slate-50 last:border-0">
@@ -341,13 +451,46 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
 
       {/* USUÁRIOS ATIVOS */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="px-5 pt-4 pb-2 text-sm font-bold text-slate-800">
-          Usuários ativos <span className="text-xs font-semibold text-slate-400">({ativos.length})</span>
+        <div className="px-5 pt-4 pb-2 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm font-bold text-slate-800">
+            Usuários ativos{' '}
+            <span className="text-xs font-semibold text-slate-400">
+              ({ativosFiltrados.length}{ativosFiltrados.length !== ativos.length ? ` de ${ativos.length}` : ''})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiltrosAtivAbertos(v => !v)}
+            className={`px-3 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer border ${filtrosAtivAbertos || contarFiltrosAtivos(filtrosAtivAplicados) > 0 ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'}`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filtros{contarFiltrosAtivos(filtrosAtivAplicados) > 0 ? ` (${contarFiltrosAtivos(filtrosAtivAplicados)})` : ''}</span>
+            {filtrosAtivAbertos ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
         </div>
+
+        <PainelFiltroUsuarios
+          aberto={filtrosAtivAbertos}
+          rascunho={filtrosAtivRascunho}
+          setCampo={setCampoFiltroAtiv}
+          opcoesCargo={CARGOS}
+          opcoesImobiliaria={opcoesImobiliariaAtiv}
+          opcoesEquipeDe={superioresDisponiveis}
+          onFiltrar={aplicarFiltrosAtiv}
+          onLimpar={limparFiltrosAtiv}
+        />
+
         {carregando ? (
           <div className="p-8 text-center text-sm text-slate-400">Carregando...</div>
         ) : ativos.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-400">Nenhum usuário ativo ainda.</div>
+        ) : ativosFiltrados.length === 0 ? (
+          <div className="p-8 text-center space-y-2">
+            <p className="text-sm text-slate-500">Nenhum usuário bate com os filtros escolhidos.</p>
+            <button type="button" onClick={limparFiltrosAtiv} className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
+              Limpar filtros
+            </button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[760px]">
@@ -361,7 +504,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                 </tr>
               </thead>
               <tbody>
-                {ativos.map(u => {
+                {ativosFiltrados.map(u => {
                   const superior = ativos.find(s => s.id === u.superiorId);
                   return (
                     <tr key={u.id} className="border-b border-slate-50 last:border-0">
@@ -652,6 +795,71 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+interface PainelFiltroUsuariosProps {
+  aberto: boolean;
+  rascunho: FiltrosUsuarios;
+  setCampo: <K extends keyof FiltrosUsuarios>(campo: K, valor: FiltrosUsuarios[K]) => void;
+  opcoesCargo: string[];
+  opcoesImobiliaria: string[];
+  opcoesEquipeDe: PerfilUsuario[];
+  onFiltrar: () => void;
+  onLimpar: () => void;
+}
+
+const PainelFiltroUsuarios: React.FC<PainelFiltroUsuariosProps> = ({ aberto, rascunho, setCampo, opcoesCargo, opcoesImobiliaria, opcoesEquipeDe, onFiltrar, onLimpar }) => {
+  if (!aberto) return null;
+  const estiloInput = 'w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400';
+  const rotulo = 'block text-[11px] font-bold text-slate-500 mb-1';
+  return (
+    <div className="px-5 py-4 bg-slate-50/60 border-b border-slate-100 space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div>
+          <label className={rotulo}>Nome ou e-mail</label>
+          <input type="text" value={rascunho.busca} onChange={e => setCampo('busca', e.target.value)} placeholder="Buscar" className={estiloInput} />
+        </div>
+        <div>
+          <label className={rotulo}>Cargo</label>
+          <select value={rascunho.cargo} onChange={e => setCampo('cargo', e.target.value)} className={estiloInput}>
+            <option value="">Todos</option>
+            {opcoesCargo.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={rotulo}>Imobiliária</label>
+          <select value={rascunho.imobiliaria} onChange={e => setCampo('imobiliaria', e.target.value)} className={estiloInput}>
+            <option value="">Todas</option>
+            {opcoesImobiliaria.map(i => <option key={i} value={i}>{i}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={rotulo}>Equipe de</label>
+          <select value={rascunho.equipeDeId} onChange={e => setCampo('equipeDeId', e.target.value)} className={estiloInput}>
+            <option value="">Todos</option>
+            {opcoesEquipeDe.map(u => <option key={u.id} value={u.id}>{u.nomeCompleto} — {u.cargo}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={rotulo}>Cadastrado de</label>
+          <input type="date" value={rascunho.dataDe} onChange={e => setCampo('dataDe', e.target.value)} className={estiloInput} />
+        </div>
+        <div>
+          <label className={rotulo}>Cadastrado até</label>
+          <input type="date" value={rascunho.dataAte} onChange={e => setCampo('dataAte', e.target.value)} className={estiloInput} />
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <button type="button" onClick={onLimpar} className="px-3.5 py-2 text-xs font-semibold text-slate-500 hover:text-rose-600 rounded-lg transition-all cursor-pointer">
+          Limpar filtros
+        </button>
+        <button type="button" onClick={onFiltrar} className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer">
+          <Search className="w-3.5 h-3.5" />
+          <span>Filtrar</span>
+        </button>
+      </div>
     </div>
   );
 };
