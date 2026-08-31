@@ -91,6 +91,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [valAtoManual, setValAtoManual] = useState<number | null>(null);
   const [atoInputText, setAtoInputText] = useState<string>('');
   const [isEditingAto, setIsEditingAto] = useState<boolean>(false);
+  // Pgtº à vista (botão de cabeçalho, igual ao do Sinal c/ Morar): aplica o
+  // desconto à vista da política sobre o preço, zera o ITBI e quita o saldo
+  // inteiro no Ato — SEPARADO do botão "Parcelado/À Vista" já existente
+  // (isAVistaActive mais abaixo), que continua só quitando o Pró-Soluto sem
+  // mexer em preço/ITBI. Estado explícito, mesmo padrão do FichaMorar.tsx.
+  const [isPagamentoAVistaAtivoManual, setIsPagamentoAVistaAtivoManual] = useState<boolean>(false);
 
   const [valAtoITBI, setValAtoITBI] = useState<number>(0);
   const [itbiInputText, setItbiInputText] = useState<string>('');
@@ -204,6 +210,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setValAtoManual(null);
     setAtoInputText('');
     setIsEditingAto(false);
+    setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
     setItbiInputText('');
     setIsEditingITBI(false);
@@ -300,8 +307,21 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const areaPriv = matchingRow ? formatArea(matchingRow[3]) : '0,00 m²';
   const areaQuintal = matchingRow ? formatArea(matchingRow[4]) : '0,00 m²';
 
-  const price = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[7]) : 0;
+  const precoTabelaOriginal = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[7]) : 0;
   const evaluation = hasUnitSelected && matchingRow ? parseCurrency(matchingRow[6]) : 0;
+
+  // Desconto à Vista: aplicado sobre o Preço de Tabela ANTES de qualquer outro
+  // cálculo do fluxo (Ato, ITBI, Pró-Soluto, motor do Parcelamento Morar etc.)
+  // quando o botão "Pgtº à vista" (cabeçalho, igual ao Sinal c/ Morar) está
+  // ativo — mesmo padrão já usado no Sinal c/ Morar (FichaMorar.tsx). O botão
+  // "Parcelado/À Vista" mais simples (dentro do card do Ato) NUNCA usa este
+  // preço com desconto — sempre lê precoTabelaOriginal diretamente, pra ficar
+  // imune a este toggle.
+  const descontoAVistaPctPolitica = currentCond?.descontoAVistaPct ?? 0;
+  const valorDescontoAVista = isPagamentoAVistaAtivoManual && precoTabelaOriginal > 0
+    ? Math.round(precoTabelaOriginal * (descontoAVistaPctPolitica / 100) * 100) / 100
+    : 0;
+  const price = Math.max(0, Math.round((precoTabelaOriginal - valorDescontoAVista) * 100) / 100);
 
   // ITBI depends on whether it's 1º Imóvel (Com Desconto) or 2º Imóvel (Sem Desconto)
   const itbiVal = (hasUnitSelected && matchingRow) 
@@ -354,6 +374,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setValAtoManual(null);
     setAtoInputText('');
     setIsEditingAto(false);
+    setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
     setItbiInputText('');
     setIsEditingITBI(false);
@@ -554,7 +575,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? resolverTetoAtoComDesconto(pmBaseAVista, isAtoPremiadoEnabled)
     : 0;
   const pmAtoAVistaTarget = pmAtoAposAntecipadasAVistaTarget + pmMensaisAntecipadas;
-  const pmIsAVistaActive = hasUnitSelected && valAtoManual !== null && Math.abs(valAtoManual - pmAtoAVistaTarget) < 0.01;
+  // No Parcelamento Morar não existe financiamento bancário nem FGTS: quitar
+  // o Pró-Soluto já É quitar tudo. Por isso aqui só existe o botão "Pgtº à
+  // vista" (cabeçalho) — o card "Ato (Imóvel)" não tem um segundo botão
+  // separado, e pmIsAVistaActive aponta direto pro mesmo estado explícito.
+  const pmIsAVistaActive = isPagamentoAVistaAtivoManual;
 
   const pm = calcularParcelamentoMorar({
     price,
@@ -759,8 +784,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // sendo pagas à parte). A regra do Ato Premiado usada aqui (10% do Ato, capado em
   // R$5.000, a partir de R$5.000) é a mesma de resolverTetoAtoComDesconto/
   // calcularDescontoAtoPremiado, então a função é reaproveitada.
+  // Usa sempre precoTabelaOriginal (nunca `price`): este botão simples não
+  // aplica o desconto à vista da política, então precisa ficar imune ao
+  // desconto que o botão "Pgtº à vista" (novo, no cabeçalho) pode aplicar.
   const baseAVista = hasUnitSelected
-    ? Math.max(0, price - (maxFinanc + subsidy + fgts) - somaMensais)
+    ? Math.max(0, precoTabelaOriginal - (maxFinanc + subsidy + fgts) - somaMensais)
     : 0;
   const atoAposMensaisAVistaTarget = hasUnitSelected
     ? resolverTetoAtoComDesconto(baseAVista, isAtoPremiadoEnabled)
@@ -859,7 +887,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // 3. REGRA ISOLADA PARA DESPESAS CARTORÁRIAS & ITBI:
   // O saldo de ITBI e Despesas Cartorárias NUNCA deve ser amortizado pelo excedente do Pagamento do Ato.
   // O ITBI/Despesas só é reduzido/abatido se o usuário preencher expressamente o campo "PAGAMENTO ITBI NO ATO".
-  const valorTotalITBI = despCartorias;
+  // Exceção: o botão "Pgtº à vista" zera o ITBI (fica por conta do cliente a
+  // partir do Habite-se) — o botão "Parcelado/À Vista" mais simples nunca
+  // mexe nisso, deixa o ITBI em aberto normalmente.
+  const valorTotalITBI = isPagamentoAVistaAtivoManual ? 0 : despCartorias;
   const atoITBIValidado = Math.min(valAtoITBI, valorTotalITBI);
   const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
   const despCartoriasEfetivas = saldoITBI;
@@ -1047,6 +1078,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setValAtoManual(null);
     setAtoInputText('');
     setIsEditingAto(false);
+    setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
     setItbiInputText('');
     setIsEditingITBI(false);
@@ -1709,6 +1741,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     <span className="text-slate-600">FGTS:</span>
                     <strong className="text-sky-600 font-semibold">{formatCurrency(displayFgts)}</strong>
                   </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                    <span className="text-slate-600">Desconto à Vista:</span>
+                    <strong className="text-amber-700 font-semibold">{formatCurrency(valorDescontoAVista)}</strong>
+                  </div>
                   <div className="flex justify-between items-center py-1 mt-2">
                     <span className="text-slate-600">Desconto Ato:</span>
                     <strong className="text-emerald-600 font-semibold">{formatCurrency(displayDescontoAto)}</strong>
@@ -1889,7 +1925,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             onShowToast={onShowToast}
             hideITBI={isParcelamentoMorar}
             valAtoITBI={valAtoITBI}
-            valorTotalITBI={despCartorias}
+            valorTotalITBI={valorTotalITBI}
             isFirstHome={isFirstHomeLocal}
             onToggleFirstHome={() => setIsFirstHomeLocal(prev => !prev)}
             onITBIChange={(novoVal) => setValAtoITBI(novoVal)}
@@ -1898,22 +1934,67 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             onToggleAtoPremiado={(ativo) => {
               setIsAtoPremiadoEnabled(ativo);
             }}
-            isAVistaActive={isParcelamentoMorar ? pmIsAVistaActive : isAVistaActive}
-            onToggleAVista={(ativo) => {
-              // Mesmo mecanismo de um Ato (Imóvel) digitado manualmente — só que o valor
-              // é calculado automaticamente para o ponto exato que zera o saldo a
-              // parcelar, ou desfeito para voltar ao fluxo parcelado normal.
-              setValAtoManual(ativo ? (isParcelamentoMorar ? pmAtoAVistaTarget : atoAVistaTarget) : null);
-              if (!ativo && isParcelamentoMorar) {
-                // Ao voltar para o fluxo parcelado, qualquer valor manual digitado
-                // antes de ativar o "À Vista" (Mensal de Obra, Semestrais, Chaves,
-                // Pós-Obra) é descartado — os blocos voltam a usar o valor sugerido
-                // automático, em vez de reaparecer com o número antigo.
-                setPmMensalObraValorManual(null);
-                setPmSemestralValorManual({});
-                setPmChavesValorManual(null);
-                setPmPosObraValorManual(null);
+            // "Pgtº à vista" — botão de cabeçalho igual ao do Sinal c/ Morar: aplica
+            // o desconto à vista da política, zera o ITBI e quita tudo no Ato. Único
+            // botão de à vista em Parcelamento Morar (não existe financiamento/FGTS
+            // nessa condição — quitar o Pró-Soluto já é quitar tudo, então o card
+            // "Ato (Imóvel)" não precisa de um segundo botão separado ali).
+            isPagamentoAVistaActive={isPagamentoAVistaAtivoManual}
+            onTogglePagamentoAVista={(ativo) => {
+              setIsPagamentoAVistaAtivoManual(ativo);
+              if (ativo) {
+                // O Ato Premiado é desligado enquanto o pagamento à vista está
+                // ativo, pra não empilhar os dois descontos sem uma regra definida
+                // pra isso (mesmo padrão do Sinal c/ Morar) — volta a ficar
+                // disponível normalmente ao desligar. `isAtoPremiadoEnabled` ainda
+                // não reflete isso neste mesmo evento, então os cálculos abaixo já
+                // usam `false` direto, na mão.
+                setIsAtoPremiadoEnabled(false);
+                // O preço com desconto ainda não está commitado no state do React
+                // neste mesmo evento — por isso o ponto que quita tudo no Ato é
+                // calculado aqui com o preço correto "na mão", em vez de reaproveitar
+                // atoAVistaTarget/pmAtoAVistaTarget (que só refletem o desconto a
+                // partir do próximo render). Mesmo padrão do Sinal c/ Morar
+                // (FichaMorar.tsx / handleTogglePagamentoAVista).
+                const descontoNaHora = precoTabelaOriginal > 0
+                  ? Math.round(precoTabelaOriginal * (descontoAVistaPctPolitica / 100) * 100) / 100
+                  : 0;
+                const precoComDesconto = Math.max(0, Math.round((precoTabelaOriginal - descontoNaHora) * 100) / 100);
+                if (isParcelamentoMorar) {
+                  const baseNaHora = hasUnitSelected ? Math.max(0, precoComDesconto - maxFinanc - pmMensaisAntecipadas) : 0;
+                  const atoAposAntecipadasNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(baseNaHora, false) : 0;
+                  setValAtoManual(atoAposAntecipadasNaHora + pmMensaisAntecipadas);
+                } else {
+                  // Zera tudo: financiamento, subsídio e FGTS somem sozinhos (o Ato,
+                  // grande o bastante para cobrir o preço inteiro, já não deixa saldo
+                  // pra eles via a cascata de amortização existente) — só as mensais
+                  // 30d/60d precisam ser zeradas explicitamente aqui.
+                  setValParc2(0);
+                  setParc2InputText('');
+                  setValParc3(0);
+                  setParc3InputText('');
+                  const atoNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(precoComDesconto, false) : 0;
+                  setValAtoManual(atoNaHora);
+                }
+              } else {
+                // Ato Premiado religado (mesmo padrão usado ao selecionar uma
+                // unidade ou limpar o fluxo) — volta a ficar disponível normalmente.
+                setIsAtoPremiadoEnabled(true);
+                setValAtoManual(null);
+                if (isParcelamentoMorar) {
+                  setPmMensalObraValorManual(null);
+                  setPmSemestralValorManual({});
+                  setPmChavesValorManual(null);
+                  setPmPosObraValorManual(null);
+                }
               }
+            }}
+            isAVistaActive={isParcelamentoMorar ? undefined : isAVistaActive}
+            onToggleAVista={isParcelamentoMorar ? undefined : (ativo) => {
+              // Mesmo mecanismo de um Ato (Imóvel) digitado manualmente — só que o valor
+              // é calculado automaticamente para o ponto exato que quita o Pró-Soluto,
+              // sem tocar preço nem ITBI, ou desfeito para voltar ao fluxo parcelado.
+              setValAtoManual(ativo ? atoAVistaTarget : null);
             }}
           >
             {/* 2ª LINHA: 2 COLUNAS IGUAIS (1ª MENSAL 30 DIAS E 2ª MENSAL 60 DIAS) — MESMO LAYOUT EM TODAS AS CONDIÇÕES */}
