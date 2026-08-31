@@ -1741,6 +1741,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     <span className="text-slate-600">FGTS:</span>
                     <strong className="text-sky-600 font-semibold">{formatCurrency(displayFgts)}</strong>
                   </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                    <span className="text-slate-600">Desconto à Vista:</span>
+                    <strong className="text-amber-700 font-semibold">{formatCurrency(valorDescontoAVista)}</strong>
+                  </div>
                   <div className="flex justify-between items-center py-1 mt-2">
                     <span className="text-slate-600">Desconto Ato:</span>
                     <strong className="text-emerald-600 font-semibold">{formatCurrency(displayDescontoAto)}</strong>
@@ -1939,6 +1943,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             onTogglePagamentoAVista={(ativo) => {
               setIsPagamentoAVistaAtivoManual(ativo);
               if (ativo) {
+                // O Ato Premiado é desligado enquanto o pagamento à vista está
+                // ativo, pra não empilhar os dois descontos sem uma regra definida
+                // pra isso (mesmo padrão do Sinal c/ Morar) — volta a ficar
+                // disponível normalmente ao desligar. `isAtoPremiadoEnabled` ainda
+                // não reflete isso neste mesmo evento, então os cálculos abaixo já
+                // usam `false` direto, na mão.
+                setIsAtoPremiadoEnabled(false);
                 // O preço com desconto ainda não está commitado no state do React
                 // neste mesmo evento — por isso o ponto que quita tudo no Ato é
                 // calculado aqui com o preço correto "na mão", em vez de reaproveitar
@@ -1951,7 +1962,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 const precoComDesconto = Math.max(0, Math.round((precoTabelaOriginal - descontoNaHora) * 100) / 100);
                 if (isParcelamentoMorar) {
                   const baseNaHora = hasUnitSelected ? Math.max(0, precoComDesconto - maxFinanc - pmMensaisAntecipadas) : 0;
-                  const atoAposAntecipadasNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(baseNaHora, isAtoPremiadoEnabled) : 0;
+                  const atoAposAntecipadasNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(baseNaHora, false) : 0;
                   setValAtoManual(atoAposAntecipadasNaHora + pmMensaisAntecipadas);
                 } else {
                   // Zera tudo: financiamento, subsídio e FGTS somem sozinhos (o Ato,
@@ -1962,10 +1973,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   setParc2InputText('');
                   setValParc3(0);
                   setParc3InputText('');
-                  const atoNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(precoComDesconto, isAtoPremiadoEnabled) : 0;
+                  const atoNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(precoComDesconto, false) : 0;
                   setValAtoManual(atoNaHora);
                 }
               } else {
+                // Ato Premiado religado (mesmo padrão usado ao selecionar uma
+                // unidade ou limpar o fluxo) — volta a ficar disponível normalmente.
+                setIsAtoPremiadoEnabled(true);
                 setValAtoManual(null);
                 if (isParcelamentoMorar) {
                   setPmMensalObraValorManual(null);
