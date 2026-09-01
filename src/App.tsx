@@ -734,6 +734,7 @@ export default function App({ perfil, onSair }: AppProps) {
               podeFiltrarPorGerente={ehAdministrador || perfil.cargo === 'Diretor'}
               usuarioId={perfil.id}
               camposEditaveisEquipe={perfil.camposEditaveisEquipe}
+              produtos={products}
             />
           )}
 
