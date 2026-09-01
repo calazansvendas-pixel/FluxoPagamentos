@@ -43,7 +43,13 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const activeProd = products.find(p => p.id === activeImportProductId) || products[0];
+  // IMPORTANTE: nunca cair para products[0] quando activeImportProductId não bate com
+  // nenhum produto atual (ex.: uma janela momentânea logo após a lista de empreendimentos
+  // ser recarregada do Supabase). Um fallback silencioso para "o primeiro da lista" fazia
+  // a importação/arquivamento gravar no empreendimento errado sem nenhum aviso — é preciso
+  // ficar sem produto selecionado (undefined) e deixar os `?.` abaixo lidarem com isso, em
+  // vez de agir sobre dados de outro empreendimento.
+  const activeProd = products.find(p => p.id === activeImportProductId);
   const tabelaVencida = Boolean(activeProd?.tableInfo?.active) && isTabelaVencida(activeProd?.tableInfo?.validTo, currentDate);
 
   const currentMonthDefaults = getCurrentMonthDates();
@@ -75,6 +81,9 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
   const [carregandoArquivadas, setCarregandoArquivadas] = useState(false);
   const [excluirArquivadaId, setExcluirArquivadaId] = useState<string | null>(null);
   const [excluindoArquivada, setExcluindoArquivada] = useState(false);
+  const [visualizandoArquivada, setVisualizandoArquivada] = useState<any | null>(null);
+  const [lookupArquivadaTorre, setLookupArquivadaTorre] = useState('');
+  const [lookupArquivadaUnidade, setLookupArquivadaUnidade] = useState('');
 
   const carregarArquivadas = React.useCallback(async (empId: string) => {
     setCarregandoArquivadas(true);
@@ -956,21 +965,36 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
               ) : (
                 <div className="space-y-2">
                   {arquivadas.map((a) => (
-                    <div key={a.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 border border-slate-200 rounded-xl p-3">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      key={a.id}
+                      onClick={() => { setVisualizandoArquivada(a); setLookupArquivadaTorre(''); setLookupArquivadaUnidade(''); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setVisualizandoArquivada(a); setLookupArquivadaTorre(''); setLookupArquivadaUnidade(''); } }}
+                      className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 hover:bg-sky-50/60 border border-slate-200 hover:border-sky-200 rounded-xl p-3 transition-all cursor-pointer text-left"
+                    >
                       <div className="min-w-0">
                         <span className="text-xs font-bold text-slate-900 font-mono block truncate">{a.file_name || 'Arquivo sem nome'}</span>
                         <span className="text-[11px] text-slate-500">
                           Vigência: {formatDateBr(a.valid_from)} a {formatDateBr(a.valid_to)} · {Array.isArray(a.rows) ? a.rows.length : 0} unid. · Arquivada em {a.arquivado_em ? new Date(a.arquivado_em).toLocaleString('pt-BR') : '-'}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setExcluirArquivadaId(a.id)}
-                        className="text-xs text-rose-700 hover:text-white hover:bg-rose-600 font-semibold flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-rose-200 transition-all shadow-2xs shrink-0 cursor-pointer self-end sm:self-center"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Excluir</span>
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <span className="text-xs text-sky-700 font-semibold flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-sky-200 shadow-2xs">
+                          <Search className="w-3.5 h-3.5" />
+                          <span>Visualizar</span>
+                        </span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); setExcluirArquivadaId(a.id); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setExcluirArquivadaId(a.id); } }}
+                          className="text-xs text-rose-700 hover:text-white hover:bg-rose-600 font-semibold flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-rose-200 transition-all shadow-2xs cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Excluir</span>
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -979,6 +1003,114 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           )}
         </div>
       )}
+
+      {/* MODAL DE VISUALIZAÇÃO DE TABELA ARQUIVADA */}
+      {visualizandoArquivada && (() => {
+        const rowsArquivada: (string | number)[][] = Array.isArray(visualizandoArquivada.rows) ? visualizandoArquivada.rows : [];
+        const headersArquivada = COLUMN_DEFINITIONS.map(d => d.label);
+        const linhasFiltradas = rowsArquivada.filter(row => {
+          const torreCell = String(row[1] || '').toLowerCase();
+          const unidadeCell = String(row[2] || '').toLowerCase();
+          const matchesTorre = !lookupArquivadaTorre || torreCell.includes(lookupArquivadaTorre.toLowerCase().trim());
+          const matchesUnidade = !lookupArquivadaUnidade || unidadeCell.includes(lookupArquivadaUnidade.toLowerCase().trim());
+          return matchesTorre && matchesUnidade;
+        });
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200">
+              <div className="flex items-start justify-between gap-3 p-5 border-b border-slate-200">
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1.5">
+                    <Archive className="w-3.5 h-3.5" /> Tabela Arquivada
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-900 font-mono truncate">{visualizandoArquivada.file_name || 'Arquivo sem nome'}</h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {visualizandoArquivada.nome_empreendimento || activeProd?.name} · Vigência: {formatDateBr(visualizandoArquivada.valid_from)} a {formatDateBr(visualizandoArquivada.valid_to)} · {rowsArquivada.length} unidades · Arquivada em {visualizandoArquivada.arquivado_em ? new Date(visualizandoArquivada.arquivado_em).toLocaleString('pt-BR') : '-'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setVisualizandoArquivada(null)}
+                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg p-1.5 transition-all cursor-pointer shrink-0"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-2.5">
+                <input
+                  type="text"
+                  value={lookupArquivadaTorre}
+                  onChange={(e) => setLookupArquivadaTorre(e.target.value)}
+                  placeholder="Filtrar por Torre/Bloco..."
+                  className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-sky-600 text-xs"
+                />
+                <input
+                  type="text"
+                  value={lookupArquivadaUnidade}
+                  onChange={(e) => setLookupArquivadaUnidade(e.target.value)}
+                  placeholder="Filtrar por Unidade..."
+                  className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-sky-600 focus:outline-none focus:border-sky-600 text-xs"
+                />
+              </div>
+
+              <div className="overflow-auto flex-1">
+                {rowsArquivada.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-8">Esta tabela arquivada não tem unidades registradas.</p>
+                ) : (
+                  <table className="w-full text-left text-[11px] text-slate-700">
+                    <thead className="bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase sticky top-0 shadow-2xs z-10">
+                      <tr>
+                        {headersArquivada.map((h, i) => (
+                          <th key={i} className="p-2.5 font-bold border-b border-slate-200 whitespace-nowrap bg-slate-100 text-slate-700">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {linhasFiltradas.map((row, rIdx) => (
+                        <tr key={rIdx} className="hover:bg-sky-50/50 transition-colors">
+                          {headersArquivada.map((headerName, cIdx) => {
+                            let val = row[cIdx] !== undefined && row[cIdx] !== null ? row[cIdx] : '';
+                            const hUpper = headerName.toUpperCase();
+                            const isCurrencyCol = hUpper.includes('PREÇO') || hUpper.includes('PRECO') || hUpper.includes('AVALIAÇÃO') || hUpper.includes('AVALIACAO') || hUpper.includes('ITBI');
+                            const isAreaCol = hUpper.includes('ÁREA') || hUpper.includes('AREA') || hUpper.includes('PRIVATIVA') || hUpper.includes('QUINTAL');
+
+                            if (isCurrencyCol) {
+                              if (typeof val === 'number') {
+                                val = formatCurrency(val);
+                              } else if (typeof val === 'string' && val && !val.includes('R$')) {
+                                const num = parseCurrency(val);
+                                if (!isNaN(num) && num > 0) {
+                                  val = formatCurrency(num);
+                                }
+                              }
+                            } else if (isAreaCol) {
+                              val = formatArea(val);
+                            }
+
+                            let cellClass = "p-2.5 font-medium border-b border-slate-100 whitespace-nowrap";
+                            if (hUpper.includes('UNIDADE')) cellClass += " font-bold text-sky-600";
+                            if (hUpper.includes('TORRE')) cellClass += " font-semibold text-slate-800";
+                            if (isCurrencyCol) cellClass += " font-semibold text-slate-900";
+
+                            return (
+                              <td key={cIdx} className={cellClass}>
+                                {String(val)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE TABELA ARQUIVADA */}
       {excluirArquivadaId && (
