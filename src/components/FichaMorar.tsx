@@ -2830,6 +2830,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           areaPriv={areaPriv}
           areaQuintal={areaQuintal}
           price={price}
+          precoTabelaOriginal={precoTabelaOriginal}
           evaluation={evaluation}
           deliveryText={deliveryText}
           income={income}

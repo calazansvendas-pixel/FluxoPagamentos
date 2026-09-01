@@ -1710,7 +1710,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Preço de Tabela</span>
             <input
               type="text"
-              value={formatCurrency(price)}
+              value={formatCurrency(precoTabelaOriginal)}
               readOnly
               className="w-full bg-transparent font-bold text-slate-900 text-center focus:outline-none cursor-not-allowed text-xs whitespace-nowrap"
             />
@@ -2482,6 +2482,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           areaPriv={areaPriv}
           areaQuintal={areaQuintal}
           price={price}
+          precoTabelaOriginal={precoTabelaOriginal}
           evaluation={evaluation}
           deliveryText={deliveryText}
           income={income}
