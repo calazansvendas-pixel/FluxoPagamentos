@@ -160,7 +160,9 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *   novo_cargo TEXT DEFAULT NULL,
  *   novo_superior_id UUID DEFAULT NULL,
  *   limpar_superior BOOLEAN DEFAULT FALSE,
- *   novas_telas TEXT[] DEFAULT NULL
+ *   novas_telas TEXT[] DEFAULT NULL,
+ *   novos_empreendimentos TEXT[] DEFAULT NULL,
+ *   limpar_empreendimentos BOOLEAN DEFAULT FALSE
  * ) RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
  * DECLARE
  *   permissoes TEXT[];
@@ -203,6 +205,10 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *     IF NOT ('telas' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar as telas liberadas.'; END IF;
  *     UPDATE perfis SET telas_liberadas = novas_telas WHERE id = subordinado_id;
  *   END IF;
+ *   IF novos_empreendimentos IS NOT NULL OR limpar_empreendimentos THEN
+ *     IF NOT ('empreendimentos' = ANY(permissoes)) THEN RAISE EXCEPTION 'Sem permissão para editar os empreendimentos liberados.'; END IF;
+ *     UPDATE perfis SET empreendimentos_liberados = CASE WHEN limpar_empreendimentos THEN NULL ELSE novos_empreendimentos END WHERE id = subordinado_id;
+ *   END IF;
  *
  *   RETURN TRUE;
  * END;
@@ -221,8 +227,12 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * -- fica ambígua entre a coluna `perfis.id` e essa variável, e a função falha
  * -- (com erro) toda vez que é chamada. Por isso o alias `pf` abaixo é
  * -- obrigatório, não cosmético.
+ * -- Atenção: se você já rodou uma versão anterior desta função (antes do campo
+ * -- `empreendimentos_liberados` existir), rode a linha de DROP abaixo antes do
+ * -- CREATE — mesmo motivo do aviso de nomes_subordinados_de logo acima.
+ * DROP FUNCTION IF EXISTS public.dados_equipe_para_edicao(UUID);
  * CREATE OR REPLACE FUNCTION public.dados_equipe_para_edicao(usuario_id UUID)
- * RETURNS TABLE(id UUID, nome_completo TEXT, telefone TEXT, cpf TEXT, imobiliaria TEXT, creci TEXT, cargo TEXT, superior_id UUID, telas_liberadas TEXT[])
+ * RETURNS TABLE(id UUID, nome_completo TEXT, telefone TEXT, cpf TEXT, imobiliaria TEXT, creci TEXT, cargo TEXT, superior_id UUID, telas_liberadas TEXT[], empreendimentos_liberados TEXT[])
  * LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
  * BEGIN
  *   IF usuario_id <> auth.uid() THEN
@@ -232,13 +242,78 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  *     RETURN;
  *   END IF;
  *   RETURN QUERY
- *     SELECT p.id, p.nome_completo, p.telefone, p.cpf, p.imobiliaria, p.creci, p.cargo, p.superior_id, p.telas_liberadas
+ *     SELECT p.id, p.nome_completo, p.telefone, p.cpf, p.imobiliaria, p.creci, p.cargo, p.superior_id, p.telas_liberadas, p.empreendimentos_liberados
  *     FROM perfis p WHERE p.id IN (SELECT sub.id FROM public.subordinados_de(usuario_id) sub);
  * END;
  * $$;
  *
- * GRANT EXECUTE ON FUNCTION public.editar_cadastro_subordinado(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, TEXT, UUID, BOOLEAN, TEXT[]) TO authenticated;
+ * GRANT EXECUTE ON FUNCTION public.editar_cadastro_subordinado(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, TEXT, UUID, BOOLEAN, TEXT[], TEXT[], BOOLEAN) TO authenticated;
  * GRANT EXECUTE ON FUNCTION public.dados_equipe_para_edicao(UUID) TO authenticated;
+ *
+ * -- 6f) Empreendimentos (produtos) que cada usuário tem permissão de ver e usar
+ * --     nas simulações — controla, por hierarquia, quem enxerga qual produto. Regra:
+ * --     NULL = "segue automaticamente a hierarquia" (herda do superior direto, subindo
+ * --     até achar alguém com uma lista definida, ou até o padrão do cargo de quem está
+ * --     no topo). Qualquer array, mesmo vazio, é uma trava manual explícita — vence
+ * --     sempre a herança, até que alguém edite de novo para "seguir automaticamente".
+ * ALTER TABLE perfis ADD COLUMN IF NOT EXISTS empreendimentos_liberados TEXT[] NULL;
+ *
+ * -- Padrão por cargo: usado só quando a busca acima chega ao topo da hierarquia (a
+ * --     pessoa não tem superior) e ainda assim não encontrou nenhuma trava manual no
+ * --     caminho — nesse caso, cai no padrão configurado para o cargo dessa pessoa do
+ * --     topo. Sem linha para o cargo (ou tabela vazia) = sem restrição nenhuma, mostra
+ * --     todos os empreendimentos (mesmo default seguro usado em toda parte do app).
+ * CREATE TABLE IF NOT EXISTS empreendimentos_padrao_por_cargo (
+ *   cargo TEXT PRIMARY KEY,
+ *   empreendimentos_liberados TEXT[] NOT NULL DEFAULT '{}'
+ * );
+ * ALTER TABLE empreendimentos_padrao_por_cargo ENABLE ROW LEVEL SECURITY;
+ * CREATE POLICY "logados_leem_empreendimentos_padrao_por_cargo" ON empreendimentos_padrao_por_cargo
+ *   FOR SELECT USING (auth.role() = 'authenticated');
+ * CREATE POLICY "admin_grava_empreendimentos_padrao_por_cargo" ON empreendimentos_padrao_por_cargo
+ *   FOR ALL USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));
+ *
+ * -- Função que resolve, em tempo real (sempre lida do banco, nunca uma cópia
+ * --     congelada), a lista efetiva de empreendimentos liberados para o próprio
+ * --     usuário logado — sobe a árvore de `superior_id` até achar a primeira trava
+ * --     manual (empreendimentos_liberados NOT NULL); se chegar ao topo sem achar
+ * --     nenhuma, cai no padrão do cargo de quem está no topo. NULL de volta = sem
+ * --     nenhuma restrição configurada em lugar nenhum da cadeia (o app mostra todos os
+ * --     empreendimentos, é o default seguro). Só é possível consultar o próprio id —
+ * --     mesma trava de `dados_equipe_para_edicao`.
+ * CREATE OR REPLACE FUNCTION public.empreendimentos_liberados_efetivos(usuario_id UUID)
+ * RETURNS TEXT[] LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+ * DECLARE
+ *   atual_id UUID;
+ *   atual_lista TEXT[];
+ *   atual_cargo TEXT;
+ *   profundidade INT := 0;
+ * BEGIN
+ *   IF usuario_id <> auth.uid() THEN
+ *     RAISE EXCEPTION 'Só é possível consultar os próprios empreendimentos liberados.';
+ *   END IF;
+ *
+ *   atual_id := usuario_id;
+ *   WHILE atual_id IS NOT NULL AND profundidade < 20 LOOP
+ *     SELECT p.empreendimentos_liberados, p.cargo, p.superior_id
+ *       INTO atual_lista, atual_cargo, atual_id
+ *       FROM perfis p WHERE p.id = atual_id;
+ *
+ *     IF atual_lista IS NOT NULL THEN
+ *       RETURN atual_lista;
+ *     END IF;
+ *
+ *     IF atual_id IS NULL THEN
+ *       RETURN (SELECT epc.empreendimentos_liberados FROM empreendimentos_padrao_por_cargo epc WHERE epc.cargo = atual_cargo);
+ *     END IF;
+ *
+ *     profundidade := profundidade + 1;
+ *   END LOOP;
+ *
+ *   RETURN NULL;
+ * END;
+ * $$;
+ * GRANT EXECUTE ON FUNCTION public.empreendimentos_liberados_efetivos(UUID) TO authenticated;
  *
  * -- 6e) Proprietário: existe no máximo UM usuário com proprietario=true no
  * --     sistema inteiro (índice único abaixo garante isso no banco, não só na
@@ -369,6 +444,7 @@ interface PerfilRow {
   telas_liberadas: string[] | null;
   ver_propostas_equipe: boolean | null;
   campos_editaveis_equipe: string[] | null;
+  empreendimentos_liberados: string[] | null;
   proprietario: boolean | null;
   created_at?: string;
 }
@@ -388,6 +464,7 @@ function rowParaPerfil(row: PerfilRow): PerfilUsuario {
     telasLiberadas: row.telas_liberadas || [],
     verPropostasEquipe: !!row.ver_propostas_equipe,
     camposEditaveisEquipe: row.campos_editaveis_equipe || [],
+    empreendimentosLiberados: row.empreendimentos_liberados,
     proprietario: !!row.proprietario,
     createdAt: row.created_at
   };
@@ -403,6 +480,7 @@ export interface MembroEquipeEditavel {
   cargo: Cargo;
   superiorId: string | null;
   telasLiberadas: string[];
+  empreendimentosLiberados: string[] | null;
 }
 
 export interface DadosCadastro {
@@ -510,7 +588,7 @@ export const authService = {
   async editarCargoEPermissoes(id: string, ajustes: {
     cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; verPropostasEquipe: boolean;
     nomeCompleto: string; telefone: string; cpf: string; imobiliaria: string; creci?: string;
-    camposEditaveisEquipe: string[];
+    camposEditaveisEquipe: string[]; empreendimentosLiberados: string[] | null;
   }) {
     const { error } = await supabase.from('perfis').update({
       cargo: ajustes.cargo,
@@ -522,7 +600,8 @@ export const authService = {
       cpf: ajustes.cpf,
       imobiliaria: ajustes.imobiliaria,
       creci: ajustes.creci || null,
-      campos_editaveis_equipe: ajustes.camposEditaveisEquipe
+      campos_editaveis_equipe: ajustes.camposEditaveisEquipe,
+      empreendimentos_liberados: ajustes.empreendimentosLiberados
     }).eq('id', id);
     return { success: !error, error: error?.message };
   },
@@ -563,7 +642,8 @@ export const authService = {
         creci: row.creci || undefined,
         cargo: row.cargo,
         superiorId: row.superior_id,
-        telasLiberadas: row.telas_liberadas || []
+        telasLiberadas: row.telas_liberadas || [],
+        empreendimentosLiberados: row.empreendimentos_liberados
       }))
     };
   },
@@ -575,6 +655,7 @@ export const authService = {
   async editarCadastroSubordinado(subordinadoId: string, ajustes: {
     nomeCompleto?: string; telefone?: string; cpf?: string; imobiliaria?: string;
     creci?: string | null; cargo?: Cargo; superiorId?: string | null; telasLiberadas?: string[];
+    empreendimentosLiberados?: string[] | null;
   }): Promise<{ success: boolean; error?: string }> {
     const { error } = await supabase.rpc('editar_cadastro_subordinado', {
       subordinado_id: subordinadoId,
@@ -587,7 +668,9 @@ export const authService = {
       novo_cargo: ajustes.cargo ?? null,
       novo_superior_id: ajustes.superiorId ?? null,
       limpar_superior: ajustes.superiorId === null,
-      novas_telas: ajustes.telasLiberadas ?? null
+      novas_telas: ajustes.telasLiberadas ?? null,
+      novos_empreendimentos: ajustes.empreendimentosLiberados ?? null,
+      limpar_empreendimentos: ajustes.empreendimentosLiberados === null
     });
     return { success: !error, error: error?.message };
   },
@@ -614,6 +697,48 @@ export const authService = {
   // no SQL acima). `novoProprietarioId` precisa ser um Administrador ativo.
   async transferirPropriedade(novoProprietarioId: string): Promise<{ success: boolean; error?: string }> {
     const { error } = await supabase.rpc('transferir_propriedade', { novo_proprietario_id: novoProprietarioId });
+    return { success: !error, error: error?.message };
+  },
+
+  // --- Empreendimentos liberados (acesso por hierarquia) --------------------
+
+  // Resolve, em tempo real, a lista efetiva de empreendimentos que o próprio
+  // usuário logado pode ver — nunca uma cópia congelada (ver função no SQL
+  // acima). `null` de volta (ou qualquer erro de rede/consulta) significa "sem
+  // restrição configurada", o mesmo default seguro usado em todo o app: uma
+  // falha aqui nunca deve travar ninguém para fora dos próprios produtos.
+  async empreendimentosLiberadosEfetivos(usuarioId: string): Promise<string[] | null> {
+    const { data, error } = await supabase.rpc('empreendimentos_liberados_efetivos', { usuario_id: usuarioId });
+    if (error) return null;
+    return (data as string[] | null) ?? null;
+  },
+
+  // Lê o padrão de empreendimentos liberados configurado para cada cargo (usado
+  // só quando a hierarquia não encontra nenhuma trava manual no caminho). Um
+  // cargo sem linha na tabela não aparece no resultado — o chamador deve tratar
+  // isso como "sem restrição", igual a uma lista vazia não é a mesma coisa.
+  async listarEmpreendimentosPadraoPorCargo(): Promise<Record<string, string[]>> {
+    const { data, error } = await supabase.from('empreendimentos_padrao_por_cargo').select('*');
+    if (error || !data) return {};
+    const resultado: Record<string, string[]> = {};
+    data.forEach((row: { cargo: string; empreendimentos_liberados: string[] }) => {
+      resultado[row.cargo] = row.empreendimentos_liberados || [];
+    });
+    return resultado;
+  },
+
+  async salvarEmpreendimentosPadraoPorCargo(cargo: Cargo, empreendimentosLiberados: string[]): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.from('empreendimentos_padrao_por_cargo').upsert(
+      { cargo, empreendimentos_liberados: empreendimentosLiberados },
+      { onConflict: 'cargo' }
+    );
+    return { success: !error, error: error?.message };
+  },
+
+  // Remove a trava do cargo (volta a "sem restrição" — o mesmo que nunca ter
+  // sido configurado).
+  async removerEmpreendimentosPadraoPorCargo(cargo: Cargo): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.from('empreendimentos_padrao_por_cargo').delete().eq('cargo', cargo);
     return { success: !error, error: error?.message };
   }
 };

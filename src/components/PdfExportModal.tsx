@@ -33,6 +33,10 @@ interface PdfExportModalProps {
   areaPriv: string;
   areaQuintal: string;
   price: number;
+  // Preço de Tabela original, importado da tabela de vendas — usado só no
+  // display "Preço de Tabela" do PDF, que nunca deve refletir o desconto à
+  // vista (aplicado sobre `price`, usado no restante dos cálculos).
+  precoTabelaOriginal: number;
   evaluation: number;
   deliveryText: string;
   income: number;
@@ -96,6 +100,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
   areaPriv,
   areaQuintal,
   price,
+  precoTabelaOriginal,
   evaluation,
   deliveryText,
   income,
@@ -600,7 +605,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                     Preço de Tabela
                   </span>
                   <strong className="text-slate-900 font-bold text-xs whitespace-nowrap truncate w-full">
-                    {fmt(price)}
+                    {fmt(precoTabelaOriginal)}
                   </strong>
                 </div>
 

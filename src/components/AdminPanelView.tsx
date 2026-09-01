@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, RefreshCw, Check, X, Pencil, Ban, PlayCircle, Trash2, Crown, ArrowLeftRight, Filter, ChevronDown, ChevronUp, Search } from 'lucide-react';
-import { PerfilUsuario, Cargo, StatusConta } from '../types';
+import { ShieldCheck, RefreshCw, Check, X, Pencil, Ban, PlayCircle, Trash2, Crown, ArrowLeftRight, Filter, ChevronDown, ChevronUp, Search, Building2 } from 'lucide-react';
+import { PerfilUsuario, Cargo, StatusConta, Product } from '../types';
 import { authService } from '../services/authService';
 import { TELAS_APP, CARGOS, TELAS_PADRAO_POR_CARGO, CAMPOS_EDITAVEIS_EQUIPE } from '../config/telasApp';
 
@@ -10,6 +10,10 @@ interface AdminPanelViewProps {
   // tela é o próprio proprietário do aplicativo (ver PerfilUsuario.proprietario):
   // só ele pode editar, pausar, excluir ou transferir o próprio cadastro.
   usuarioAtualId: string;
+  // Lista completa de empreendimentos, para montar a grade de checkboxes de
+  // "Empreendimentos liberados" — tanto na edição individual quanto no padrão
+  // por cargo. Esta tela em si nunca é filtrada por empreendimentos liberados.
+  produtos: Pick<Product, 'id' | 'name'>[];
 }
 
 // Cargos que, por padrão, enxergam a proposta da equipe abaixo deles quando
@@ -73,7 +77,7 @@ function passaFiltroUsuario(u: PerfilUsuario, f: FiltrosUsuarios, equipeDescende
   return true;
 }
 
-export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usuarioAtualId }) => {
+export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usuarioAtualId, produtos }) => {
   const [pendentes, setPendentes] = useState<PerfilUsuario[]>([]);
   const [ativos, setAtivos] = useState<PerfilUsuario[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -116,6 +120,10 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   const [edCpf, setEdCpf] = useState('');
   const [edImobiliaria, setEdImobiliaria] = useState('');
   const [edCreci, setEdCreci] = useState('');
+  // Empreendimentos liberados: 'auto' segue a hierarquia (grava NULL), 'manual'
+  // trava explicitamente na lista marcada abaixo (mesmo que fique vazia).
+  const [edEmpreendimentosModo, setEdEmpreendimentosModo] = useState<'auto' | 'manual'>('auto');
+  const [edEmpreendimentosSelecionados, setEdEmpreendimentosSelecionados] = useState<Set<string>>(new Set());
 
   // Edição de permissões por cargo — aplica de uma vez só (telas liberadas,
   // ver propostas da equipe, campos editáveis da equipe) para todo mundo que
@@ -129,6 +137,27 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   const [pmCamposEditaveis, setPmCamposEditaveis] = useState<Set<string>>(new Set());
   const [confirmandoAplicacaoMassa, setConfirmandoAplicacaoMassa] = useState(false);
   const [aplicandoMassa, setAplicandoMassa] = useState(false);
+
+  // Empreendimentos padrão por cargo — usado só quando a hierarquia chega ao
+  // topo sem achar nenhuma trava manual no caminho (ver empreendimentos_liberados_efetivos
+  // no SQL de authService.ts). Um cargo ausente de `empPadraoTodos` está "sem
+  // restrição" (nunca configurado); presente = trava explícita naquela lista.
+  const [empPadraoTodos, setEmpPadraoTodos] = useState<Record<string, string[]>>({});
+  const [carregandoEmpPadrao, setCarregandoEmpPadrao] = useState(true);
+  const [empPadraoAberto, setEmpPadraoAberto] = useState(false);
+  const [empPadraoCargo, setEmpPadraoCargo] = useState<Cargo>('Corretor');
+  const [empPadraoModo, setEmpPadraoModo] = useState<'auto' | 'manual'>('auto');
+  const [empPadraoSelecionados, setEmpPadraoSelecionados] = useState<Set<string>>(new Set());
+  const [salvandoEmpPadrao, setSalvandoEmpPadrao] = useState(false);
+
+  const carregarEmpPadrao = async () => {
+    setCarregandoEmpPadrao(true);
+    const dados = await authService.listarEmpreendimentosPadraoPorCargo();
+    setEmpPadraoTodos(dados);
+    setCarregandoEmpPadrao(false);
+  };
+
+  useEffect(() => { carregarEmpPadrao(); }, []);
 
   const carregar = async () => {
     setCarregando(true);
@@ -230,6 +259,8 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     setEdCpf(u.cpf);
     setEdImobiliaria(u.imobiliaria);
     setEdCreci(u.creci || '');
+    setEdEmpreendimentosModo(u.empreendimentosLiberados === null ? 'auto' : 'manual');
+    setEdEmpreendimentosSelecionados(new Set(u.empreendimentosLiberados || []));
   };
 
   const salvarEdicao = async () => {
@@ -249,7 +280,8 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
       cpf: edCpf.trim(),
       imobiliaria: edImobiliaria.trim(),
       creci: edCreci.trim() || undefined,
-      camposEditaveisEquipe: Array.from(edCamposEditaveis)
+      camposEditaveisEquipe: Array.from(edCamposEditaveis),
+      empreendimentosLiberados: edEmpreendimentosModo === 'auto' ? null : Array.from(edEmpreendimentosSelecionados)
     });
     setProcessandoId(null);
     if (res.success) {
@@ -329,9 +361,22 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
 
   const abrirPermissoesPorCargo = (cargo: Cargo) => {
     setPmCargo(cargo);
-    setPmTelas(new Set(TELAS_PADRAO_POR_CARGO[cargo] || []));
-    setPmVerEquipe(CARGOS_COM_EQUIPE.includes(cargo));
-    setPmCamposEditaveis(new Set());
+    // Pré-preenche com o que já está gravado hoje para alguém desse cargo (em vez
+    // de sempre voltar para o padrão de fábrica) — sem isso, reabrir o painel
+    // depois de aplicar dava a falsa impressão de que nada tinha sido salvo,
+    // porque os quadradinhos voltavam desmarcados mesmo já estando gravados no
+    // banco. Só cai no padrão de fábrica quando ainda não existe ninguém com
+    // esse cargo para servir de referência.
+    const usuarioReferencia = ativos.find(u => u.cargo === cargo);
+    if (usuarioReferencia) {
+      setPmTelas(new Set(usuarioReferencia.telasLiberadas));
+      setPmVerEquipe(usuarioReferencia.verPropostasEquipe);
+      setPmCamposEditaveis(new Set(usuarioReferencia.camposEditaveisEquipe));
+    } else {
+      setPmTelas(new Set(TELAS_PADRAO_POR_CARGO[cargo] || []));
+      setPmVerEquipe(CARGOS_COM_EQUIPE.includes(cargo));
+      setPmCamposEditaveis(new Set());
+    }
     setPermCargoAberto(true);
   };
 
@@ -349,6 +394,28 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
       carregar();
     } else {
       onShowToast(`Erro ao aplicar em massa: ${res.error || 'erro desconhecido'}`);
+    }
+  };
+
+  const abrirEmpPadrao = (cargo: Cargo) => {
+    setEmpPadraoCargo(cargo);
+    const lista = empPadraoTodos[cargo];
+    setEmpPadraoModo(lista !== undefined ? 'manual' : 'auto');
+    setEmpPadraoSelecionados(new Set(lista || []));
+    setEmpPadraoAberto(true);
+  };
+
+  const salvarEmpPadrao = async () => {
+    setSalvandoEmpPadrao(true);
+    const res = empPadraoModo === 'auto'
+      ? await authService.removerEmpreendimentosPadraoPorCargo(empPadraoCargo)
+      : await authService.salvarEmpreendimentosPadraoPorCargo(empPadraoCargo, Array.from(empPadraoSelecionados));
+    setSalvandoEmpPadrao(false);
+    if (res.success) {
+      onShowToast(`Padrão de empreendimentos do cargo ${empPadraoCargo} atualizado.`);
+      carregarEmpPadrao();
+    } else {
+      onShowToast(`Erro ao salvar padrão do cargo: ${res.error || 'erro desconhecido'}`);
     }
   };
 
@@ -411,6 +478,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
               </select>
               <p className="text-[11px] text-slate-400 mt-1.5">
                 {usuariosDoCargoEmMassa.length} conta{usuariosDoCargoEmMassa.length === 1 ? '' : 's'} com o cargo {pmCargo} hoje (ativas ou pausadas).
+                {usuariosDoCargoEmMassa.length > 1 && ' Os quadradinhos abaixo mostram o que já está gravado para o primeiro deles — se estiverem diferentes entre si, ao aplicar todos passam a ficar iguais ao que está marcado aqui.'}
               </p>
             </div>
 
@@ -475,6 +543,93 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                 Aplicar a todos os {pmCargo} ({usuariosDoCargoEmMassa.length})
               </button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* EMPREENDIMENTOS PADRÃO POR CARGO */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <button
+          type="button"
+          onClick={() => {
+            if (!empPadraoAberto) abrirEmpPadrao(empPadraoCargo);
+            else setEmpPadraoAberto(false);
+          }}
+          className="w-full px-5 py-4 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/60 transition-colors"
+        >
+          <div className="text-left flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+            <div>
+              <div className="text-sm font-bold text-slate-800">Empreendimentos padrão por cargo</div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Vale só para quem está no topo da hierarquia (sem superior) e não tem uma trava manual própria — o
+                padrão é herdado ao vivo por toda a equipe abaixo, a não ser que alguém no meio do caminho trave manualmente.
+              </p>
+            </div>
+          </div>
+          {empPadraoAberto ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+        </button>
+
+        {empPadraoAberto && (
+          <div className="px-5 pb-5 space-y-4 border-t border-slate-100 pt-4">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">Cargo</label>
+              <select
+                value={empPadraoCargo}
+                onChange={e => abrirEmpPadrao(e.target.value as Cargo)}
+                className="w-full sm:w-64 px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white"
+              >
+                {CARGOS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            {carregandoEmpPadrao ? (
+              <p className="text-xs text-slate-400">Carregando...</p>
+            ) : (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <label className="flex items-center gap-2 text-xs text-slate-700">
+                    <input type="radio" name="emp-padrao-modo" checked={empPadraoModo === 'auto'} onChange={() => setEmpPadraoModo('auto')} className="w-3.5 h-3.5 accent-sky-600" />
+                    Sem restrição (mostra todos os empreendimentos)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-700">
+                    <input type="radio" name="emp-padrao-modo" checked={empPadraoModo === 'manual'} onChange={() => setEmpPadraoModo('manual')} className="w-3.5 h-3.5 accent-sky-600" />
+                    Definir lista específica
+                  </label>
+                </div>
+                {empPadraoModo === 'manual' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-50/60 border border-slate-100 rounded-lg p-2.5">
+                    {produtos.map(p => (
+                      <label key={p.id} className="flex items-center gap-2 text-xs text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={empPadraoSelecionados.has(p.id)}
+                          onChange={e => {
+                            setEmpPadraoSelecionados(prev => {
+                              const novo = new Set(prev);
+                              if (e.target.checked) novo.add(p.id); else novo.delete(p.id);
+                              return novo;
+                            });
+                          }}
+                          className="w-4 h-4 accent-sky-600"
+                        />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="flex justify-end pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={salvandoEmpPadrao}
+                    onClick={salvarEmpPadrao}
+                    className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-50"
+                  >
+                    {salvandoEmpPadrao ? 'Salvando...' : `Salvar padrão do cargo ${empPadraoCargo}`}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -855,6 +1010,47 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <p className="text-[11px] font-bold text-slate-500 mb-1">Empreendimentos liberados</p>
+              <p className="text-[11px] text-slate-400 mb-2">
+                Controla quais empreendimentos esta pessoa vê ao simular. "Automaticamente" acompanha ao vivo o que o
+                superior hierárquico dela enxerga (ou o padrão do cargo, se ninguém acima definir nada) — muda sozinho
+                se a hierarquia ou aquela configuração mudar depois. "Definir manualmente" trava a lista marcada abaixo,
+                mesmo que a hierarquia mude.
+              </p>
+              <div className="flex flex-col gap-1.5 mb-2">
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <input type="radio" name="ed-emp-modo" checked={edEmpreendimentosModo === 'auto'} onChange={() => setEdEmpreendimentosModo('auto')} className="w-3.5 h-3.5 accent-sky-600" />
+                  Seguir automaticamente (hierarquia/cargo)
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <input type="radio" name="ed-emp-modo" checked={edEmpreendimentosModo === 'manual'} onChange={() => setEdEmpreendimentosModo('manual')} className="w-3.5 h-3.5 accent-sky-600" />
+                  Definir manualmente
+                </label>
+              </div>
+              {edEmpreendimentosModo === 'manual' && (
+                <div className="grid grid-cols-2 gap-2 bg-slate-50/60 border border-slate-100 rounded-lg p-2.5">
+                  {produtos.map(p => (
+                    <label key={p.id} className="flex items-center gap-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={edEmpreendimentosSelecionados.has(p.id)}
+                        onChange={e => {
+                          setEdEmpreendimentosSelecionados(prev => {
+                            const novo = new Set(prev);
+                            if (e.target.checked) novo.add(p.id); else novo.delete(p.id);
+                            return novo;
+                          });
+                        }}
+                        className="w-4 h-4 accent-sky-600"
+                      />
+                      {p.name}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

@@ -4,7 +4,7 @@ import { formatCurrency, parseCurrency, formatForEdit } from '../utils/formatter
 import { imoveisService } from '../services/imoveisService';
 import { authService, MembroEquipeEditavel } from '../services/authService';
 import { CAMPOS_EDITAVEIS_EQUIPE, CARGOS, TELAS_APP } from '../config/telasApp';
-import { Cargo } from '../types';
+import { Cargo, Product } from '../types';
 
 export interface SavedSimulationRecord {
   id: string;
@@ -32,6 +32,9 @@ interface SavedSimulationsViewProps {
   // ausente = a seção "Editar cadastro da equipe" nem aparece.
   usuarioId: string;
   camposEditaveisEquipe?: string[];
+  // Lista completa de empreendimentos, só para montar a grade de checkboxes de
+  // "Empreendimentos liberados" quando esse campo estiver autorizado.
+  produtos: Pick<Product, 'id' | 'name'>[];
 }
 
 interface FiltrosSimulacoes {
@@ -135,7 +138,7 @@ function descendentesNaEquipe(id: string, equipe: MembroEquipeEditavel[]): Set<s
   return resultado;
 }
 
-export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEditSimulation, onShowToast, podeFiltrarPorGerente, usuarioId, camposEditaveisEquipe }) => {
+export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEditSimulation, onShowToast, podeFiltrarPorGerente, usuarioId, camposEditaveisEquipe, produtos }) => {
   const [simulations, setSimulations] = useState<SavedSimulationRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [viewingSim, setViewingSim] = useState<SavedSimulationRecord | null>(null);
@@ -164,6 +167,8 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
   const [emCargo, setEmCargo] = useState<Cargo>('Corretor');
   const [emSuperiorId, setEmSuperiorId] = useState<string | null>(null);
   const [emTelas, setEmTelas] = useState<Set<string>>(new Set());
+  const [emEmpreendimentosModo, setEmEmpreendimentosModo] = useState<'auto' | 'manual'>('auto');
+  const [emEmpreendimentosSelecionados, setEmEmpreendimentosSelecionados] = useState<Set<string>>(new Set());
 
   const carregarEquipe = async () => {
     if (!podeEditarEquipe) return;
@@ -191,6 +196,8 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
     setEmCargo(m.cargo);
     setEmSuperiorId(m.superiorId);
     setEmTelas(new Set(m.telasLiberadas));
+    setEmEmpreendimentosModo(m.empreendimentosLiberados === null ? 'auto' : 'manual');
+    setEmEmpreendimentosSelecionados(new Set(m.empreendimentosLiberados || []));
   };
 
   const descendentesDoMembroEditando = membroEditando ? descendentesNaEquipe(membroEditando.id, equipe) : new Set<string>();
@@ -210,7 +217,10 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
       creci: camposAutorizados.has('creci') ? (emCreci.trim() || null) : undefined,
       cargo: camposAutorizados.has('cargo') ? emCargo : undefined,
       superiorId: camposAutorizados.has('superior') ? emSuperiorId : undefined,
-      telasLiberadas: camposAutorizados.has('telas') ? Array.from(emTelas) : undefined
+      telasLiberadas: camposAutorizados.has('telas') ? Array.from(emTelas) : undefined,
+      empreendimentosLiberados: camposAutorizados.has('empreendimentos')
+        ? (emEmpreendimentosModo === 'auto' ? null : Array.from(emEmpreendimentosSelecionados))
+        : undefined
     });
     setSalvandoMembro(false);
     if (res.success) {
@@ -744,6 +754,47 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
                     </label>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {camposAutorizados.has('empreendimentos') && (
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-[11px] font-bold text-slate-500 mb-1">Empreendimentos liberados</p>
+                <p className="text-[11px] text-slate-400 mb-2">
+                  "Automaticamente" acompanha ao vivo o que está definido acima dele na hierarquia (ou o padrão do
+                  cargo). "Definir manualmente" trava a lista marcada abaixo.
+                </p>
+                <div className="flex flex-col gap-1.5 mb-2">
+                  <label className="flex items-center gap-2 text-xs text-slate-700">
+                    <input type="radio" name="em-emp-modo" checked={emEmpreendimentosModo === 'auto'} onChange={() => setEmEmpreendimentosModo('auto')} className="w-3.5 h-3.5 accent-sky-600" />
+                    Seguir automaticamente (hierarquia/cargo)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-700">
+                    <input type="radio" name="em-emp-modo" checked={emEmpreendimentosModo === 'manual'} onChange={() => setEmEmpreendimentosModo('manual')} className="w-3.5 h-3.5 accent-sky-600" />
+                    Definir manualmente
+                  </label>
+                </div>
+                {emEmpreendimentosModo === 'manual' && (
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50/60 border border-slate-100 rounded-lg p-2.5">
+                    {produtos.map(p => (
+                      <label key={p.id} className="flex items-center gap-2 text-xs text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={emEmpreendimentosSelecionados.has(p.id)}
+                          onChange={e => {
+                            setEmEmpreendimentosSelecionados(prev => {
+                              const novo = new Set(prev);
+                              if (e.target.checked) novo.add(p.id); else novo.delete(p.id);
+                              return novo;
+                            });
+                          }}
+                          className="w-4 h-4 accent-sky-600"
+                        />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

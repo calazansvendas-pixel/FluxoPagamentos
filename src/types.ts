@@ -9,6 +9,11 @@ export interface CommercialCondition {
   taxaJuros1: number;
   mesesTabela2: number;
   taxaJuros2: number;
+  // Taxa de Assinatura de Contrato (%) — específica do Sinal c/ Banco Direto:
+  // soma sobre o Pró-Soluto Total c/ ITBI só na base de cálculo da parcela
+  // (Tabela Price), sem alterar o Pró-Soluto exibido em tela nem os demais
+  // cálculos (indicadores de risco, PDF etc.). Padrão 0% (sem acréscimo).
+  taxaAssinaturaContratoPct?: number;
   policy: string;
   // % de Desconto à Vista: ainda não é aplicado em nenhum cálculo do simulador,
   // é apenas cadastrado aqui como base para uma futura regra de desconto por
@@ -167,6 +172,13 @@ export interface PerfilUsuario {
   // hierarquia (ex.: um Gerente autorizado a corrigir telefone/imobiliária
   // dos próprios corretores, sem precisar do Administrador pra isso).
   camposEditaveisEquipe: string[];
+  // Empreendimentos (produtos) que este usuário pode ver e usar nas simulações.
+  // `null` = segue automaticamente a hierarquia (herda do superior direto,
+  // subindo até achar uma trava manual ou o padrão do cargo de quem está no
+  // topo); um array (mesmo vazio) é uma trava manual explícita, sempre
+  // resolvida em tempo real pela RPC empreendimentos_liberados_efetivos — não
+  // é uma cópia congelada no momento do cadastro.
+  empreendimentosLiberados: string[] | null;
   // Existe no máximo UM usuário com proprietario=true no sistema inteiro (trava
   // por índice único no banco). É quem "é dono" do aplicativo — mesmo sendo
   // Administrador como qualquer outro, só ele mesmo pode se rebaixar de cargo,
