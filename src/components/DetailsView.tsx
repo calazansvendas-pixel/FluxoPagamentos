@@ -1110,8 +1110,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const taxa2 = currentCond?.taxaJuros2 !== undefined ? currentCond.taxaJuros2 : 1.9;
   const appliedRatePct = (qtdMensais <= meses1) ? taxa1 : taxa2;
 
-  // 4. CÁLCULO DA BASE LÍQUIDA PARA A PARCELA (DESCONTO DO FATOR DE TAXA):
-  const baseCalculoParcela = proSolutoTotalParcelado * 0.997997;
+  // 4. CÁLCULO DA BASE PARA A PARCELA (ACRÉSCIMO DA TAXA DE ASSINATURA DE CONTRATO):
+  // A taxa soma sobre o Pró-Soluto só aqui, na base que alimenta a Tabela Price —
+  // o Pró-Soluto Total c/ ITBI exibido em tela (proSolutoTotalPainel) e todos os
+  // demais cálculos (indicadores de risco, PDF etc.) continuam usando o valor sem
+  // a taxa. Cadastrada em Políticas & Empreendimentos; padrão 0% (sem acréscimo).
+  const taxaAssinaturaContratoPct = currentCond?.taxaAssinaturaContratoPct ?? 0;
+  const baseCalculoParcela = proSolutoTotalParcelado * (1 + taxaAssinaturaContratoPct / 100);
 
   // 5. CÁLCULO DA PARCELA MENSAL (TABELA PRICE COM TAXA APLICADA):
   const parcela = (hasUnitSelected && baseCalculoParcela > 0 && qtdMensais > 0)

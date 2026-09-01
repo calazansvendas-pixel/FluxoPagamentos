@@ -105,6 +105,10 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const [taxaJuros1Str, setTaxaJuros1Str] = useState<string>('0,00');
   const [mesesTabela2Str, setMesesTabela2Str] = useState<string>('72');
   const [taxaJuros2Str, setTaxaJuros2Str] = useState<string>('1,00');
+  // Taxa de Assinatura de Contrato (%) — exclusiva do Sinal c/ Banco Direto:
+  // soma sobre o Pró-Soluto Total c/ ITBI só na base de cálculo da parcela
+  // (Tabela Price), sem alterar o Pró-Soluto exibido em tela.
+  const [taxaAssinaturaContratoStr, setTaxaAssinaturaContratoStr] = useState<string>('0,00');
   const [policyText, setPolicyText] = useState<string>('');
   // % de Desconto à Vista: comum a todas as condições comerciais de todos os
   // produtos (não é exclusivo de Sinal c/ Morar ou Parcelamento Morar) —
@@ -303,6 +307,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const t1 = source.taxaJuros1 !== undefined ? source.taxaJuros1 : 0.0;
     const m2 = source.mesesTabela2 !== undefined ? source.mesesTabela2 : 72;
     const t2 = source.taxaJuros2 !== undefined ? source.taxaJuros2 : 1.0;
+    const ta = source.taxaAssinaturaContratoPct !== undefined ? source.taxaAssinaturaContratoPct : 0;
 
     const mo = source.mesesObra !== undefined ? source.mesesObra : 33;
     const mp = source.mesesPos !== undefined ? source.mesesPos : 27;
@@ -352,6 +357,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setTaxaJuros1Str(formatDecimalBR(t1, 2, 2));
     setMesesTabela2Str(String(m2));
     setTaxaJuros2Str(formatDecimalBR(t2, 2, 2));
+    setTaxaAssinaturaContratoStr(formatDecimalBR(ta, 2, 2));
 
     setMesesObraStr(String(mo));
     setMesesPosStr(String(mp));
@@ -391,6 +397,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const taxaJuros1 = parseDecimal(taxaJuros1Str, 0);
   const mesesTabela2 = parseIntFlexible(mesesTabela2Str, 1);
   const taxaJuros2 = parseDecimal(taxaJuros2Str, 1);
+  const taxaAssinaturaContratoPct = parseDecimal(taxaAssinaturaContratoStr, 0);
 
   // Parâmetros Morar calculados dinamicamente
   const mesesObra = Math.max(0, parseIntFlexible(mesesObraStr, 0));
@@ -450,6 +457,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       taxaJuros1,
       mesesTabela2,
       taxaJuros2,
+      taxaAssinaturaContratoPct,
       mesesObra,
       mesesPos,
       globalSerie1Pct,
@@ -660,6 +668,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedTaxa1 = parseDecimal(taxaJuros1Str, 0);
     const parsedMeses2 = Math.max(0, parseIntFlexible(mesesTabela2Str, 72));
     const parsedTaxa2 = parseDecimal(taxaJuros2Str, 1);
+    const parsedTaxaAssinaturaContrato = parseDecimal(taxaAssinaturaContratoStr, 0);
 
     const parsedMesesObra = Math.max(0, parseIntFlexible(mesesObraStr, 33));
     const parsedMesesPos = Math.max(0, parseIntFlexible(mesesPosStr, 27));
@@ -702,6 +711,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setTaxaJuros1Str(formatDecimalBR(parsedTaxa1, 2, 2));
     setMesesTabela2Str(String(parsedMeses2));
     setTaxaJuros2Str(formatDecimalBR(parsedTaxa2, 2, 2));
+    setTaxaAssinaturaContratoStr(formatDecimalBR(parsedTaxaAssinaturaContrato, 2, 2));
 
     setMesesObraStr(String(parsedMesesObra));
     setMesesPosStr(String(parsedMesesPos));
@@ -740,6 +750,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       taxaJuros1: parsedTaxa1,
       mesesTabela2: parsedMeses2,
       taxaJuros2: parsedTaxa2,
+      taxaAssinaturaContratoPct: parsedTaxaAssinaturaContrato,
       mesesObra: parsedMesesObra,
       mesesPos: parsedMesesPos,
       globalSerie1Pct: parsedGlobal1,
@@ -1989,6 +2000,32 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         />
                         <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">% a.m.</span>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TAXA DE ASSINATURA DE CONTRATO: SOMA SOBRE O PRÓ-SOLUTO SÓ NA BASE DA PARCELA */}
+                <div className="pt-3 border-t border-sky-100/80">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/80 max-w-sm">
+                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual somado ao Pró-Soluto Total c/ ITBI só na base de cálculo da parcela (Tabela Price)">
+                      Taxa de Assinatura de Contrato (%)
+                    </label>
+                    <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
+                      Soma sobre o Pró-Soluto Total c/ ITBI só para calcular a parcela — o valor exibido em "Pró-Soluto Total c/ ITBI" não muda.
+                    </p>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={taxaAssinaturaContratoStr}
+                        onChange={(e) => setTaxaAssinaturaContratoStr(e.target.value)}
+                        onBlur={() => {
+                          const parsed = parseDecimal(taxaAssinaturaContratoStr, 0);
+                          setTaxaAssinaturaContratoStr(formatDecimalBR(parsed, 2, 4));
+                        }}
+                        className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-amber-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      />
+                      <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">%</span>
                     </div>
                   </div>
                 </div>

@@ -9,6 +9,11 @@ export interface CommercialCondition {
   taxaJuros1: number;
   mesesTabela2: number;
   taxaJuros2: number;
+  // Taxa de Assinatura de Contrato (%) — específica do Sinal c/ Banco Direto:
+  // soma sobre o Pró-Soluto Total c/ ITBI só na base de cálculo da parcela
+  // (Tabela Price), sem alterar o Pró-Soluto exibido em tela nem os demais
+  // cálculos (indicadores de risco, PDF etc.). Padrão 0% (sem acréscimo).
+  taxaAssinaturaContratoPct?: number;
   policy: string;
   // % de Desconto à Vista: ainda não é aplicado em nenhum cálculo do simulador,
   // é apenas cadastrado aqui como base para uma futura regra de desconto por
