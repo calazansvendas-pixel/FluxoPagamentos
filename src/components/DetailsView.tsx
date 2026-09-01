@@ -471,6 +471,17 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   let fgts = rawFGTS;
   let subsidy = rawSubsidy;
 
+  // Pagamento à vista = 100% recurso próprio do cliente: nenhum financiamento
+  // bancário, subsídio ou FGTS é considerado (mesmo que tenha sido digitado no
+  // Simulador) — o Ato (Imóvel) absorve o preço com desconto inteiro, e Max
+  // Financ./Subsídio/FGTS/Total Negoc. ficam todos em R$ 0,00. Mesma regra já
+  // aplicada em FichaMorar.tsx (Sinal c/ Morar).
+  if (isPagamentoAVistaAtivoManual) {
+    maxFinanc = 0;
+    fgts = 0;
+    subsidy = 0;
+  }
+
   if (hasUnitSelected && somaRecursos > tetoMaximo) {
     let excesso = somaRecursos - tetoMaximo;
 
