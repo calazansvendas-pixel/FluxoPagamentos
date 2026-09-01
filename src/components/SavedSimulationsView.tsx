@@ -663,10 +663,12 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
         </div>
       )}
 
-      {/* MODAL: EDITAR CADASTRO DE UM MEMBRO DA EQUIPE */}
+      {/* MODAL: EDITAR CADASTRO DE UM MEMBRO DA EQUIPE — sem véu escuro atrás,
+          a pedido: só o cartão branco flutua sobre a tela, sem escurecer o
+          fundo (clicar fora do cartão continua fechando o modal). */}
       {membroEditando && (
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+          className="fixed inset-0 flex items-center justify-center p-4 z-50 animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) setMembroEditando(null); }}
         >
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4">
