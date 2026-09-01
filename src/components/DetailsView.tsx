@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
-import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit } from '../utils/formatters';
+import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
 import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
@@ -236,8 +236,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   }, [currentProd?.id, currentCond?.id, currentCond?.numParcelas, condNumParcelas]);
 
+  // Tabela vencida (data final de validade já passou em relação ao "Hoje é"
+  // do cabeçalho) = trata como se não houvesse tabela nenhuma: zera as linhas
+  // disponíveis para Torre/Unidade, bloqueando a simulação com preços
+  // desatualizados até uma tabela nova ser importada.
+  const tabelaVencida = isTabelaVencida(currentProd?.tableInfo?.validTo, currentDate);
+
   // Get table rows for current product
-  const tableRows = currentProd?.tableInfo?.rows || [];
+  const tableRows = tabelaVencida ? [] : (currentProd?.tableInfo?.rows || []);
   const uniqueTorres = React.useMemo(() => {
     return (Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== ''))) as string[])
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
@@ -1321,12 +1327,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     );
   }
 
-  // Check if sales table exists and is active
+  // Check if sales table exists, is active, and is not expired
   const hasTable = Boolean(
     currentProd.tableInfo &&
     currentProd.tableInfo.active &&
     currentProd.tableInfo.rows &&
-    currentProd.tableInfo.rows.length > 0
+    currentProd.tableInfo.rows.length > 0 &&
+    !tabelaVencida
   );
 
   const [isSavingSimulation, setIsSavingSimulation] = useState<boolean>(false);
@@ -1578,24 +1585,28 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         </div>
       </div>
 
-      {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA */}
+      {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA OU VENCIDA */}
       {!hasTable && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+        <div className={`${tabelaVencida ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'} border rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm`}>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+            <div className={`p-2 ${tabelaVencida ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'} rounded-lg shrink-0`}>
               <AlertTriangle className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-amber-900">Tabela de Vendas Não Importada</h4>
-              <p className="text-xs font-medium text-amber-800 mt-0.5">
-                Atenção: É necessário importar a tabela de vendas para este empreendimento.
+              <h4 className={`text-xs font-bold ${tabelaVencida ? 'text-rose-900' : 'text-amber-900'}`}>
+                {tabelaVencida ? 'Tabela de Vendas Vencida' : 'Tabela de Vendas Não Importada'}
+              </h4>
+              <p className={`text-xs font-medium mt-0.5 ${tabelaVencida ? 'text-rose-800' : 'text-amber-800'}`}>
+                {tabelaVencida
+                  ? `A validade desta tabela terminou em ${formatDateBr(currentProd.tableInfo?.validTo)}. Importe uma tabela nova para liberar a simulação com preços atualizados.`
+                  : 'Atenção: É necessário importar a tabela de vendas para este empreendimento.'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => onNavigateToImport(currentProd.id)}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer"
+            className={`px-3.5 py-1.5 ${tabelaVencida ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'} text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer`}
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Importar Tabela (Excel)</span>

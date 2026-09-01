@@ -126,10 +126,15 @@ export default function App({ perfil, onSair }: AppProps) {
               const units = await imoveisService.listarUnidadesPorEmpreendimento(dbEmp.id);
               if (units && units.length > 0) {
                 const rows = imoveisService.converterUnidadesParaLinhas(units);
+                // Vigência e nome do arquivo vêm do Supabase quando já sincronizados por
+                // quem importou (ver ImportTableView.tsx) — sem isso, cada navegador
+                // ficava com seu próprio default local ("+3 meses a partir de agora"),
+                // então a mesma tabela podia parecer vigente para uns e vencida para
+                // outros, dependendo de quando cada um abriu o app pela primeira vez.
                 currentTableInfo = {
-                  validFrom: existing.tableInfo?.validFrom || new Date().toISOString().split('T')[0],
-                  validTo: existing.tableInfo?.validTo || new Date(new Date().setMonth(new Date().getMonth() + 3)).toISOString().split('T')[0],
-                  fileName: existing.tableInfo?.fileName || `tabela_${dbEmp.id}.xlsx`,
+                  validFrom: dbEmp.tabela_valid_from || existing.tableInfo?.validFrom || new Date().toISOString().split('T')[0],
+                  validTo: dbEmp.tabela_valid_to || existing.tableInfo?.validTo || new Date(new Date().setMonth(new Date().getMonth() + 3)).toISOString().split('T')[0],
+                  fileName: dbEmp.tabela_file_name || existing.tableInfo?.fileName || `tabela_${dbEmp.id}.xlsx`,
                   headers: existing.tableInfo?.headers || ['Fase', 'TORRE', 'UNIDADE', 'ÁREA PRIVATIVA M² - APTO', 'ÁREA QUINTAL M²', 'TIPOLOGIA', 'AVALIAÇÃO', 'PREÇO', 'ITBI + Registro 1º Imóvel', 'ITBI + Registro 2º Imóvel'],
                   rows: rows,
                   active: true
@@ -671,6 +676,7 @@ export default function App({ perfil, onSair }: AppProps) {
               product={activeAnalysisProduct}
               condition={activeAnalysisCondition}
               products={produtosLiberados}
+              currentDate={currentDate}
               onSelectProduct={(prod, condId) => {
                 const prodWithConds = ensureProductConditions({ ...prod });
                 const cond = prodWithConds.conditions.find(c => c.id === condId) || prodWithConds.conditions[0];
@@ -724,6 +730,7 @@ export default function App({ perfil, onSair }: AppProps) {
               onSaveTableInfo={handleSaveTableInfo}
               onDeleteTable={handleDeleteTable}
               onShowToast={showToast}
+              currentDate={currentDate}
             />
           )}
 

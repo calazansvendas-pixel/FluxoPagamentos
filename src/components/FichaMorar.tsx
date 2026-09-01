@@ -18,7 +18,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
-import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit } from '../utils/formatters';
+import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
 import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
@@ -35,6 +35,7 @@ interface FichaMorarProps {
   product: Product | null;
   condition: CommercialCondition | null;
   products?: Product[];
+  currentDate?: string;
   onSelectProduct?: (product: Product, conditionId: string) => void;
   onSelectCondition?: (condition: CommercialCondition) => void;
   simulationData: SimulationData;
@@ -53,6 +54,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   product,
   condition,
   products = [],
+  currentDate,
   onSelectProduct,
   onSelectCondition,
   simulationData,
@@ -69,6 +71,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     if (products && products.length > 0) return products[0];
     return null;
   }, [product, products]);
+
+  // Tabela vencida (data final de validade já passou em relação ao "Hoje é"
+  // do cabeçalho) = trata como se não houvesse unidades nenhuma, bloqueando a
+  // simulação com preços desatualizados até uma tabela nova ser importada.
+  const tabelaVencida = isTabelaVencida(currentProd?.tableInfo?.validTo, currentDate);
 
   const [selectedTorre, setSelectedTorre] = useState<string>('');
 
@@ -301,10 +308,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     };
   }, [currentProd?.id]);
 
+  // Unidades "efetivas" para fins de seleção: some por completo quando a
+  // tabela está vencida, mesmo que o Supabase ainda tenha as linhas — é o que
+  // impede escolher Torre/Unidade e simular com preços desatualizados.
+  const dbUnitsEfetivos = tabelaVencida ? [] : dbUnits;
+
   const uniqueTorres = React.useMemo(() => {
-    return (Array.from(new Set(dbUnits.map(u => String(u.torre || '').trim()).filter(t => t !== ''))) as string[])
+    return (Array.from(new Set(dbUnitsEfetivos.map(u => String(u.torre || '').trim()).filter(t => t !== ''))) as string[])
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [dbUnits]);
+  }, [dbUnitsEfetivos]);
 
   // Torres habilitadas para simulação nesta política comercial (sempre a partir
   // da condição base — não depende de qual torre já está selecionada).
@@ -334,7 +346,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
       if (selectedUnidade) {
         const unitsOfCurrent = Array.from(new Set(
-          dbUnits
+          dbUnitsEfetivos
             .filter(u => String(u.torre || '').trim().toLowerCase() === selectedTorre.toLowerCase())
             .map(u => String(u.unidade || '').trim())
             .filter(u => u !== '')
@@ -347,11 +359,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         }
       }
     }
-  }, [availableTorres, currentProd?.id, currentCond?.id, dbUnits, dbUnitsLoaded]);
+  }, [availableTorres, currentProd?.id, currentCond?.id, dbUnitsEfetivos, dbUnitsLoaded]);
 
   const filteredUnits = selectedTorre
     ? (Array.from(new Set(
-        dbUnits
+        dbUnitsEfetivos
           .filter(u => String(u.torre || '').trim().toLowerCase() === selectedTorre.toLowerCase())
           .map(u => String(u.unidade || '').trim())
           .filter(u => u !== '')
@@ -359,7 +371,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     : [];
 
   const matchingRow = (selectedTorre && selectedUnidade)
-    ? dbUnits.find(u => 
+    ? dbUnitsEfetivos.find(u =>
         String(u.torre || '').trim().toLowerCase() === selectedTorre.toLowerCase() &&
         String(u.unidade || '').trim().toLowerCase() === selectedUnidade.toLowerCase()
       )
@@ -1550,7 +1562,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         ? formatDeliveryText(currentProd.deliveryDatePhase1)
         : '';
 
-  const hasTable = dbUnits.length > 0;
+  const hasTable = dbUnitsEfetivos.length > 0;
 
   const pctObra = baseLiquidaComITBI > 0 ? (totalFaseObraComITBI / baseLiquidaComITBI) * 100 : 0;
   const pctPos = baseLiquidaComITBI > 0 ? (totalFasePosComITBI / baseLiquidaComITBI) * 100 : 0;
@@ -1896,24 +1908,28 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         </div>
       </div>
 
-      {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA */}
+      {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA OU VENCIDA */}
       {!hasTable && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+        <div className={`${tabelaVencida ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'} border rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm`}>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+            <div className={`p-2 ${tabelaVencida ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'} rounded-lg shrink-0`}>
               <AlertTriangle className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-amber-900">Tabela de Vendas Não Importada</h4>
-              <p className="text-xs font-medium text-amber-800 mt-0.5">
-                Atenção: É necessário importar a tabela de vendas para este empreendimento.
+              <h4 className={`text-xs font-bold ${tabelaVencida ? 'text-rose-900' : 'text-amber-900'}`}>
+                {tabelaVencida ? 'Tabela de Vendas Vencida' : 'Tabela de Vendas Não Importada'}
+              </h4>
+              <p className={`text-xs font-medium mt-0.5 ${tabelaVencida ? 'text-rose-800' : 'text-amber-800'}`}>
+                {tabelaVencida
+                  ? `A validade desta tabela terminou em ${formatDateBr(currentProd.tableInfo?.validTo)}. Importe uma tabela nova para liberar a simulação com preços atualizados.`
+                  : 'Atenção: É necessário importar a tabela de vendas para este empreendimento.'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => onNavigateToImport(currentProd.id)}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer"
+            className={`px-3.5 py-1.5 ${tabelaVencida ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'} text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer`}
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Importar Tabela (Excel)</span>

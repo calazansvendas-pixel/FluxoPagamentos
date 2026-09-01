@@ -226,3 +226,14 @@ export function formatDateBr(dateStr?: string): string {
   return dateStr;
 }
 
+// Uma tabela de vendas é considerada vencida quando a data "final da validade"
+// (validTo) já passou em relação ao "Hoje é" configurado no cabeçalho do app
+// (currentDate) — não a data real do dispositivo, para respeitar simulações
+// feitas "como se fosse" outra data. Ambas as datas são strings ISO
+// (YYYY-MM-DD), então a comparação lexicográfica já é cronologicamente
+// correta, sem precisar converter para objeto Date.
+export function isTabelaVencida(validTo: string | undefined, currentDate: string | undefined): boolean {
+  if (!validTo || !currentDate) return false;
+  return validTo < currentDate;
+}
+
