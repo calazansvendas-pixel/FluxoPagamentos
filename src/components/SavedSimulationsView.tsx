@@ -820,7 +820,7 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
       {/* MODAL: CONFIRMAR EXCLUSÃO */}
       {confirmDeleteSim && (
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+          className="fixed inset-0 flex items-center justify-center p-4 z-50 animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) setConfirmDeleteSim(null); }}
         >
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4">
