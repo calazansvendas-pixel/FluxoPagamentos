@@ -323,6 +323,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     : 0;
   const price = Math.max(0, Math.round((precoTabelaOriginal - valorDescontoAVista) * 100) / 100);
 
+  // Taxa de Assinatura de Contrato (%) — exclusiva do Sinal c/ Banco Direto,
+  // cadastrada em Políticas & Empreendimentos. Reduz o Risco Máximo Apurado
+  // (o "Pró-Soluto Total c/ ITBI" bruto) para chegar no valor líquido — é
+  // esse líquido que sugere o Ato (Imóvel), aparece em "Pró-Soluto Total c/
+  // ITBI" e alimenta todo o resto do fluxo. A parcela (Tabela Price), mais
+  // abaixo, é a única conta feita sobre o valor BRUTO (sem a redução).
+  const taxaAssinaturaContratoPct = currentCond?.taxaAssinaturaContratoPct ?? 0;
+
   // ITBI depends on whether it's 1º Imóvel (Com Desconto) or 2º Imóvel (Sem Desconto)
   const itbiVal = (hasUnitSelected && matchingRow) 
     ? (isFirstHomeLocal ? parseCurrency(matchingRow[8]) : parseCurrency(matchingRow[9]))
@@ -731,17 +739,18 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         ? Math.min(vpValRiscoRenda, valorRiscoImovel) 
         : valorRiscoImovel;
 
-      // g) Taxa Bancária = Risco Máximo Apurado * 0.0020029;
-      taxaBancaria = riscoMaximoApuradoBruto * 0.0020029;
+      // g) Taxa Bancária (Taxa de Assinatura de Contrato, da política) = Risco Máximo Apurado * taxa;
+      taxaBancaria = riscoMaximoApuradoBruto * (taxaAssinaturaContratoPct / 100);
 
       // h) Pró-Soluto Líquido = Risco Máximo Apurado - Taxa Bancária;
       proSolutoLiquido = Math.max(0, riscoMaximoApuradoBruto - taxaBancaria);
 
-      // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Risco Máximo Apurado Bruto;
-      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - riscoMaximoApuradoBruto);
+      // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Pró-Soluto Líquido — é o
+      // valor JÁ LÍQUIDO da taxa que sugere o Ato, não o bruto (Risco Máximo Apurado).
+      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido);
 
-      // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Risco Máximo Apurado Bruto
-      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - riscoMaximoApuradoBruto);
+      // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido
+      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido);
 
       // j) novoAtoPremiado = Exatamente 10% do Pagamento Ato (Sinal Efetivo), caso o Ato Bruto seja >= 5000
       const novoAtoPremiado = (isAtoPremiadoEnabled && atoBrutoCalculado >= 5000) 
@@ -764,7 +773,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       atoPremiadoAtual = 0; // Regra dos 10% não se aplica se não atingir 5k
       const baseDividaTotal = gapInicial + despCartorias;
       riscoMaximoApuradoBruto = Math.max(0, baseDividaTotal - pagamentoAtoSinalEfetivo);
-      taxaBancaria = riscoMaximoApuradoBruto * 0.0020029;
+      taxaBancaria = riscoMaximoApuradoBruto * (taxaAssinaturaContratoPct / 100);
       proSolutoLiquido = riscoMaximoApuradoBruto - taxaBancaria;
     }
   }
@@ -1110,13 +1119,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const taxa2 = currentCond?.taxaJuros2 !== undefined ? currentCond.taxaJuros2 : 1.9;
   const appliedRatePct = (qtdMensais <= meses1) ? taxa1 : taxa2;
 
-  // 4. CÁLCULO DA BASE PARA A PARCELA (ACRÉSCIMO DA TAXA DE ASSINATURA DE CONTRATO):
-  // A taxa soma sobre o Pró-Soluto só aqui, na base que alimenta a Tabela Price —
-  // o Pró-Soluto Total c/ ITBI exibido em tela (proSolutoTotalPainel) e todos os
-  // demais cálculos (indicadores de risco, PDF etc.) continuam usando o valor sem
-  // a taxa. Cadastrada em Políticas & Empreendimentos; padrão 0% (sem acréscimo).
-  const taxaAssinaturaContratoPct = currentCond?.taxaAssinaturaContratoPct ?? 0;
-  const baseCalculoParcela = proSolutoTotalParcelado * (1 + taxaAssinaturaContratoPct / 100);
+  // 4. CÁLCULO DA BASE PARA A PARCELA (RECONSTRÓI O VALOR BRUTO, ANTES DA TAXA):
+  // proSolutoTotalParcelado (= proSolutoTotalPainel, exibido em tela) já saiu
+  // líquido da Taxa de Assinatura de Contrato — a mesma redução já foi aplicada
+  // lá atrás, no motor que sugere o Ato (Imóvel). A parcela é a única conta que
+  // usa o valor BRUTO (antes da redução), então ele é reconstruído aqui.
+  const baseCalculoParcela = taxaAssinaturaContratoPct < 100
+    ? proSolutoTotalParcelado / (1 - taxaAssinaturaContratoPct / 100)
+    : proSolutoTotalParcelado;
 
   // 5. CÁLCULO DA PARCELA MENSAL (TABELA PRICE COM TAXA APLICADA):
   const parcela = (hasUnitSelected && baseCalculoParcela > 0 && qtdMensais > 0)
