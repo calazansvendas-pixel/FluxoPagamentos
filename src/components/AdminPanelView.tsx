@@ -361,9 +361,22 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
 
   const abrirPermissoesPorCargo = (cargo: Cargo) => {
     setPmCargo(cargo);
-    setPmTelas(new Set(TELAS_PADRAO_POR_CARGO[cargo] || []));
-    setPmVerEquipe(CARGOS_COM_EQUIPE.includes(cargo));
-    setPmCamposEditaveis(new Set());
+    // Pré-preenche com o que já está gravado hoje para alguém desse cargo (em vez
+    // de sempre voltar para o padrão de fábrica) — sem isso, reabrir o painel
+    // depois de aplicar dava a falsa impressão de que nada tinha sido salvo,
+    // porque os quadradinhos voltavam desmarcados mesmo já estando gravados no
+    // banco. Só cai no padrão de fábrica quando ainda não existe ninguém com
+    // esse cargo para servir de referência.
+    const usuarioReferencia = ativos.find(u => u.cargo === cargo);
+    if (usuarioReferencia) {
+      setPmTelas(new Set(usuarioReferencia.telasLiberadas));
+      setPmVerEquipe(usuarioReferencia.verPropostasEquipe);
+      setPmCamposEditaveis(new Set(usuarioReferencia.camposEditaveisEquipe));
+    } else {
+      setPmTelas(new Set(TELAS_PADRAO_POR_CARGO[cargo] || []));
+      setPmVerEquipe(CARGOS_COM_EQUIPE.includes(cargo));
+      setPmCamposEditaveis(new Set());
+    }
     setPermCargoAberto(true);
   };
 
@@ -465,6 +478,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
               </select>
               <p className="text-[11px] text-slate-400 mt-1.5">
                 {usuariosDoCargoEmMassa.length} conta{usuariosDoCargoEmMassa.length === 1 ? '' : 's'} com o cargo {pmCargo} hoje (ativas ou pausadas).
+                {usuariosDoCargoEmMassa.length > 1 && ' Os quadradinhos abaixo mostram o que já está gravado para o primeiro deles — se estiverem diferentes entre si, ao aplicar todos passam a ficar iguais ao que está marcado aqui.'}
               </p>
             </div>
 
