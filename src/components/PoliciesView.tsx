@@ -105,9 +105,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const [taxaJuros1Str, setTaxaJuros1Str] = useState<string>('0,00');
   const [mesesTabela2Str, setMesesTabela2Str] = useState<string>('72');
   const [taxaJuros2Str, setTaxaJuros2Str] = useState<string>('1,00');
-  // Taxa de Assinatura de Contrato (%) — exclusiva do Sinal c/ Banco Direto:
-  // soma sobre o Pró-Soluto Total c/ ITBI só na base de cálculo da parcela
-  // (Tabela Price), sem alterar o Pró-Soluto exibido em tela.
+  // Taxa Bancária (%) — exclusiva do Sinal c/ Banco Direto: reduz o Risco
+  // Máximo Apurado que sugere o Ato (Imóvel) e o "Pró-Soluto Total c/ ITBI"
+  // exibido em tela; a parcela (Tabela Price) usa o valor antes do desconto.
   const [taxaAssinaturaContratoStr, setTaxaAssinaturaContratoStr] = useState<string>('0,00');
   const [policyText, setPolicyText] = useState<string>('');
   // % de Desconto à Vista: comum a todas as condições comerciais de todos os
@@ -2004,14 +2004,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </div>
                 </div>
 
-                {/* TAXA DE ASSINATURA DE CONTRATO: SOMA SOBRE O PRÓ-SOLUTO SÓ NA BASE DA PARCELA */}
+                {/* TAXA BANCÁRIA: REDUZ O ATO/PRÓ-SOLUTO EXIBIDO; A PARCELA USA O VALOR BRUTO */}
                 <div className="pt-3 border-t border-sky-100/80">
                   <div className="bg-white p-3 rounded-xl border border-slate-200/80 max-w-sm">
-                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual somado ao Pró-Soluto Total c/ ITBI só na base de cálculo da parcela (Tabela Price)">
-                      Taxa de Assinatura de Contrato (%)
+                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual descontado do Risco Máximo Apurado para sugerir o Ato (Imóvel) e o Pró-Soluto Total c/ ITBI exibido — a parcela (Tabela Price) usa o valor antes desse desconto">
+                      Taxa Bancária (%)
                     </label>
                     <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
-                      Soma sobre o Pró-Soluto Total c/ ITBI só para calcular a parcela — o valor exibido em "Pró-Soluto Total c/ ITBI" não muda.
+                      Reduz o Ato (Imóvel) sugerido e o "Pró-Soluto Total c/ ITBI" exibido em tela — a parcela continua calculada sobre o valor cheio, antes desse desconto.
                     </p>
                     <div className="relative flex items-center">
                       <input
