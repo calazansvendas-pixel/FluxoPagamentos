@@ -147,9 +147,9 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
   { key: "TIPOLOGIA", label: "TIPOLOGIA", match: norm => norm.includes("TIPOLOGIA") || norm.includes("TIPOLOG") || norm.includes("QUARTO") || norm.includes("DORM") },
   { key: "AVALIAÇÃO", label: "AVALIAÇÃO", match: norm => (norm.includes("AVALIAC") || norm.includes("AVAL")) && !norm.includes("ITBI") && !norm.includes("REGISTRO") },
   { key: "PREÇO", label: "PREÇO", match: norm => (norm.includes("PRECO") || norm.includes("VALOR") || norm.includes("TABELA") || norm.includes("VENDA")) && !norm.includes("AVALIAC") && !norm.includes("ITBI") && !norm.includes("REGISTRO") && !norm.includes("CARTOR") && !norm.includes("SINAL") && !norm.includes("FINANC") },
-  { 
-    key: "ITBI + Registro 1º Imóvel", 
-    label: "ITBI + Registro 1º Imóvel", 
+  {
+    key: "ITBI + Registro 1º Imóvel",
+    label: "ITBI + Registro 1º Imóvel",
     match: norm => {
       // Exclui estritamente colunas compostas que embutem preço do imóvel ou parcelas
       if (norm.includes("PRECO") || norm.includes("VALOR TOTAL") || norm.includes("TOTAL C ITBI") || norm.includes("SOMA") || norm.includes("FINANC") || norm.includes("SINAL") || norm.includes("PARCELA") || norm.includes("ENTRADA") || norm.includes("FLUXO") || norm.includes("AVALIAC")) {
@@ -158,8 +158,14 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
       const isTax = norm.includes("ITBI") || norm.includes("REGISTRO") || norm.includes("CARTOR") || norm.includes("DESP CARTORIAS") || norm.includes("DESPESAS CARTOR") || norm.includes("EMOLUMENT") || norm.includes("CUSTAS");
       const is1st = norm.includes("1") || norm.includes("PRIMEIRO") || norm.includes("1O") || norm.includes("1A") || norm.includes("PRIMEIRA");
       const is2nd = norm.includes("2") || norm.includes("SEGUNDO") || norm.includes("2O") || norm.includes("2A") || norm.includes("SEGUNDA");
-      return (isTax && is1st && !is2nd) || (norm.startsWith("1") && norm.includes("IMOVEL") && isTax);
-    } 
+      // Uma coluna com "ITBI" E "REGISTRO" juntos (ex.: "ITBI + Registro") e sem
+      // marca de "2º" é a composta do 1º imóvel — algumas planilhas (como a do Vista
+      // Tropical) não escrevem "1º" no título dessa coluna, deixando o "1º" implícito
+      // por contraste com a coluna "2º Imóvel" que vem depois. Sem essa alternativa,
+      // a coluna acabava sem casar com nada e o valor caía para 0.
+      const hasItbiAndRegistro = norm.includes("ITBI") && (norm.includes("REGISTRO") || norm.includes("REG"));
+      return (isTax && is1st && !is2nd) || (norm.startsWith("1") && norm.includes("IMOVEL") && isTax) || (hasItbiAndRegistro && !is2nd);
+    }
   },
   { 
     key: "ITBI + Registro 2º Imóvel", 
