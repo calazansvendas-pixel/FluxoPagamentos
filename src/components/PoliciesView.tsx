@@ -1275,7 +1275,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
               </div>
             )}
 
-            {/* CAMPO COMUM A TODAS AS CONDIÇÕES COMERCIAIS: DESCONTO À VISTA */}
+            {/* CAMPOS COMUNS A TODAS AS CONDIÇÕES COMERCIAIS: DESCONTO À VISTA + % ATO PREMIADO */}
             <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
                 <div className="lg:col-span-4">
@@ -1302,6 +1302,35 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                       }}
                       placeholder="0,0"
                       className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-amber-700 text-center focus:outline-none focus:border-amber-600 text-xs"
+                    />
+                    <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1 rounded-md bg-fuchsia-50 text-fuchsia-700">
+                      <Percent className="w-3.5 h-3.5" />
+                    </div>
+                    <label className="block font-bold text-slate-800 text-xs truncate" title="Percentual do Ato Premiado (desconto comercial sobre o Ato Efetivo). Padrão histórico é 10%; pode ser editado por condição comercial e inclusive ficar zerado (0%).">
+                      % do Ato Premiado
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
+                    Desconto do Ato Premiado, aplicado em cima do Ato Efetivo. Vale em todos os cálculos que usam Ato Premiado nesta condição. Deixe em 0 para desligar.
+                  </p>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={atoPremiadoPctStr}
+                      onChange={(e) => setAtoPremiadoPctStr(e.target.value)}
+                      onBlur={() => {
+                        const val = Math.max(0, parseDecimal(atoPremiadoPctStr, 10));
+                        setAtoPremiadoPctStr(formatDecimalBR(val, 2, 2));
+                      }}
+                      placeholder="10,00"
+                      className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-fuchsia-700 text-center focus:outline-none focus:border-fuchsia-600 text-xs"
                     />
                     <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
                   </div>
@@ -2021,9 +2050,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </div>
                 </div>
 
-                {/* TAXA BANCÁRIA + ATO PREMIADO */}
-                <div className="pt-3 border-t border-sky-100/80 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="bg-white p-3 rounded-xl border border-slate-200/80">
+                {/* TAXA BANCÁRIA: REDUZ O ATO/PRÓ-SOLUTO EXIBIDO; A PARCELA USA O VALOR BRUTO */}
+                <div className="pt-3 border-t border-sky-100/80">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/80 max-w-sm">
                     <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual descontado do Risco Máximo Apurado para sugerir o Ato (Imóvel) e o Pró-Soluto Total c/ ITBI exibido — a parcela (Tabela Price) usa o valor antes desse desconto">
                       Taxa Bancária (%)
                     </label>
@@ -2041,29 +2070,6 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           setTaxaAssinaturaContratoStr(formatDecimalBR(parsed, 2, 4));
                         }}
                         className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-amber-700 text-center focus:outline-none focus:border-sky-600 text-xs"
-                      />
-                      <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">%</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-200/80">
-                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual do Ato Premiado (desconto comercial concedido em cima do Ato Efetivo). Padrão histórico é 10%; pode ser editado por condição comercial e inclusive ficar zerado (0%) para desligar o Ato Premiado dessa condição.">
-                      % do Ato Premiado
-                    </label>
-                    <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
-                      Desconto do Ato Premiado, aplicado em cima do Ato Efetivo. Vale para todos os cálculos que usam o Ato Premiado (Sinal c/ Morar, Sinal c/ Banco Direto, Parcelamento Morar). Deixe em 0 para desligar.
-                    </p>
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={atoPremiadoPctStr}
-                        onChange={(e) => setAtoPremiadoPctStr(e.target.value)}
-                        onBlur={() => {
-                          const parsed = Math.max(0, parseDecimal(atoPremiadoPctStr, 10));
-                          setAtoPremiadoPctStr(formatDecimalBR(parsed, 2, 2));
-                        }}
-                        className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-fuchsia-700 text-center focus:outline-none focus:border-sky-600 text-xs"
                       />
                       <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">%</span>
                     </div>
