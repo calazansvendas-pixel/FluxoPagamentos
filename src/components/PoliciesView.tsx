@@ -109,6 +109,10 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // Máximo Apurado que sugere o Ato (Imóvel) e o "Pró-Soluto Total c/ ITBI"
   // exibido em tela; a parcela (Tabela Price) usa o valor antes do desconto.
   const [taxaAssinaturaContratoStr, setTaxaAssinaturaContratoStr] = useState<string>('0,00');
+  // % do Ato Premiado — desconto comercial aplicado em cima do Ato Efetivo. Antes
+  // era fixo em 10% em todos os cálculos; agora vem por condição comercial e
+  // pode ficar zerado (0%). Padrão histórico continua sendo 10%.
+  const [atoPremiadoPctStr, setAtoPremiadoPctStr] = useState<string>('10,00');
   const [policyText, setPolicyText] = useState<string>('');
   // % de Desconto à Vista: comum a todas as condições comerciais de todos os
   // produtos (não é exclusivo de Sinal c/ Morar ou Parcelamento Morar) —
@@ -308,6 +312,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const m2 = source.mesesTabela2 !== undefined ? source.mesesTabela2 : 72;
     const t2 = source.taxaJuros2 !== undefined ? source.taxaJuros2 : 1.0;
     const ta = source.taxaAssinaturaContratoPct !== undefined ? source.taxaAssinaturaContratoPct : 0;
+    // Padrão histórico do Ato Premiado é 10% — só se a política tiver um valor
+    // gravado explicitamente (inclusive 0) é que ela sobrescreve o padrão.
+    const apPct = source.atoPremiadoPct !== undefined ? Math.round(source.atoPremiadoPct * 10000) / 100 : 10;
 
     const mo = source.mesesObra !== undefined ? source.mesesObra : 33;
     const mp = source.mesesPos !== undefined ? source.mesesPos : 27;
@@ -358,6 +365,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setMesesTabela2Str(String(m2));
     setTaxaJuros2Str(formatDecimalBR(t2, 2, 2));
     setTaxaAssinaturaContratoStr(formatDecimalBR(ta, 2, 2));
+    setAtoPremiadoPctStr(formatDecimalBR(apPct, 2, 2));
 
     setMesesObraStr(String(mo));
     setMesesPosStr(String(mp));
@@ -398,6 +406,10 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   const mesesTabela2 = parseIntFlexible(mesesTabela2Str, 1);
   const taxaJuros2 = parseDecimal(taxaJuros2Str, 1);
   const taxaAssinaturaContratoPct = parseDecimal(taxaAssinaturaContratoStr, 0);
+  // Ato Premiado: input está em % humano (ex.: 10,00 = 10%); campo do tipo é em
+  // decimal (0.10), então precisa dividir por 100 ao salvar e multiplicar ao ler.
+  const atoPremiadoPctInput = parseDecimal(atoPremiadoPctStr, 10);
+  const atoPremiadoPctSalvar = Math.max(0, atoPremiadoPctInput) / 100;
 
   // Parâmetros Morar calculados dinamicamente
   const mesesObra = Math.max(0, parseIntFlexible(mesesObraStr, 0));
@@ -458,6 +470,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       mesesTabela2,
       taxaJuros2,
       taxaAssinaturaContratoPct,
+      atoPremiadoPct: atoPremiadoPctSalvar,
       mesesObra,
       mesesPos,
       globalSerie1Pct,
@@ -669,6 +682,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedMeses2 = Math.max(0, parseIntFlexible(mesesTabela2Str, 72));
     const parsedTaxa2 = parseDecimal(taxaJuros2Str, 1);
     const parsedTaxaAssinaturaContrato = parseDecimal(taxaAssinaturaContratoStr, 0);
+    const parsedAtoPremiadoPctInput = Math.max(0, parseDecimal(atoPremiadoPctStr, 10));
+    const parsedAtoPremiadoPct = parsedAtoPremiadoPctInput / 100;
 
     const parsedMesesObra = Math.max(0, parseIntFlexible(mesesObraStr, 33));
     const parsedMesesPos = Math.max(0, parseIntFlexible(mesesPosStr, 27));
@@ -712,6 +727,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setMesesTabela2Str(String(parsedMeses2));
     setTaxaJuros2Str(formatDecimalBR(parsedTaxa2, 2, 2));
     setTaxaAssinaturaContratoStr(formatDecimalBR(parsedTaxaAssinaturaContrato, 2, 2));
+    setAtoPremiadoPctStr(formatDecimalBR(parsedAtoPremiadoPctInput, 2, 2));
 
     setMesesObraStr(String(parsedMesesObra));
     setMesesPosStr(String(parsedMesesPos));
@@ -751,6 +767,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       mesesTabela2: parsedMeses2,
       taxaJuros2: parsedTaxa2,
       taxaAssinaturaContratoPct: parsedTaxaAssinaturaContrato,
+      atoPremiadoPct: parsedAtoPremiadoPct,
       mesesObra: parsedMesesObra,
       mesesPos: parsedMesesPos,
       globalSerie1Pct: parsedGlobal1,
@@ -2004,9 +2021,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </div>
                 </div>
 
-                {/* TAXA BANCÁRIA: REDUZ O ATO/PRÓ-SOLUTO EXIBIDO; A PARCELA USA O VALOR BRUTO */}
-                <div className="pt-3 border-t border-sky-100/80">
-                  <div className="bg-white p-3 rounded-xl border border-slate-200/80 max-w-sm">
+                {/* TAXA BANCÁRIA + ATO PREMIADO */}
+                <div className="pt-3 border-t border-sky-100/80 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/80">
                     <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual descontado do Risco Máximo Apurado para sugerir o Ato (Imóvel) e o Pró-Soluto Total c/ ITBI exibido — a parcela (Tabela Price) usa o valor antes desse desconto">
                       Taxa Bancária (%)
                     </label>
@@ -2024,6 +2041,29 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           setTaxaAssinaturaContratoStr(formatDecimalBR(parsed, 2, 4));
                         }}
                         className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-amber-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      />
+                      <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">%</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/80">
+                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual do Ato Premiado (desconto comercial concedido em cima do Ato Efetivo). Padrão histórico é 10%; pode ser editado por condição comercial e inclusive ficar zerado (0%) para desligar o Ato Premiado dessa condição.">
+                      % do Ato Premiado
+                    </label>
+                    <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
+                      Desconto do Ato Premiado, aplicado em cima do Ato Efetivo. Vale para todos os cálculos que usam o Ato Premiado (Sinal c/ Morar, Sinal c/ Banco Direto, Parcelamento Morar). Deixe em 0 para desligar.
+                    </p>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={atoPremiadoPctStr}
+                        onChange={(e) => setAtoPremiadoPctStr(e.target.value)}
+                        onBlur={() => {
+                          const parsed = Math.max(0, parseDecimal(atoPremiadoPctStr, 10));
+                          setAtoPremiadoPctStr(formatDecimalBR(parsed, 2, 2));
+                        }}
+                        className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-fuchsia-700 text-center focus:outline-none focus:border-sky-600 text-xs"
                       />
                       <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">%</span>
                     </div>

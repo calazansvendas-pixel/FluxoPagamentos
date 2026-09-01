@@ -336,6 +336,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // ITBI" e alimenta todo o resto do fluxo. A parcela (Tabela Price), mais
   // abaixo, é a única conta feita sobre o valor BRUTO (sem a redução).
   const taxaAssinaturaContratoPct = currentCond?.taxaAssinaturaContratoPct ?? 0;
+  // % do Ato Premiado desta condição comercial (padrão histórico 10% quando a
+  // política não define). 0% desliga completamente o desconto do Ato Premiado
+  // nesta condição, mesmo com o botão "Ato Premiado" ligado na ficha.
+  const pctAtoPremiadoCond = currentCond?.atoPremiadoPct ?? 0.10;
+  const tetoDescontoAtoPremiado = Math.round(50000 * pctAtoPremiadoCond * 100) / 100;
 
   // ITBI depends on whether it's 1º Imóvel (Com Desconto) or 2º Imóvel (Sem Desconto)
   const itbiVal = (hasUnitSelected && matchingRow) 
@@ -597,7 +602,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? Math.max(0, price - maxFinanc - pmMensaisAntecipadas)
     : 0;
   const pmAtoAposAntecipadasAVistaTarget = hasUnitSelected
-    ? resolverTetoAtoComDesconto(pmBaseAVista, isAtoPremiadoEnabled)
+    ? resolverTetoAtoComDesconto(pmBaseAVista, isAtoPremiadoEnabled, pctAtoPremiadoCond)
     : 0;
   const pmAtoAVistaTarget = pmAtoAposAntecipadasAVistaTarget + pmMensaisAntecipadas;
   // No Parcelamento Morar não existe financiamento bancário nem FGTS: quitar
@@ -638,7 +643,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     parcelaMinimaSemestral: currentCond?.pmParcelaMinimaSemestral ?? 200,
     parcelaMinimaPosObra: currentCond?.pmParcelaMinimaPosObra ?? 200,
     mensaisAntecipadas: pmMensaisAntecipadas,
-    chavesHabilitada: pmIsAVistaActive ? false : pmChavesEnabled
+    chavesHabilitada: pmIsAVistaActive ? false : pmChavesEnabled,
+    atoPremiadoPct: currentCond?.atoPremiadoPct
   });
   // "Sinal Total" no mesmo sentido do Bloco 1 do Banco Direto: o que falta do
   // valor do imóvel antes de descontar o Ato em si (Ato + este saldo = tudo
@@ -769,9 +775,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido
       const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido);
 
-      // j) novoAtoPremiado = Exatamente 10% do Pagamento Ato (Sinal Efetivo), caso o Ato Bruto seja >= 5000
-      const novoAtoPremiado = (isAtoPremiadoEnabled && atoBrutoCalculado >= 5000) 
-        ? Math.min(pagamentoAtoSinalEfetivo * 0.10, 5000) 
+      // j) novoAtoPremiado = pct do Pagamento Ato (Sinal Efetivo) caso o Ato Bruto seja >= 5000
+      // pct vem da política do empreendimento (currentCond.atoPremiadoPct); ausente → 10%
+      const novoAtoPremiado = (isAtoPremiadoEnabled && pctAtoPremiadoCond > 0 && atoBrutoCalculado >= 5000)
+        ? Math.min(pagamentoAtoSinalEfetivo * pctAtoPremiadoCond, tetoDescontoAtoPremiado)
         : 0;
 
       // 2. CONDIÇÃO DE PARADA: Tolerância zero para bater os centavos do Excel
@@ -817,7 +824,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? Math.max(0, precoTabelaOriginal - (maxFinanc + subsidy + fgts) - somaMensais)
     : 0;
   const atoAposMensaisAVistaTarget = hasUnitSelected
-    ? resolverTetoAtoComDesconto(baseAVista, isAtoPremiadoEnabled)
+    ? resolverTetoAtoComDesconto(baseAVista, isAtoPremiadoEnabled, pctAtoPremiadoCond)
     : 0;
   // valAtoManual é o Ato ANTES da absorção das mensais (mesma convenção já usada pelo
   // onAtoChange existente do FluxoEntradaConstrutora), então somamos de volta.
@@ -836,7 +843,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // devia — o Pró-Soluto era clampado em R$ 0,00 e a diferença sumia da tela.
   // Mesma abordagem já usada na ficha "Sinal c/ Morar" (FichaMorar.tsx).
   const atoMaximoPossivel = hasUnitSelected
-    ? resolverTetoAtoComDesconto(Math.max(0, price - subsidy), isAtoPremiadoEnabled)
+    ? resolverTetoAtoComDesconto(Math.max(0, price - subsidy), isAtoPremiadoEnabled, pctAtoPremiadoCond)
     : 0;
 
   const atoImovelDigitadoBruto = (valAtoManual !== null && valAtoManual >= atoMinimoCalculado)
@@ -854,13 +861,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // Recálculo do Ato Premiado (desconto da Construtora) para o novo Ato do Imóvel
   let novoAtoPremiado = 0;
-  if (isAtoPremiadoEnabled && atoAposMensais >= 4500) {
+  if (isAtoPremiadoEnabled && pctAtoPremiadoCond > 0 && atoAposMensais >= 4500) {
     let currAtoEfetivo = atoAposMensais;
     let currAtoPremiado = 0;
     for (let iter = 0; iter < 100; iter++) {
       const atoBrutoCalculado = currAtoEfetivo + currAtoPremiado;
       const novoDesc = (atoBrutoCalculado >= 5000 && currAtoEfetivo >= 4500)
-        ? Math.min(currAtoEfetivo * 0.10, 5000)
+        ? Math.min(currAtoEfetivo * pctAtoPremiadoCond, tetoDescontoAtoPremiado)
         : 0;
 
       const lacuna = atoAposMensais - currAtoEfetivo;
@@ -1999,7 +2006,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 const precoComDesconto = Math.max(0, Math.round((precoTabelaOriginal - descontoNaHora) * 100) / 100);
                 if (isParcelamentoMorar) {
                   const baseNaHora = hasUnitSelected ? Math.max(0, precoComDesconto - maxFinanc - pmMensaisAntecipadas) : 0;
-                  const atoAposAntecipadasNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(baseNaHora, false) : 0;
+                  const atoAposAntecipadasNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(baseNaHora, false, pctAtoPremiadoCond) : 0;
                   setValAtoManual(atoAposAntecipadasNaHora + pmMensaisAntecipadas);
                 } else {
                   // Zera tudo: financiamento, subsídio e FGTS somem sozinhos (o Ato,
@@ -2010,7 +2017,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   setParc2InputText('');
                   setValParc3(0);
                   setParc3InputText('');
-                  const atoNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(precoComDesconto, false) : 0;
+                  const atoNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(precoComDesconto, false, pctAtoPremiadoCond) : 0;
                   setValAtoManual(atoNaHora);
                 }
               } else {

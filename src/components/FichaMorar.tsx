@@ -551,6 +551,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // piso válido — só cai no padrão de R$ 2.000,00 quando o campo não foi
   // definido (string vazia/undefined).
   const sinalMinimoVal = currentCond?.sinalMinimo ? parseCurrency(currentCond.sinalMinimo) : 2000;
+  // % do Ato Premiado desta condição comercial (padrão histórico 10% quando a política
+  // não define). 0% desliga o desconto do Ato Premiado nesta condição mesmo com o botão
+  // "Ato Premiado" ligado na ficha — comporta-se como se o Ato Premiado estivesse zerado.
+  const pctAtoPremiadoCond = currentCond?.atoPremiadoPct ?? 0.10;
 
   // 1. VALOR BASE: Maior entre Preço de Tabela e Avaliação Bancária
   const valorBase = hasUnitSelected ? Math.max(price, evaluation) : 0;
@@ -668,7 +672,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       isAtoPremiadoEnabled,
-      atoITBI: atoITBIValidado
+      atoITBI: atoITBIValidado,
+      atoPremiadoPct: pctAtoPremiadoCond
     });
   }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, atoITBIValidado, totalParcObra, totalParcPos, serieMesesCapacidades]);
 
@@ -677,7 +682,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const valorAtoEfetivo = valAtoManual !== null ? valAtoManual : atoSugeridoResidual;
 
   // Desconto do Ato Premiado baseado no Ato Efetivo
-  const descontoAtoPremiadoCalculado = calcularDescontoAtoPremiado(valorAtoEfetivo);
+  const descontoAtoPremiadoCalculado = calcularDescontoAtoPremiado(valorAtoEfetivo, pctAtoPremiadoCond);
   const descontoAto = isAtoPremiadoEnabled
     ? (valAtoManual !== null ? descontoAtoPremiadoCalculado : (morarEngineBase?.atoPremiado ?? 0))
     : 0;
@@ -686,7 +691,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // Não pode usar "descontoAto" acima diretamente pois ele reflete o desconto do
   // Ato ATUAL (sugerido ou já digitado), não o desconto que valeria no próprio teto.
   const valorAtoMaximoCalculado = hasUnitSelected
-    ? resolverTetoAtoComDesconto(price - subsidy, isAtoPremiadoEnabled)
+    ? resolverTetoAtoComDesconto(price - subsidy, isAtoPremiadoEnabled, pctAtoPremiadoCond)
     : 0;
 
   // =========================================================================
@@ -707,7 +712,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // (antes de abater financiamento/FGTS) em vez de price - subsidy (que é o teto
   // absoluto, usado quando o excedente pode avançar até o FGTS).
   const atoAVistaTarget = hasUnitSelected
-    ? resolverTetoAtoComDesconto(sinalImovelInicial, isAtoPremiadoEnabled)
+    ? resolverTetoAtoComDesconto(sinalImovelInicial, isAtoPremiadoEnabled, pctAtoPremiadoCond)
     : 0;
   const isAVistaActive = hasUnitSelected && valAtoManual !== null && Math.abs(valAtoManual - atoAVistaTarget) < 0.01;
 
@@ -964,7 +969,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
-      isAtoPremiadoEnabled
+      isAtoPremiadoEnabled,
+      atoPremiadoPct: pctAtoPremiadoCond
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1040,7 +1046,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIParam,
       isAtoPremiadoEnabled: atoPremiadoAtivo,
-      atoManual: atoValor
+      atoManual: atoValor,
+      atoPremiadoPct: pctAtoPremiadoCond
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1114,7 +1121,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     // de quitação à vista — com o novo estado do prêmio —, mantendo o
     // Pró-Soluto zerado nos dois sentidos (ligando ou desligando).
     if (isAVistaActive) {
-      const novoAtoVistaTarget = resolverTetoAtoComDesconto(sinalImovelInicial, ativo);
+      const novoAtoVistaTarget = resolverTetoAtoComDesconto(sinalImovelInicial, ativo, pctAtoPremiadoCond);
       setValAtoManual(novoAtoVistaTarget);
       setAtoInputText(formatCurrency(novoAtoVistaTarget));
       recalcularSeriesParaAtoManual(novoAtoVistaTarget, ativo);
@@ -1124,7 +1131,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     // Sinal lançado pelo usuário: é preservado, limitado ao novo teto (nunca
     // pagar mais do que o devido) e elevado ao piso da política de crédito
     // dentro de `recalcularSeriesParaAtoManual` quando o risco exigir.
-    const novoTetoAto = resolverTetoAtoComDesconto(Math.max(0, price - subsidy), ativo);
+    const novoTetoAto = resolverTetoAtoComDesconto(Math.max(0, price - subsidy), ativo, pctAtoPremiadoCond);
     const atoPreservado = Math.min(valAtoManual, novoTetoAto);
 
     setValAtoManual(atoPreservado);
@@ -1408,7 +1415,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
       atoITBI: atoITBIValidado,
-      isAtoPremiadoEnabled
+      isAtoPremiadoEnabled,
+      atoPremiadoPct: pctAtoPremiadoCond
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1518,7 +1526,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       sinalMinimo: sinalMinimoVal,
       atoITBI: finalVal,
       isAtoPremiadoEnabled,
-      atoManual: valAtoManual !== null ? valAtoManual : undefined
+      atoManual: valAtoManual !== null ? valAtoManual : undefined,
+      atoPremiadoPct: pctAtoPremiadoCond
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
