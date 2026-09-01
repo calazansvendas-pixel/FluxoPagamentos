@@ -46,7 +46,8 @@ export const CAMPOS_EDITAVEIS_EQUIPE: CampoEditavelEquipe[] = [
   { key: 'creci', label: 'CRECI' },
   { key: 'cargo', label: 'Cargo' },
   { key: 'superior', label: 'Superior hierárquico' },
-  { key: 'telas', label: 'Telas liberadas' }
+  { key: 'telas', label: 'Telas liberadas' },
+  { key: 'empreendimentos', label: 'Empreendimentos liberados' }
 ];
 
 export const CARGOS: Cargo[] = [

@@ -172,6 +172,13 @@ export interface PerfilUsuario {
   // hierarquia (ex.: um Gerente autorizado a corrigir telefone/imobiliária
   // dos próprios corretores, sem precisar do Administrador pra isso).
   camposEditaveisEquipe: string[];
+  // Empreendimentos (produtos) que este usuário pode ver e usar nas simulações.
+  // `null` = segue automaticamente a hierarquia (herda do superior direto,
+  // subindo até achar uma trava manual ou o padrão do cargo de quem está no
+  // topo); um array (mesmo vazio) é uma trava manual explícita, sempre
+  // resolvida em tempo real pela RPC empreendimentos_liberados_efetivos — não
+  // é uma cópia congelada no momento do cadastro.
+  empreendimentosLiberados: string[] | null;
   // Existe no máximo UM usuário com proprietario=true no sistema inteiro (trava
   // por índice único no banco). É quem "é dono" do aplicativo — mesmo sendo
   // Administrador como qualquer outro, só ele mesmo pode se rebaixar de cargo,

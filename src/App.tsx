@@ -11,6 +11,7 @@ import { Toast } from './components/Toast';
 import { SimulatorView } from './components/SimulatorView';
 import { AdminPanelView } from './components/AdminPanelView';
 import { imoveisService } from './services/imoveisService';
+import { authService } from './services/authService';
 
 // Telas carregadas sob demanda: evitam colocar recharts, jsPDF, html2canvas-pro
 // e xlsx no bundle inicial quando o usuário só precisa do Simulador.
@@ -47,6 +48,17 @@ interface AppProps {
 export default function App({ perfil, onSair }: AppProps) {
   const ehAdministrador = perfil.cargo === 'Administrador';
   const telasLiberadas = ehAdministrador ? undefined : perfil.telasLiberadas;
+
+  // Empreendimentos que este usuário pode ver/usar nas simulações, resolvidos ao
+  // vivo pela hierarquia (ver empreendimentos_liberados_efetivos em authService.ts).
+  // `null` = sem restrição (default seguro, inclusive enquanto a consulta ainda
+  // não voltou). Buscado uma vez por sessão, logo após o login — o Administrador
+  // nunca é filtrado, mesma regra já aplicada às telas liberadas acima.
+  const [empreendimentosLiberados, setEmpreendimentosLiberados] = useState<string[] | null>(null);
+  React.useEffect(() => {
+    if (ehAdministrador) return;
+    authService.empreendimentosLiberadosEfetivos(perfil.id).then(setEmpreendimentosLiberados);
+  }, [perfil.id, ehAdministrador]);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
     if (telasLiberadas && telasLiberadas.length > 0 && !telasLiberadas.includes('simulator')) {
@@ -233,6 +245,16 @@ export default function App({ perfil, onSair }: AppProps) {
     }
   }, [products]);
 
+  // Lista de produtos efetivamente liberada para este usuário simular — usada só
+  // no Simulador e nos seletores de empreendimento das fichas de análise. Telas
+  // de gestão (Políticas & Empreendimentos, Importar Tabela, Painel do Administrador)
+  // continuam recebendo `products` (a lista completa), sem esse filtro.
+  const produtosLiberados = React.useMemo(() => {
+    if (ehAdministrador || empreendimentosLiberados === null) return products;
+    const idsLiberados = new Set(empreendimentosLiberados);
+    return products.filter(p => idsLiberados.has(p.id));
+  }, [products, empreendimentosLiberados, ehAdministrador]);
+
   // Keep activeAnalysisProduct and activeAnalysisCondition in sync with products state
   React.useEffect(() => {
     if (activeAnalysisProduct) {
@@ -409,8 +431,8 @@ export default function App({ perfil, onSair }: AppProps) {
     if (tab === 'details') {
       const targetKind: ConditionKind = variant === 'parcelamento-morar' ? 'parcelamento-morar' : 'banco-direto';
       // Se não temos produto ativo, inicializa com o primeiro
-      if (!activeAnalysisProduct && products.length > 0) {
-        const prodWithConds = ensureProductConditions({ ...products[0] });
+      if (!activeAnalysisProduct && produtosLiberados.length > 0) {
+        const prodWithConds = ensureProductConditions({ ...produtosLiberados[0] });
         setActiveAnalysisProduct(prodWithConds);
         const targetCond = prodWithConds.conditions.find(c => getConditionKind(c.name) === targetKind)
           || prodWithConds.conditions.find(c => !isMorarCondition(c.name))
@@ -429,8 +451,8 @@ export default function App({ perfil, onSair }: AppProps) {
       }
     } else if (tab === 'ficha-morar') {
       // Se não temos produto ativo, inicializa com o primeiro
-      if (!activeAnalysisProduct && products.length > 0) {
-        const prodWithConds = ensureProductConditions({ ...products[0] });
+      if (!activeAnalysisProduct && produtosLiberados.length > 0) {
+        const prodWithConds = ensureProductConditions({ ...produtosLiberados[0] });
         setActiveAnalysisProduct(prodWithConds);
         const morarCond = prodWithConds.conditions.find(c => isMorarCondition(c.name)) || prodWithConds.conditions[0];
         setActiveAnalysisCondition(morarCond);
@@ -607,7 +629,7 @@ export default function App({ perfil, onSair }: AppProps) {
             <SimulatorView
               simulationData={simulationData}
               onSimulationDataChange={setSimulationData}
-              products={products}
+              products={produtosLiberados}
               selectedConditions={selectedConditions}
               onSelectCondition={handleSelectCondition}
               onAdvanceToDetails={handleAdvanceToDetails}
@@ -621,7 +643,7 @@ export default function App({ perfil, onSair }: AppProps) {
             <DetailsView
               product={activeAnalysisProduct}
               condition={activeAnalysisCondition}
-              products={products}
+              products={produtosLiberados}
               currentDate={currentDate}
               onSelectProduct={(prod, condId) => {
                 const prodWithConds = ensureProductConditions({ ...prod });
@@ -648,7 +670,7 @@ export default function App({ perfil, onSair }: AppProps) {
             <FichaMorar
               product={activeAnalysisProduct}
               condition={activeAnalysisCondition}
-              products={products}
+              products={produtosLiberados}
               onSelectProduct={(prod, condId) => {
                 const prodWithConds = ensureProductConditions({ ...prod });
                 const cond = prodWithConds.conditions.find(c => c.id === condId) || prodWithConds.conditions[0];
@@ -716,7 +738,7 @@ export default function App({ perfil, onSair }: AppProps) {
           )}
 
           {activeTab === 'admin-panel' && (
-            <AdminPanelView onShowToast={showToast} usuarioAtualId={perfil.id} />
+            <AdminPanelView onShowToast={showToast} usuarioAtualId={perfil.id} produtos={products} />
           )}
           </Suspense>
         </main>
