@@ -17,6 +17,8 @@ export interface FinancialParams {
   atoManual?: number;
   aportesExtras?: number;
   sinalMinimo?: number;
+  // % do Ato Premiado (0 a 1). Vem da política do empreendimento. Ausente → 10%.
+  atoPremiadoPct?: number;
 }
 
 export interface SimulationResult {
@@ -162,18 +164,30 @@ export function resolveConditionForTorre(
 }
 
 /**
- * Regra Oficial de Desconto do Ato Premiado Morar:
- * - Ato >= 50.000: Desconto fixo de R$ 5.000,00
- * - Ato >= 5.000 e < 50.000: Desconto de 10% (Ex: R$ 20.000 -> R$ 2.000)
- * - Ato < 5.000: Desconto de R$ 0,00
+ * Padrão histórico do percentual do Ato Premiado (10%). Quando a política do
+ * empreendimento não define `atoPremiadoPct`, cai neste valor — assim simulações
+ * antigas continuam batendo com o que era antes de esse campo ser editável.
  */
-export function calcularDescontoAtoPremiado(valorAto: number): number {
+export const ATO_PREMIADO_PCT_PADRAO = 0.10;
+
+/**
+ * Regra Oficial de Desconto do Ato Premiado Morar (percentual configurável por
+ * condição comercial):
+ * - Ato >= 50.000: Desconto fixo de R$ (pct * 50.000) — teto histórico de R$ 5.000 quando pct = 10%
+ * - Ato >= 5.000 e < 50.000: Desconto = Ato * pct
+ * - Ato < 5.000: Desconto de R$ 0,00
+ * - pct = 0 (política zerada): sempre R$ 0,00
+ */
+export function calcularDescontoAtoPremiado(valorAto: number, pct: number = ATO_PREMIADO_PCT_PADRAO): number {
   const ato = Math.max(0, valorAto || 0);
+  const p = Math.max(0, pct || 0);
+  if (p === 0) return 0;
+  const tetoValor = Math.round(50000 * p * 100) / 100;
   if (ato >= 50000) {
-    return 5000.00;
+    return tetoValor;
   }
   if (ato >= 5000) {
-    return Math.round(ato * 0.10 * 100) / 100;
+    return Math.round(ato * p * 100) / 100;
   }
   return 0;
 }
@@ -182,20 +196,23 @@ export function calcularDescontoAtoPremiado(valorAto: number): number {
  * Resolve o ponto fixo ato* = base - calcularDescontoAtoPremiado(ato*), onde
  * "base" é o valor disponível para o Ato antes do desconto (ex: preço - subsídio).
  * Necessário porque o desconto do Ato Premiado é escalonado pelo próprio valor do
- * Ato, então não dá para simplesmente subtrair um desconto fixo de "base".
+ * Ato, então não dá para simplesmente subtrair um desconto fixo de "base". O
+ * percentual do Ato Premiado é configurável por condição comercial.
  */
-export function resolverTetoAtoComDesconto(base: number, isAtoPremiadoEnabled: boolean): number {
+export function resolverTetoAtoComDesconto(base: number, isAtoPremiadoEnabled: boolean, pct: number = ATO_PREMIADO_PCT_PADRAO): number {
   const baseValida = Math.max(0, base || 0);
-  if (!isAtoPremiadoEnabled) {
+  const p = Math.max(0, pct || 0);
+  if (!isAtoPremiadoEnabled || p === 0) {
     return Math.round(baseValida * 100) / 100;
   }
-  // Hipótese: ato* >= 50.000 (desconto fixo de R$ 5.000,00)
-  const tentativaFlat = baseValida - 5000;
+  const tetoValor = 50000 * p; // desconto quando ato >= 50k
+  // Hipótese: ato* >= 50.000 (desconto fixo)
+  const tentativaFlat = baseValida - tetoValor;
   if (tentativaFlat >= 50000) {
     return Math.round(tentativaFlat * 100) / 100;
   }
-  // Hipótese: 5.000 <= ato* < 50.000 (desconto de 10% sobre o próprio Ato)
-  const tentativaPct = baseValida / 1.10;
+  // Hipótese: 5.000 <= ato* < 50.000 (desconto de pct sobre o próprio Ato)
+  const tentativaPct = baseValida / (1 + p);
   if (tentativaPct >= 5000 && tentativaPct < 50000) {
     return Math.round(tentativaPct * 100) / 100;
   }
@@ -326,6 +343,9 @@ export interface MorarEngineParams {
   isAtoZerado?: boolean;
   atoManual?: number;
   atoPremiado?: number; // Compatibilidade retroativa
+  // % do Ato Premiado (0 a 1). Vem da política do empreendimento; quando ausente,
+  // cai no padrão histórico de 10% (ATO_PREMIADO_PCT_PADRAO).
+  atoPremiadoPct?: number;
 }
 
 export interface MorarSerieResult {
@@ -382,6 +402,12 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const mesesPos = params.mesesPos !== undefined ? params.mesesPos : 27;
   const isAtoPremiadoEnabled = params.isAtoPremiadoEnabled !== undefined ? params.isAtoPremiadoEnabled : true;
   const isAtoZerado = params.isAtoZerado === true;
+  // Percentual do Ato Premiado desta condição comercial. Quando a política estiver
+  // zerada (0%), o desconto do Ato é forçado a R$ 0,00 mesmo com o Ato Premiado
+  // "ligado" — comporta-se equivalente a desligar o Ato Premiado para efeito de
+  // cálculo. Quando ausente, cai no padrão histórico de 10%.
+  const pctAtoPremiado = Math.max(0, params.atoPremiadoPct !== undefined ? params.atoPremiadoPct : ATO_PREMIADO_PCT_PADRAO);
+  const isAtoPremiadoAtivoEfetivo = isAtoPremiadoEnabled && pctAtoPremiado > 0;
 
   // 1. Fatiamento do Tempo (Cascata Contínua de Baldes, cada um com sua própria capacidade de meses):
   const { obra: mObra, pos: mPos } = decomposeMorarMonths(mesesObra, mesesPos, params.serieMesesCapacidades);
@@ -437,7 +463,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   // sobre a base). `calcularAtoMinimoDaPolitica`, logo abaixo, embrulha este
   // resultado aplicando também o teto por RENDA.
   const calcularAtoMinimoPorPreco = (): { atoResidual: number; descontoAto: number; baseCalculoComITBI: number; totalProSolutoMaximo: number } => {
-    if (!isAtoPremiadoEnabled) {
+    if (!isAtoPremiadoAtivoEfetivo) {
       const descontoAtoCalc = 0;
       const baseCalc = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
       const proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
@@ -452,36 +478,37 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     // Total Pró-Soluto = Base Líquida * 17%
     // Ato Imóvel = (Sinal Total + ITBI Total) - Total Pró-Soluto - Desconto Ato
     //
-    // Hipótese 1: Ato >= 50.000 -> Desconto Fixo de R$ 5.000,00
-    const baseCom5k = (precoTabela - 5000) + itbiRegistro;
+    // Hipótese 1: Ato >= 50.000 -> Desconto fixo de (pct * 50.000)
+    const descontoAtoFlat50k = Math.round(50000 * pctAtoPremiado * 100) / 100;
+    const baseCom5k = (precoTabela - descontoAtoFlat50k) + itbiRegistro;
     const proSoluto5k = Math.round(baseCom5k * pctMaxProSoluto * 100) / 100;
-    const atoCom5k = (sinalSemITBI + itbiRegistro) - proSoluto5k - 5000;
+    const atoCom5k = (sinalSemITBI + itbiRegistro) - proSoluto5k - descontoAtoFlat50k;
     const sinalMinimoFloor = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
 
     if (atoCom5k >= 50000) {
       return {
-        descontoAto: 5000,
+        descontoAto: descontoAtoFlat50k,
         atoResidual: Math.max(sinalMinimoFloor, Math.round(atoCom5k * 100) / 100),
         baseCalculoComITBI: Math.round(baseCom5k * 100) / 100,
         totalProSolutoMaximo: proSoluto5k
       };
     }
 
-    // Hipótese 2: Ato >= 5.000 e < 50.000 -> Desconto de 10% sobre o Ato
-    // Fórmula analítica: ato = [(Sinal + ITBI) - (Preço Tabela + ITBI) * pctMaxProSoluto] / (1 + 0.10 - (0.10 * pctMaxProSoluto))
-    const denom = 1 + 0.10 - (0.10 * pctMaxProSoluto);
+    // Hipótese 2: Ato >= 5.000 e < 50.000 -> Desconto de pct sobre o próprio Ato
+    // Fórmula analítica: ato = [(Sinal + ITBI) - (Preço Tabela + ITBI) * pctMaxProSoluto] / (1 + pct - (pct * pctMaxProSoluto))
+    const denom = 1 + pctAtoPremiado - (pctAtoPremiado * pctMaxProSoluto);
     const num = (sinalSemITBI + itbiRegistro) - ((precoTabela + itbiRegistro) * pctMaxProSoluto);
     const atoAnalitico = denom > 0 ? num / denom : 0;
 
     if (atoAnalitico >= 5000 && atoAnalitico < 50000) {
       let atoResidualCalc = Math.round(atoAnalitico * 100) / 100;
-      let descontoAtoCalc = Math.round(atoResidualCalc * 0.10 * 100) / 100;
+      let descontoAtoCalc = Math.round(atoResidualCalc * pctAtoPremiado * 100) / 100;
       let baseCalc = Math.round(((precoTabela - descontoAtoCalc) + itbiRegistro) * 100) / 100;
       let proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
 
       // Ajuste de centavos fino para convergência perfeita
       atoResidualCalc = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - proSolutoMax - descontoAtoCalc) * 100) / 100);
-      descontoAtoCalc = Math.round(atoResidualCalc * 0.10 * 100) / 100;
+      descontoAtoCalc = Math.round(atoResidualCalc * pctAtoPremiado * 100) / 100;
       baseCalc = Math.round(((precoTabela - descontoAtoCalc) + itbiRegistro) * 100) / 100;
       proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
       atoResidualCalc = Math.max(sinalMinimoFloor, Math.round(((sinalSemITBI + itbiRegistro) - proSolutoMax - descontoAtoCalc) * 100) / 100);
@@ -544,7 +571,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     let descontoAjustado = porPreco.descontoAto;
     let capacidadeAjustada = capacidadeRendaInicial;
     for (let i = 0; i < 12; i++) {
-      descontoAjustado = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoAjustado) : 0;
+      descontoAjustado = isAtoPremiadoAtivoEfetivo ? calcularDescontoAtoPremiado(atoAjustado, pctAtoPremiado) : 0;
       capacidadeAjustada = capacidadeRendaTotalCom(descontoAjustado);
       atoAjustado = Math.round((base - capacidadeAjustada - descontoAjustado) * 100) / 100;
     }
@@ -567,7 +594,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     // usuário sempre pode optar por pagar mais do que o mínimo exigido).
     const atoMinimo = calcularAtoMinimoDaPolitica();
     atoResidual = Math.max(params.atoManual, atoMinimo.atoResidual);
-    descontoAto = (!isAtoZerado && isAtoPremiadoEnabled) ? calcularDescontoAtoPremiado(atoResidual) : 0;
+    descontoAto = (!isAtoZerado && isAtoPremiadoAtivoEfetivo) ? calcularDescontoAtoPremiado(atoResidual, pctAtoPremiado) : 0;
     baseCalculoComITBI = Math.max(0, Math.round(((precoTabela - descontoAto) + itbiRegistro) * 100) / 100);
     totalProSolutoMaximo = Math.round(baseCalculoComITBI * pctMaxProSoluto * 100) / 100;
   } else if (params.atoManual === 0 || isAtoZerado) {
@@ -846,14 +873,15 @@ export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResul
     atoSugerido = Math.max(totalComITBI - proSolutoMaximo - aportesExtras, pisoSinal);
     atoEfetivo = atoManual > 0 ? Math.max(atoManual, atoSugerido) : atoSugerido;
 
-    // Regra do Desconto (Ato Premiado)
+    // Regra do Desconto (Ato Premiado) — % configurável por condição comercial
+    const pctAtoPremiadoFluxo = Math.max(0, params.atoPremiadoPct !== undefined ? params.atoPremiadoPct : ATO_PREMIADO_PCT_PADRAO);
     let novoDesconto = 0;
-    if (atoEfetivo > 50000) {
-      novoDesconto = 5000;
-    } else if (atoEfetivo >= 5000 && atoEfetivo <= 50000) {
-      novoDesconto = atoEfetivo * 0.10;
-    } else {
-      novoDesconto = 0;
+    if (pctAtoPremiadoFluxo > 0) {
+      if (atoEfetivo > 50000) {
+        novoDesconto = Math.round(50000 * pctAtoPremiadoFluxo * 100) / 100;
+      } else if (atoEfetivo >= 5000 && atoEfetivo <= 50000) {
+        novoDesconto = atoEfetivo * pctAtoPremiadoFluxo;
+      }
     }
 
     erro = Math.abs(novoDesconto - desconto);
@@ -967,7 +995,8 @@ export function calculatePolicyRiskValues(
       mesesPos: mesesPosParam,
       globalSeriesPct: globalPct,
       sinalMinimo: sinalMinimoNum > 0 ? sinalMinimoNum : 2000,
-      isAtoPremiadoEnabled: true
+      isAtoPremiadoEnabled: true,
+      atoPremiadoPct: cond.atoPremiadoPct
     });
 
     const simulacao: SimulationResult = {
@@ -1043,6 +1072,7 @@ export function calculatePolicyRiskValues(
     prazoMeses: numParcelas,
     taxaJurosMensal: appliedRatePct,
     sinalMinimo: sinalMinimoNum > 0 ? sinalMinimoNum : 2000,
+    atoPremiadoPct: cond.atoPremiadoPct
   });
 
   return {
@@ -1214,6 +1244,9 @@ export interface ParcelamentoMorarParams {
   // Liga/desliga a parcela de chaves — o fluxo pode ser montado sem ela (o
   // saldo que seria dela flui para Semestrais/Mensais de Obra). Padrão true.
   chavesHabilitada?: boolean;
+
+  // % do Ato Premiado (0 a 1). Vem da política do empreendimento; ausente = 10%.
+  atoPremiadoPct?: number;
 }
 
 export interface ParcelamentoMorarResult {
@@ -1289,8 +1322,11 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
   // 40 iterações convergem com folga: a taxa de desconto do Ato Premiado
   // (10%) atua como fator de contração, reduzindo o erro pela metade (na
   // prática, por 10x) a cada passo.
+  const pctAtoPremiadoPM = Math.max(0, p.atoPremiadoPct !== undefined ? p.atoPremiadoPct : ATO_PREMIADO_PCT_PADRAO);
   for (let iter = 0; iter < 40; iter++) {
-    descontoAtoPremiado = p.isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoAposAntecipadas) : 0;
+    descontoAtoPremiado = (p.isAtoPremiadoEnabled && pctAtoPremiadoPM > 0)
+      ? calcularDescontoAtoPremiado(atoAposAntecipadas, pctAtoPremiadoPM)
+      : 0;
     const valorUtilizado = Math.max(0, price - descontoAtoPremiado - recursos);
 
     // MENSAL DE OBRA — teto rígido de % da renda (padrão 40%), usado no valor

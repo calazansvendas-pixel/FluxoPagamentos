@@ -11,7 +11,7 @@ const CONTEUDO: Record<AccountStatusViewProps['status'], { icon: React.ReactNode
   pendente: {
     icon: <Clock className="w-6 h-6" />,
     titulo: 'Cadastro em análise',
-    texto: 'Seu e-mail foi confirmado. Um administrador vai revisar seus dados e liberar seu cargo e permissões em breve.',
+    texto: 'Um administrador vai revisar seus dados e liberar seu cargo e permissões em breve.',
     corFundo: 'bg-amber-50',
     corTexto: 'text-amber-600'
   },

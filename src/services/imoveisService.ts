@@ -43,6 +43,32 @@ import { parseM2Number, parseCurrency, formatArea } from '../utils/formatters';
  * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS conditions JSONB;
  * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
  *
+ * -- Colunas de vigência da tabela de vendas (necessário para que o status "Tabela
+ * -- Vigente / Vencida" e o nome do arquivo importado fiquem compartilhados entre
+ * -- todos os usuários, em vez de cada navegador calcular seu próprio valor):
+ * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS tabela_valid_from TEXT;
+ * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS tabela_valid_to TEXT;
+ * -- ALTER TABLE empreendimentos ADD COLUMN IF NOT EXISTS tabela_file_name TEXT;
+ *
+ * -- Tabela de Tabelas de Vendas Arquivadas. Toda vez que uma nova tabela de vendas é
+ * -- importada por cima de uma já vigente (ImportTableView), a tabela antiga (unidades +
+ * -- vigência) é guardada aqui antes de ser sobrescrita, para consulta e exclusão
+ * -- posterior em "Tabelas Arquivadas".
+ * CREATE TABLE IF NOT EXISTS tabelas_arquivadas (
+ *   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+ *   empreendimento_id UUID REFERENCES empreendimentos(id) ON DELETE CASCADE,
+ *   nome_empreendimento TEXT,
+ *   file_name TEXT,
+ *   valid_from TEXT,
+ *   valid_to TEXT,
+ *   rows JSONB,
+ *   arquivado_em TIMESTAMPTZ DEFAULT now(),
+ *   arquivado_por UUID
+ * );
+ * ALTER TABLE tabelas_arquivadas ENABLE ROW LEVEL SECURITY;
+ * CREATE POLICY "logados_leem_tabelas_arquivadas" ON tabelas_arquivadas FOR SELECT USING (auth.role() = 'authenticated');
+ * CREATE POLICY "logados_gravam_tabelas_arquivadas" ON tabelas_arquivadas FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
+ *
  * -- Tabela de Simulações Salvas (propostas). Usada pelo botão "Salvar Simulação"
  * -- nas fichas Sinal c/ Morar e Sinal c/ Banco Direto, e pela tela "Simulações
  * -- Salvas" (visualizar / editar / excluir).
@@ -129,8 +155,10 @@ export const imoveisService = {
   },
 
   // Garante que o empreendimento exista no Supabase (nome, datas de entrega) e, quando
-  // fornecida, grava também a política de crédito (conditions) e o destaque (is_featured) —
-  // para que a política configurada por um usuário fique visível para todos os demais.
+  // fornecida, grava também a política de crédito (conditions), o destaque (is_featured) e
+  // a vigência da tabela de vendas atual (tabela_valid_from/to/file_name) — para que essas
+  // informações fiquem compartilhadas entre todos os usuários, em vez de cada um ficar com
+  // seu próprio valor local.
   async sincronizarEmpreendimento(emp: {
     id: string;
     nome: string;
@@ -138,41 +166,59 @@ export const imoveisService = {
     delivery_date_phase2?: string;
     conditions?: unknown;
     is_featured?: boolean;
+    tabela_valid_from?: string;
+    tabela_valid_to?: string;
+    tabela_file_name?: string;
   }): Promise<{ success: boolean; error?: string }> {
     try {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(emp.id);
       if (!isUUID) return { success: false, error: 'id não é um UUID válido' };
 
-      const basePayload: Record<string, unknown> = {
+      const payload: Record<string, unknown> = {
         id: emp.id,
         nome: emp.nome,
         delivery_date_phase1: emp.delivery_date_phase1 || null,
         delivery_date_phase2: emp.delivery_date_phase2 || null
       };
-      const fullPayload = { ...basePayload };
-      if (emp.conditions !== undefined) fullPayload.conditions = emp.conditions;
-      if (emp.is_featured !== undefined) fullPayload.is_featured = emp.is_featured;
+      if (emp.conditions !== undefined) payload.conditions = emp.conditions;
+      if (emp.is_featured !== undefined) payload.is_featured = emp.is_featured;
+      if (emp.tabela_valid_from !== undefined) payload.tabela_valid_from = emp.tabela_valid_from;
+      if (emp.tabela_valid_to !== undefined) payload.tabela_valid_to = emp.tabela_valid_to;
+      if (emp.tabela_file_name !== undefined) payload.tabela_file_name = emp.tabela_file_name;
 
-      const { error } = await supabase.from('empreendimentos').upsert([fullPayload], { onConflict: 'id' });
+      // Colunas opcionais que podem ainda não existir no schema do Supabase (quem estiver
+      // rodando um banco mais antigo ainda não rodou o ALTER TABLE indicado no topo deste
+      // arquivo). Tenta gravar tudo; se o Supabase reclamar de alguma coluna específica por
+      // não existir, remove só ela do payload e tenta de novo — assim o que já existir no
+      // schema não deixa de ser sincronizado por causa de uma coluna nova ainda pendente.
+      const colunasOpcionais = ['conditions', 'is_featured', 'tabela_valid_from', 'tabela_valid_to', 'tabela_file_name'];
+      let lastError: { code?: string; message?: string } | null = null;
+      for (let tentativa = 0; tentativa <= colunasOpcionais.length; tentativa++) {
+        const { error } = await supabase.from('empreendimentos').upsert([payload], { onConflict: 'id' });
+        if (!error) return { success: true };
 
-      // Se as colunas conditions/is_featured ainda não existirem no schema do Supabase
-      // (usuário ainda não rodou o ALTER TABLE), grava ao menos os campos básicos, para
-      // não perder a sincronização de nome/datas de entrega enquanto isso. Esse fallback
-      // conta como sucesso (é o melhor possível até o SQL ser rodado) — só uma falha real
-      // de rede/conexão deve ser reportada como erro para quem chamou.
-      if (error && (error.code === 'PGRST204' || /conditions|is_featured/i.test(String(error.message || '')))) {
-        console.warn('Aviso: colunas conditions/is_featured não encontradas no Supabase. Rode o ALTER TABLE indicado em imoveisService.ts para sincronizar a política de crédito entre usuários. Gravando apenas nome/datas por enquanto.');
-        const { error: baseError } = await supabase.from('empreendimentos').upsert([basePayload], { onConflict: 'id' });
-        if (baseError) {
-          return { success: false, error: baseError.message };
+        const isMissingColumn = error.code === 'PGRST204' || /column .* does not exist/i.test(String(error.message || ''));
+        if (!isMissingColumn) {
+          return { success: false, error: error.message };
         }
-        return { success: true };
-      }
 
-      if (error) {
-        return { success: false, error: error.message };
+        const colunaFaltante = colunasOpcionais.find(c => c in payload && new RegExp(c, 'i').test(String(error.message || '')));
+        if (!colunaFaltante) {
+          // Não conseguimos identificar qual coluna está faltando pela mensagem — remove
+          // todas as opcionais ainda presentes de uma vez, para não ficar em loop.
+          const restantes = colunasOpcionais.filter(c => c in payload);
+          if (restantes.length === 0) {
+            return { success: false, error: error.message };
+          }
+          restantes.forEach(c => delete payload[c]);
+          lastError = error;
+          continue;
+        }
+        console.warn(`Aviso: coluna "${colunaFaltante}" não encontrada no Supabase. Rode o ALTER TABLE indicado em imoveisService.ts. Gravando os demais campos por enquanto.`);
+        delete payload[colunaFaltante];
+        lastError = error;
       }
-      return { success: true };
+      return { success: false, error: lastError?.message || 'Erro ao sincronizar com o banco' };
     } catch (e: any) {
       console.warn('Aviso ao sincronizar empreendimento no Supabase:', e);
       return { success: false, error: e?.message || 'Erro ao sincronizar com o banco' };
@@ -538,6 +584,94 @@ export const imoveisService = {
       return { success: true };
     } catch (e: any) {
       console.warn('Erro ao excluir simulação:', e);
+      return { success: false, error: e?.message || 'Erro de conexão' };
+    }
+  },
+
+  // Exclui várias simulações salvas de uma vez (seleção em lote na tela de
+  // Simulações Salvas). O RLS de `simulacoes` já restringe quais linhas cada
+  // usuário pode de fato apagar (a própria, ou qualquer uma se Administrador)
+  // — por isso devolvemos quantas foram realmente excluídas (via `.select()`
+  // no delete), para avisar quando o lote pedido for maior que o permitido.
+  async excluirSimulacoesEmLote(ids: string[]) {
+    if (ids.length === 0) return { success: true, excluidas: 0 };
+    try {
+      const { data, error } = await supabase.from('simulacoes').delete().in('id', ids).select('id');
+      if (error) {
+        console.error('Erro ao excluir simulações em lote no Supabase:', error);
+        return { success: false, error: error.message };
+      }
+      return { success: true, excluidas: data?.length ?? 0 };
+    } catch (e: any) {
+      console.warn('Erro ao excluir simulações em lote:', e);
+      return { success: false, error: e?.message || 'Erro de conexão' };
+    }
+  },
+
+  // Guarda a tabela de vendas atualmente vigente de um empreendimento em
+  // `tabelas_arquivadas`, antes que ela seja sobrescrita por uma nova importação
+  // (ImportTableView.handleSaveTable chama isto logo antes de gravar a tabela nova).
+  // Falha em arquivar não deve travar a importação da tabela nova — por isso não
+  // lança, apenas devolve { success: false } para o chamador decidir se avisa o usuário.
+  async arquivarTabelaAtual(
+    empId: string,
+    nomeEmpreendimento: string,
+    tableInfo: { fileName?: string; validFrom?: string; validTo?: string; rows?: (string | number)[][] }
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!tableInfo?.rows || tableInfo.rows.length === 0) {
+      return { success: true };
+    }
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const payload: Record<string, unknown> = {
+        empreendimento_id: empId,
+        nome_empreendimento: nomeEmpreendimento,
+        file_name: tableInfo.fileName || null,
+        valid_from: tableInfo.validFrom || null,
+        valid_to: tableInfo.validTo || null,
+        rows: tableInfo.rows,
+        arquivado_por: userData?.user?.id || null
+      };
+      const { error } = await supabase.from('tabelas_arquivadas').insert([payload]);
+      if (error) {
+        console.warn('Aviso ao arquivar tabela de vendas anterior:', error.message);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
+      console.warn('Erro ao arquivar tabela de vendas anterior:', e);
+      return { success: false, error: e?.message || 'Erro de conexão' };
+    }
+  },
+
+  // Lista as tabelas de vendas arquivadas (mais recentes primeiro). Quando `empId` é
+  // informado, restringe ao empreendimento; caso contrário lista de todos (tela geral).
+  async listarTabelasArquivadas(empId?: string): Promise<any[]> {
+    try {
+      let query = supabase.from('tabelas_arquivadas').select('*').order('arquivado_em', { ascending: false });
+      if (empId) query = query.eq('empreendimento_id', empId);
+      const { data, error } = await query;
+      if (error) {
+        console.warn('Aviso ao listar tabelas arquivadas:', error.message);
+        return [];
+      }
+      return data || [];
+    } catch (e) {
+      console.warn('Erro ao listar tabelas arquivadas:', e);
+      return [];
+    }
+  },
+
+  // Exclui definitivamente uma tabela arquivada.
+  async excluirTabelaArquivada(id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase.from('tabelas_arquivadas').delete().eq('id', id);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
+      console.warn('Erro ao excluir tabela arquivada:', e);
       return { success: false, error: e?.message || 'Erro de conexão' };
     }
   },

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Building, Coins, AlertTriangle, FileSpreadsheet, PieChart, TrendingUp, Printer, FileDown, ChevronDown, Save, Loader2 } from 'lucide-react';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
-import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit } from '../utils/formatters';
+import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
 import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
@@ -236,8 +236,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   }, [currentProd?.id, currentCond?.id, currentCond?.numParcelas, condNumParcelas]);
 
+  // Tabela vencida (data final de validade já passou em relação ao "Hoje é"
+  // do cabeçalho) = trata como se não houvesse tabela nenhuma: zera as linhas
+  // disponíveis para Torre/Unidade, bloqueando a simulação com preços
+  // desatualizados até uma tabela nova ser importada.
+  const tabelaVencida = isTabelaVencida(currentProd?.tableInfo?.validTo, currentDate);
+
   // Get table rows for current product
-  const tableRows = currentProd?.tableInfo?.rows || [];
+  const tableRows = tabelaVencida ? [] : (currentProd?.tableInfo?.rows || []);
   const uniqueTorres = React.useMemo(() => {
     return (Array.from(new Set(tableRows.map(r => String(r[1] || '').trim()).filter(t => t !== ''))) as string[])
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
@@ -330,6 +336,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // ITBI" e alimenta todo o resto do fluxo. A parcela (Tabela Price), mais
   // abaixo, é a única conta feita sobre o valor BRUTO (sem a redução).
   const taxaAssinaturaContratoPct = currentCond?.taxaAssinaturaContratoPct ?? 0;
+  // % do Ato Premiado desta condição comercial (padrão histórico 10% quando a
+  // política não define). 0% desliga completamente o desconto do Ato Premiado
+  // nesta condição, mesmo com o botão "Ato Premiado" ligado na ficha.
+  const pctAtoPremiadoCond = currentCond?.atoPremiadoPct ?? 0.10;
+  const tetoDescontoAtoPremiado = Math.round(50000 * pctAtoPremiadoCond * 100) / 100;
 
   // ITBI depends on whether it's 1º Imóvel (Com Desconto) or 2º Imóvel (Sem Desconto)
   const itbiVal = (hasUnitSelected && matchingRow) 
@@ -591,7 +602,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? Math.max(0, price - maxFinanc - pmMensaisAntecipadas)
     : 0;
   const pmAtoAposAntecipadasAVistaTarget = hasUnitSelected
-    ? resolverTetoAtoComDesconto(pmBaseAVista, isAtoPremiadoEnabled)
+    ? resolverTetoAtoComDesconto(pmBaseAVista, isAtoPremiadoEnabled, pctAtoPremiadoCond)
     : 0;
   const pmAtoAVistaTarget = pmAtoAposAntecipadasAVistaTarget + pmMensaisAntecipadas;
   // No Parcelamento Morar não existe financiamento bancário nem FGTS: quitar
@@ -632,7 +643,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     parcelaMinimaSemestral: currentCond?.pmParcelaMinimaSemestral ?? 200,
     parcelaMinimaPosObra: currentCond?.pmParcelaMinimaPosObra ?? 200,
     mensaisAntecipadas: pmMensaisAntecipadas,
-    chavesHabilitada: pmIsAVistaActive ? false : pmChavesEnabled
+    chavesHabilitada: pmIsAVistaActive ? false : pmChavesEnabled,
+    atoPremiadoPct: currentCond?.atoPremiadoPct
   });
   // "Sinal Total" no mesmo sentido do Bloco 1 do Banco Direto: o que falta do
   // valor do imóvel antes de descontar o Ato em si (Ato + este saldo = tudo
@@ -763,9 +775,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido
       const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido);
 
-      // j) novoAtoPremiado = Exatamente 10% do Pagamento Ato (Sinal Efetivo), caso o Ato Bruto seja >= 5000
-      const novoAtoPremiado = (isAtoPremiadoEnabled && atoBrutoCalculado >= 5000) 
-        ? Math.min(pagamentoAtoSinalEfetivo * 0.10, 5000) 
+      // j) novoAtoPremiado = pct do Pagamento Ato (Sinal Efetivo) caso o Ato Bruto seja >= 5000
+      // pct vem da política do empreendimento (currentCond.atoPremiadoPct); ausente → 10%
+      const novoAtoPremiado = (isAtoPremiadoEnabled && pctAtoPremiadoCond > 0 && atoBrutoCalculado >= 5000)
+        ? Math.min(pagamentoAtoSinalEfetivo * pctAtoPremiadoCond, tetoDescontoAtoPremiado)
         : 0;
 
       // 2. CONDIÇÃO DE PARADA: Tolerância zero para bater os centavos do Excel
@@ -811,7 +824,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? Math.max(0, precoTabelaOriginal - (maxFinanc + subsidy + fgts) - somaMensais)
     : 0;
   const atoAposMensaisAVistaTarget = hasUnitSelected
-    ? resolverTetoAtoComDesconto(baseAVista, isAtoPremiadoEnabled)
+    ? resolverTetoAtoComDesconto(baseAVista, isAtoPremiadoEnabled, pctAtoPremiadoCond)
     : 0;
   // valAtoManual é o Ato ANTES da absorção das mensais (mesma convenção já usada pelo
   // onAtoChange existente do FluxoEntradaConstrutora), então somamos de volta.
@@ -830,7 +843,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // devia — o Pró-Soluto era clampado em R$ 0,00 e a diferença sumia da tela.
   // Mesma abordagem já usada na ficha "Sinal c/ Morar" (FichaMorar.tsx).
   const atoMaximoPossivel = hasUnitSelected
-    ? resolverTetoAtoComDesconto(Math.max(0, price - subsidy), isAtoPremiadoEnabled)
+    ? resolverTetoAtoComDesconto(Math.max(0, price - subsidy), isAtoPremiadoEnabled, pctAtoPremiadoCond)
     : 0;
 
   const atoImovelDigitadoBruto = (valAtoManual !== null && valAtoManual >= atoMinimoCalculado)
@@ -848,13 +861,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // Recálculo do Ato Premiado (desconto da Construtora) para o novo Ato do Imóvel
   let novoAtoPremiado = 0;
-  if (isAtoPremiadoEnabled && atoAposMensais >= 4500) {
+  if (isAtoPremiadoEnabled && pctAtoPremiadoCond > 0 && atoAposMensais >= 4500) {
     let currAtoEfetivo = atoAposMensais;
     let currAtoPremiado = 0;
     for (let iter = 0; iter < 100; iter++) {
       const atoBrutoCalculado = currAtoEfetivo + currAtoPremiado;
       const novoDesc = (atoBrutoCalculado >= 5000 && currAtoEfetivo >= 4500)
-        ? Math.min(currAtoEfetivo * 0.10, 5000)
+        ? Math.min(currAtoEfetivo * pctAtoPremiadoCond, tetoDescontoAtoPremiado)
         : 0;
 
       const lacuna = atoAposMensais - currAtoEfetivo;
@@ -1321,12 +1334,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     );
   }
 
-  // Check if sales table exists and is active
+  // Check if sales table exists, is active, and is not expired
   const hasTable = Boolean(
     currentProd.tableInfo &&
     currentProd.tableInfo.active &&
     currentProd.tableInfo.rows &&
-    currentProd.tableInfo.rows.length > 0
+    currentProd.tableInfo.rows.length > 0 &&
+    !tabelaVencida
   );
 
   const [isSavingSimulation, setIsSavingSimulation] = useState<boolean>(false);
@@ -1578,24 +1592,28 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         </div>
       </div>
 
-      {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA */}
+      {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA OU VENCIDA */}
       {!hasTable && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+        <div className={`${tabelaVencida ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'} border rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm`}>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+            <div className={`p-2 ${tabelaVencida ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'} rounded-lg shrink-0`}>
               <AlertTriangle className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-amber-900">Tabela de Vendas Não Importada</h4>
-              <p className="text-xs font-medium text-amber-800 mt-0.5">
-                Atenção: É necessário importar a tabela de vendas para este empreendimento.
+              <h4 className={`text-xs font-bold ${tabelaVencida ? 'text-rose-900' : 'text-amber-900'}`}>
+                {tabelaVencida ? 'Tabela de Vendas Vencida' : 'Tabela de Vendas Não Importada'}
+              </h4>
+              <p className={`text-xs font-medium mt-0.5 ${tabelaVencida ? 'text-rose-800' : 'text-amber-800'}`}>
+                {tabelaVencida
+                  ? `A validade desta tabela terminou em ${formatDateBr(currentProd.tableInfo?.validTo)}. Importe uma tabela nova para liberar a simulação com preços atualizados.`
+                  : 'Atenção: É necessário importar a tabela de vendas para este empreendimento.'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => onNavigateToImport(currentProd.id)}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer"
+            className={`px-3.5 py-1.5 ${tabelaVencida ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'} text-white rounded-lg text-xs font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer`}
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Importar Tabela (Excel)</span>
@@ -1988,7 +2006,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 const precoComDesconto = Math.max(0, Math.round((precoTabelaOriginal - descontoNaHora) * 100) / 100);
                 if (isParcelamentoMorar) {
                   const baseNaHora = hasUnitSelected ? Math.max(0, precoComDesconto - maxFinanc - pmMensaisAntecipadas) : 0;
-                  const atoAposAntecipadasNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(baseNaHora, false) : 0;
+                  const atoAposAntecipadasNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(baseNaHora, false, pctAtoPremiadoCond) : 0;
                   setValAtoManual(atoAposAntecipadasNaHora + pmMensaisAntecipadas);
                 } else {
                   // Zera tudo: financiamento, subsídio e FGTS somem sozinhos (o Ato,
@@ -1999,7 +2017,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   setParc2InputText('');
                   setValParc3(0);
                   setParc3InputText('');
-                  const atoNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(precoComDesconto, false) : 0;
+                  const atoNaHora = hasUnitSelected ? resolverTetoAtoComDesconto(precoComDesconto, false, pctAtoPremiadoCond) : 0;
                   setValAtoManual(atoNaHora);
                 }
               } else {

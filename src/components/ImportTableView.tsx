@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { FileCheck, CheckCircle, AlertCircle, Trash2, CalendarClock, UploadCloud, Search, XCircle, Table as TableIcon, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { FileCheck, CheckCircle, AlertCircle, Trash2, CalendarClock, UploadCloud, Search, XCircle, Table as TableIcon, CheckCircle2, AlertTriangle, Loader2, Archive, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, TableInfo } from '../types';
-import { COLUMN_DEFINITIONS, formatCurrency, formatArea, normalizeHeader, parseCurrency, parseM2Number } from '../utils/formatters';
+import { COLUMN_DEFINITIONS, formatCurrency, formatArea, normalizeHeader, parseCurrency, parseM2Number, isTabelaVencida, formatDateBr } from '../utils/formatters';
 import { supabase } from '../lib/supabaseClient';
 import { imoveisService } from '../services/imoveisService';
 
@@ -13,6 +13,9 @@ interface ImportTableViewProps {
   onSaveTableInfo: (productId: string, tableInfo: TableInfo) => void;
   onDeleteTable: (productId: string) => void;
   onShowToast: (message: string) => void;
+  // "Hoje é" configurado no cabeçalho do app — usado para saber se a tabela
+  // vigente já passou da validade (não a data real do dispositivo).
+  currentDate: string;
 }
 
 // Helper to get first and last day of current month in YYYY-MM-DD format
@@ -35,11 +38,19 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
   onSelectImportProduct,
   onSaveTableInfo,
   onDeleteTable,
-  onShowToast
+  onShowToast,
+  currentDate
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const activeProd = products.find(p => p.id === activeImportProductId) || products[0];
+  // IMPORTANTE: nunca cair para products[0] quando activeImportProductId não bate com
+  // nenhum produto atual (ex.: uma janela momentânea logo após a lista de empreendimentos
+  // ser recarregada do Supabase). Um fallback silencioso para "o primeiro da lista" fazia
+  // a importação/arquivamento gravar no empreendimento errado sem nenhum aviso — é preciso
+  // ficar sem produto selecionado (undefined) e deixar os `?.` abaixo lidarem com isso, em
+  // vez de agir sobre dados de outro empreendimento.
+  const activeProd = products.find(p => p.id === activeImportProductId);
+  const tabelaVencida = Boolean(activeProd?.tableInfo?.active) && isTabelaVencida(activeProd?.tableInfo?.validTo, currentDate);
 
   const currentMonthDefaults = getCurrentMonthDates();
 
@@ -62,6 +73,44 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Tabelas de vendas arquivadas (versões antigas substituídas) do empreendimento
+  // selecionado — ver "Tabelas Arquivadas" mais abaixo.
+  const [arquivadasAbertas, setArquivadasAbertas] = useState(false);
+  const [arquivadas, setArquivadas] = useState<any[]>([]);
+  const [carregandoArquivadas, setCarregandoArquivadas] = useState(false);
+  const [excluirArquivadaId, setExcluirArquivadaId] = useState<string | null>(null);
+  const [excluindoArquivada, setExcluindoArquivada] = useState(false);
+  const [visualizandoArquivada, setVisualizandoArquivada] = useState<any | null>(null);
+  const [lookupArquivadaTorre, setLookupArquivadaTorre] = useState('');
+  const [lookupArquivadaUnidade, setLookupArquivadaUnidade] = useState('');
+
+  const carregarArquivadas = React.useCallback(async (empId: string) => {
+    setCarregandoArquivadas(true);
+    const lista = await imoveisService.listarTabelasArquivadas(empId);
+    setArquivadas(lista);
+    setCarregandoArquivadas(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (activeProd && arquivadasAbertas) {
+      carregarArquivadas(activeProd.id);
+    }
+  }, [activeImportProductId, arquivadasAbertas, activeProd, carregarArquivadas]);
+
+  const handleConfirmDeleteArquivada = async () => {
+    if (!excluirArquivadaId) return;
+    setExcluindoArquivada(true);
+    const res = await imoveisService.excluirTabelaArquivada(excluirArquivadaId);
+    setExcluindoArquivada(false);
+    setExcluirArquivadaId(null);
+    if (res.success) {
+      setArquivadas(prev => prev.filter(a => a.id !== excluirArquivadaId));
+      onShowToast('Tabela arquivada excluída com sucesso.');
+    } else {
+      onShowToast(`Erro ao excluir tabela arquivada: ${res.error || 'erro desconhecido'}`);
+    }
+  };
 
   // Executa a exclusão de todas as unidades do empreendimento no Supabase e limpa o estado
   const handleConfirmDeleteUnits = async () => {
@@ -176,6 +225,30 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
         if (headerRowIndex === -1 || bestScore < 5) {
           onShowToast("Não foi possível identificar as colunas pelo nome do cabeçalho. Confira se a planilha tem uma linha com os nomes das colunas (TORRE, UNIDADE, PREÇO, ITBI, etc).");
           return;
+        }
+
+        // Algumas planilhas têm um cabeçalho mesclado verticalmente numa coluna específica
+        // (ex.: uma célula mesclada com "ITBI+Registro" numa linha e "1º Imóvel" na linha
+        // logo abaixo/acima) — como o texto de uma célula mesclada só existe na célula-âncora
+        // do Excel, a coluna vizinha "some" nessa linha e o nome não bate com nada. Para as
+        // colunas que ainda não foram reconhecidas na linha de cabeçalho escolhida, tenta de
+        // novo combinando o texto dela com o da linha imediatamente acima e abaixo, coluna a
+        // coluna, antes de considerar a coluna realmente ausente.
+        const linhasVizinhasCabecalho = [headerRowIndex - 1, headerRowIndex, headerRowIndex + 1].filter(r => r >= 0 && r < jsonData.length);
+        const totalColunasVizinhas = linhasVizinhasCabecalho.reduce((max, r) => Math.max(max, (jsonData[r] as any[])?.length || 0), 0);
+        const colunasJaUsadas = new Set(Object.values(colIndices));
+        for (let idx = 0; idx < totalColunasVizinhas; idx++) {
+          if (colunasJaUsadas.has(idx)) continue;
+          const textoCombinado = linhasVizinhasCabecalho.map(r => String((jsonData[r] as any[])?.[idx] ?? '')).join(' ');
+          const normCombinado = normalizeHeader(textoCombinado);
+          if (!normCombinado) continue;
+          for (const def of COLUMN_DEFINITIONS) {
+            if (colIndices[def.key] === undefined && def.match(normCombinado)) {
+              colIndices[def.key] = idx;
+              colunasJaUsadas.add(idx);
+              break;
+            }
+          }
         }
 
         const colFase = colIndices["Fase"];
@@ -382,15 +455,27 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
     const unidadesProcessadas = imoveisService.converterLinhasParaUnidades(activeProd.id, currentRows);
 
     try {
-      // 1. Garante que o empreendimento exista no Supabase
+      // 1. Se já havia uma tabela vigente com unidades e uma planilha nova foi importada
+      // agora, guarda a tabela antiga em "Tabelas Arquivadas" antes de sobrescrevê-la.
+      if (tempParsedData && activeProd.tableInfo?.active && (activeProd.tableInfo.rows?.length || 0) > 0) {
+        const arquivarRes = await imoveisService.arquivarTabelaAtual(activeProd.id, activeProd.name, activeProd.tableInfo);
+        if (!arquivarRes.success) {
+          console.warn('Aviso: não foi possível arquivar a tabela anterior:', arquivarRes.error);
+        }
+      }
+
+      // 2. Garante que o empreendimento exista no Supabase, já com a vigência da nova tabela
       await imoveisService.sincronizarEmpreendimento({
         id: activeProd.id,
         nome: activeProd.name,
         delivery_date_phase1: activeProd.deliveryDatePhase1 || activeProd.deliveryDate,
-        delivery_date_phase2: activeProd.deliveryDatePhase2
+        delivery_date_phase2: activeProd.deliveryDatePhase2,
+        tabela_valid_from: validFrom,
+        tabela_valid_to: validTo,
+        tabela_file_name: currentFileName
       });
 
-      // 2. Realiza o upsert em lote e obtém os dados do banco
+      // 3. Realiza o upsert em lote e obtém os dados do banco
       const res = await imoveisService.salvarUnidadesLote(activeProd.id, unidadesProcessadas);
       
       let finalRows = currentRows;
@@ -428,13 +513,14 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
         active: true
       };
 
-      // 3. Salva no estado global e no cache local (localStorage)
+      // 4. Salva no estado global e no cache local (localStorage)
       onSaveTableInfo(activeProd.id, newTableInfo);
       setTempParsedData(null);
       onShowToast(`Sucesso! ${unidadesProcessadas.length} unidades sincronizadas no banco Supabase.`);
-      
-      // 4. Dispara evento customizado para atualizar todos os componentes e abas abertas
+
+      // 5. Dispara evento customizado para atualizar todos os componentes e abas abertas
       window.dispatchEvent(new CustomEvent('tabela_atualizada'));
+      if (arquivadasAbertas) carregarArquivadas(activeProd.id);
 
     } catch (err: any) {
       console.error(err);
@@ -507,10 +593,12 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
               className="w-full bg-white font-bold text-slate-900 border border-slate-300 rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-sky-600 text-xs shadow-xs cursor-pointer"
             >
               {products.map(p => {
-                const isActive = p.tableInfo && p.tableInfo.active;
+                const isActive = Boolean(p.tableInfo && p.tableInfo.active);
+                const isVencida = isActive && isTabelaVencida(p.tableInfo?.validTo, currentDate);
+                const rotulo = !isActive ? ' — ⚠️ Sem Tabela Ativa' : isVencida ? ' — ⏰ Tabela Vencida' : ' — ✓ Tabela Vigente';
                 return (
                   <option key={p.id} value={p.id}>
-                    {p.name} {isActive ? ' — ✓ Tabela Vigente' : ' — ⚠️ Sem Tabela Ativa'}
+                    {p.name}{rotulo}
                   </option>
                 );
               })}
@@ -518,7 +606,22 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           </div>
 
           <div className="self-end sm:self-center shrink-0 flex items-center gap-2">
-            {hasTable ? (
+            {hasTable && tabelaVencida ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Tabela Vencida desde {formatDateBr(activeProd?.tableInfo?.validTo)} ({activeProd?.tableInfo?.rows?.length || 0} unid.)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="text-xs text-rose-700 hover:text-white hover:bg-rose-600 font-bold flex items-center gap-1.5 bg-rose-50 px-3.5 py-1.5 rounded-xl border border-rose-200 transition-all shadow-2xs shrink-0 cursor-pointer"
+                  title="Excluir todas as unidades deste empreendimento no Supabase e na aplicação"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Excluir Unidades Existentes</span>
+                </button>
+              </div>
+            ) : hasTable ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
                   <CheckCircle className="w-3.5 h-3.5" /> Tabela Vigente ({activeProd?.tableInfo?.rows?.length || 0} unid.)
@@ -551,6 +654,22 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
             )}
           </div>
         </div>
+
+        {tabelaVencida && (
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex items-start gap-3 shadow-sm">
+            <div className="p-2 bg-rose-100 text-rose-700 rounded-lg shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-rose-900">Tabela vencida — simulações bloqueadas</h4>
+              <p className="text-xs font-medium text-rose-800 mt-0.5">
+                A validade desta tabela terminou em {formatDateBr(activeProd?.tableInfo?.validTo)}. Enquanto uma tabela
+                nova não for importada, o Simulador não deixa escolher Torre/Unidade deste empreendimento, para
+                evitar simular com preços desatualizados.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* FORMULÁRIO DE IMPORTAÇÃO DA TABELA */}
         <form onSubmit={handleSaveTable} className="space-y-5 text-xs">
@@ -832,6 +951,235 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
 
         </form>
       </div>
+
+      {/* TABELAS ARQUIVADAS: versões antigas substituídas por uma nova importação, para
+          consulta e exclusão pelo usuário. */}
+      {activeProd && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setArquivadasAbertas(v => !v)}
+            className="w-full flex items-center justify-between gap-3 p-4 sm:p-5 hover:bg-slate-50/80 transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-slate-100 text-slate-600 rounded-lg shrink-0">
+                <Archive className="w-4 h-4" />
+              </div>
+              <div className="text-left">
+                <span className="font-bold text-slate-900 text-xs block">Tabelas Arquivadas</span>
+                <span className="text-[11px] text-slate-500">
+                  Versões anteriores da tabela de vendas de {activeProd.name}, substituídas por uma importação mais nova.
+                </span>
+              </div>
+            </div>
+            {arquivadasAbertas ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+          </button>
+
+          {arquivadasAbertas && (
+            <div className="border-t border-slate-200 p-4 sm:p-5">
+              {carregandoArquivadas ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500 py-4 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Carregando tabelas arquivadas...
+                </div>
+              ) : arquivadas.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-4">
+                  Nenhuma tabela arquivada para este empreendimento ainda. Toda vez que uma tabela de vendas vigente é
+                  substituída por uma nova importação, a versão anterior aparece aqui.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {arquivadas.map((a) => (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      key={a.id}
+                      onClick={() => { setVisualizandoArquivada(a); setLookupArquivadaTorre(''); setLookupArquivadaUnidade(''); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setVisualizandoArquivada(a); setLookupArquivadaTorre(''); setLookupArquivadaUnidade(''); } }}
+                      className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 hover:bg-sky-50/60 border border-slate-200 hover:border-sky-200 rounded-xl p-3 transition-all cursor-pointer text-left"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-900 font-mono block truncate">{a.file_name || 'Arquivo sem nome'}</span>
+                        <span className="text-[11px] text-slate-500">
+                          Vigência: {formatDateBr(a.valid_from)} a {formatDateBr(a.valid_to)} · {Array.isArray(a.rows) ? a.rows.length : 0} unid. · Arquivada em {a.arquivado_em ? new Date(a.arquivado_em).toLocaleString('pt-BR') : '-'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <span className="text-xs text-sky-700 font-semibold flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-sky-200 shadow-2xs">
+                          <Search className="w-3.5 h-3.5" />
+                          <span>Visualizar</span>
+                        </span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); setExcluirArquivadaId(a.id); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setExcluirArquivadaId(a.id); } }}
+                          className="text-xs text-rose-700 hover:text-white hover:bg-rose-600 font-semibold flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-rose-200 transition-all shadow-2xs cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Excluir</span>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL DE VISUALIZAÇÃO DE TABELA ARQUIVADA */}
+      {visualizandoArquivada && (() => {
+        const rowsArquivada: (string | number)[][] = Array.isArray(visualizandoArquivada.rows) ? visualizandoArquivada.rows : [];
+        const headersArquivada = COLUMN_DEFINITIONS.map(d => d.label);
+        const linhasFiltradas = rowsArquivada.filter(row => {
+          const torreCell = String(row[1] || '').toLowerCase();
+          const unidadeCell = String(row[2] || '').toLowerCase();
+          const matchesTorre = !lookupArquivadaTorre || torreCell.includes(lookupArquivadaTorre.toLowerCase().trim());
+          const matchesUnidade = !lookupArquivadaUnidade || unidadeCell.includes(lookupArquivadaUnidade.toLowerCase().trim());
+          return matchesTorre && matchesUnidade;
+        });
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200">
+              <div className="flex items-start justify-between gap-3 p-5 border-b border-slate-200">
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1.5">
+                    <Archive className="w-3.5 h-3.5" /> Tabela Arquivada
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-900 font-mono truncate">{visualizandoArquivada.file_name || 'Arquivo sem nome'}</h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {visualizandoArquivada.nome_empreendimento || activeProd?.name} · Vigência: {formatDateBr(visualizandoArquivada.valid_from)} a {formatDateBr(visualizandoArquivada.valid_to)} · {rowsArquivada.length} unidades · Arquivada em {visualizandoArquivada.arquivado_em ? new Date(visualizandoArquivada.arquivado_em).toLocaleString('pt-BR') : '-'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setVisualizandoArquivada(null)}
+                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg p-1.5 transition-all cursor-pointer shrink-0"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-2.5">
+                <input
+                  type="text"
+                  value={lookupArquivadaTorre}
+                  onChange={(e) => setLookupArquivadaTorre(e.target.value)}
+                  placeholder="Filtrar por Torre/Bloco..."
+                  className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-sky-600 text-xs"
+                />
+                <input
+                  type="text"
+                  value={lookupArquivadaUnidade}
+                  onChange={(e) => setLookupArquivadaUnidade(e.target.value)}
+                  placeholder="Filtrar por Unidade..."
+                  className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-sky-600 focus:outline-none focus:border-sky-600 text-xs"
+                />
+              </div>
+
+              <div className="overflow-auto flex-1">
+                {rowsArquivada.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-8">Esta tabela arquivada não tem unidades registradas.</p>
+                ) : (
+                  <table className="w-full text-left text-[11px] text-slate-700">
+                    <thead className="bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-600 uppercase sticky top-0 shadow-2xs z-10">
+                      <tr>
+                        {headersArquivada.map((h, i) => (
+                          <th key={i} className="p-2.5 font-bold border-b border-slate-200 whitespace-nowrap bg-slate-100 text-slate-700">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {linhasFiltradas.map((row, rIdx) => (
+                        <tr key={rIdx} className="hover:bg-sky-50/50 transition-colors">
+                          {headersArquivada.map((headerName, cIdx) => {
+                            let val = row[cIdx] !== undefined && row[cIdx] !== null ? row[cIdx] : '';
+                            const hUpper = headerName.toUpperCase();
+                            const isCurrencyCol = hUpper.includes('PREÇO') || hUpper.includes('PRECO') || hUpper.includes('AVALIAÇÃO') || hUpper.includes('AVALIACAO') || hUpper.includes('ITBI');
+                            const isAreaCol = hUpper.includes('ÁREA') || hUpper.includes('AREA') || hUpper.includes('PRIVATIVA') || hUpper.includes('QUINTAL');
+
+                            if (isCurrencyCol) {
+                              if (typeof val === 'number') {
+                                val = formatCurrency(val);
+                              } else if (typeof val === 'string' && val && !val.includes('R$')) {
+                                const num = parseCurrency(val);
+                                if (!isNaN(num) && num > 0) {
+                                  val = formatCurrency(num);
+                                }
+                              }
+                            } else if (isAreaCol) {
+                              val = formatArea(val);
+                            }
+
+                            let cellClass = "p-2.5 font-medium border-b border-slate-100 whitespace-nowrap";
+                            if (hUpper.includes('UNIDADE')) cellClass += " font-bold text-sky-600";
+                            if (hUpper.includes('TORRE')) cellClass += " font-semibold text-slate-800";
+                            if (isCurrencyCol) cellClass += " font-semibold text-slate-900";
+
+                            return (
+                              <td key={cIdx} className={cellClass}>
+                                {String(val)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE TABELA ARQUIVADA */}
+      {excluirArquivadaId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-bold text-slate-900 font-heading">Excluir tabela arquivada?</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Esta ação é permanente e não pode ser desfeita. A tabela arquivada será removida definitivamente.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={excluindoArquivada}
+                onClick={() => setExcluirArquivadaId(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={excluindoArquivada}
+                onClick={handleConfirmDeleteArquivada}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+              >
+                {excluindoArquivada ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Excluindo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Confirmar Exclusão</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE UNIDADES NO SUPABASE */}
       {isDeleteModalOpen && (

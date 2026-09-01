@@ -19,6 +19,12 @@ export interface CommercialCondition {
   // é apenas cadastrado aqui como base para uma futura regra de desconto por
   // pagamento à vista (padrão 0%, ou seja, sem desconto).
   descontoAVistaPct?: number;
+  // % do Ato Premiado — desconto comercial concedido em cima do Ato Efetivo.
+  // Antes esse percentual era fixo em 10% em todos os cálculos; agora vem daqui,
+  // por condição comercial, editável em "Políticas e Regras dos Empreendimentos"
+  // e podendo inclusive ficar zerado (0%). Quando ausente/undefined, cai no
+  // padrão histórico de 10% para preservar simulações antigas.
+  atoPremiadoPct?: number;
 
   // Campos específicos para a condição "Sinal c/ Morar"
   mesesObra?: number;

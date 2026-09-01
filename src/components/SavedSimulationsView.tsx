@@ -144,6 +144,12 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
   const [viewingSim, setViewingSim] = useState<SavedSimulationRecord | null>(null);
   const [confirmDeleteSim, setConfirmDeleteSim] = useState<SavedSimulationRecord | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Exclusão em lote: seleção sempre restrita ao que está filtrado na tela
+  // (`filtradas`) — selecionar/excluir "tudo" nunca alcança simulações fora
+  // do filtro aplicado no momento.
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [confirmarExclusaoLote, setConfirmarExclusaoLote] = useState(false);
+  const [excluindoLote, setExcluindoLote] = useState(false);
   const [filtrosAbertos, setFiltrosAbertos] = useState<boolean>(false);
   // Rascunho: o que a pessoa está escolhendo no painel, ainda não aplicado.
   // Aplicados: o que de fato filtra a lista embaixo — só muda quando ela
@@ -335,6 +341,52 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
     setConfirmDeleteSim(null);
   };
 
+  const alternarSelecao = (id: string) => {
+    setSelecionadas(prev => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id); else novo.add(id);
+      return novo;
+    });
+  };
+
+  const idsFiltradasSelecionadas = filtradas.filter(s => selecionadas.has(s.id)).length;
+  const todasFiltradasSelecionadas = filtradas.length > 0 && idsFiltradasSelecionadas === filtradas.length;
+
+  const alternarSelecionarTodas = () => {
+    setSelecionadas(prev => {
+      if (todasFiltradasSelecionadas) {
+        // Desmarca só as que estão filtradas agora — preserva seleção de fora do filtro, se houver.
+        const novo = new Set(prev);
+        filtradas.forEach(s => novo.delete(s.id));
+        return novo;
+      }
+      const novo = new Set(prev);
+      filtradas.forEach(s => novo.add(s.id));
+      return novo;
+    });
+  };
+
+  const handleConfirmDeleteLote = async () => {
+    const ids = Array.from<string>(selecionadas);
+    if (ids.length === 0) return;
+    setExcluindoLote(true);
+    const res = await imoveisService.excluirSimulacoesEmLote(ids);
+    setExcluindoLote(false);
+    setConfirmarExclusaoLote(false);
+    if (res.success) {
+      const excluidas = res.excluidas ?? 0;
+      setSimulations(prev => prev.filter(s => !selecionadas.has(s.id)));
+      setSelecionadas(new Set());
+      onShowToast(
+        excluidas < ids.length
+          ? `${excluidas} de ${ids.length} simulações excluídas — as demais não puderam ser removidas (sem permissão).`
+          : `${excluidas} simulaç${excluidas === 1 ? 'ão excluída' : 'ões excluídas'} com sucesso.`
+      );
+    } else {
+      onShowToast(`Erro ao excluir simulações: ${res.error || 'erro desconhecido'}`);
+    }
+  };
+
   return (
     <div className="w-full space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -399,26 +451,179 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
           ) : (
             <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
               {equipe.map(m => (
-                <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-50/60">
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{m.nomeCompleto}</p>
-                    <p className="text-[11px] text-slate-400">{m.cargo} — {m.imobiliaria}</p>
+                membroEditando?.id === m.id ? (
+                  <div key={m.id} className="px-4 py-4 bg-white animate-highlight space-y-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">Editar cadastro de {membroEditando.nomeCompleto}</h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Só os campos que o Administrador autorizou você a editar aparecem aqui.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {camposAutorizados.has('nome') && (
+                        <div className="col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">Nome completo</label>
+                          <input type="text" value={emNome} onChange={e => setEmNome(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                        </div>
+                      )}
+                      {camposAutorizados.has('telefone') && (
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">Telefone</label>
+                          <input type="text" value={emTelefone} onChange={e => setEmTelefone(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                        </div>
+                      )}
+                      {camposAutorizados.has('cpf') && (
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">CPF</label>
+                          <input type="text" value={emCpf} onChange={e => setEmCpf(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                        </div>
+                      )}
+                      {camposAutorizados.has('imobiliaria') && (
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">Imobiliária</label>
+                          <input type="text" value={emImobiliaria} onChange={e => setEmImobiliaria(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                        </div>
+                      )}
+                      {camposAutorizados.has('creci') && (
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">CRECI <span className="font-normal text-slate-400">(opcional)</span></label>
+                          <input type="text" value={emCreci} onChange={e => setEmCreci(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
+                        </div>
+                      )}
+                    </div>
+
+                    {(camposAutorizados.has('cargo') || camposAutorizados.has('superior')) && (
+                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                        {camposAutorizados.has('cargo') && (
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-500 mb-1">Cargo</label>
+                            <select value={emCargo} onChange={e => setEmCargo(e.target.value as Cargo)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white">
+                              {CARGOS.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                        )}
+                        {camposAutorizados.has('superior') && (
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-500 mb-1">Superior hierárquico</label>
+                            <select value={emSuperiorId || ''} onChange={e => setEmSuperiorId(e.target.value || null)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white">
+                              <option value={usuarioId}>Eu mesmo</option>
+                              {equipe.filter(m2 => m2.id !== membroEditando.id && !descendentesDoMembroEditando.has(m2.id)).map(m2 => (
+                                <option key={m2.id} value={m2.id}>{m2.nomeCompleto} — {m2.cargo}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {camposAutorizados.has('telas') && (
+                      <div className="pt-3 border-t border-slate-100">
+                        <p className="text-[11px] font-bold text-slate-500 mb-2">Telas liberadas</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {TELAS_APP.map(t => (
+                            <label key={t.key} className="flex items-center gap-2 text-xs text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={emTelas.has(t.key)}
+                                onChange={e => {
+                                  setEmTelas(prev => {
+                                    const novo = new Set(prev);
+                                    if (e.target.checked) novo.add(t.key); else novo.delete(t.key);
+                                    return novo;
+                                  });
+                                }}
+                                className="w-4 h-4 accent-sky-600"
+                              />
+                              {t.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {camposAutorizados.has('empreendimentos') && (
+                      <div className="pt-3 border-t border-slate-100">
+                        <p className="text-[11px] font-bold text-slate-500 mb-1">Empreendimentos liberados</p>
+                        <p className="text-[11px] text-slate-400 mb-2">
+                          "Automaticamente" acompanha ao vivo o que está definido acima dele na hierarquia (ou o padrão do
+                          cargo). "Definir manualmente" trava a lista marcada abaixo.
+                        </p>
+                        <div className="flex flex-col gap-1.5 mb-2">
+                          <label className="flex items-center gap-2 text-xs text-slate-700">
+                            <input type="radio" name="em-emp-modo" checked={emEmpreendimentosModo === 'auto'} onChange={() => setEmEmpreendimentosModo('auto')} className="w-3.5 h-3.5 accent-sky-600" />
+                            Seguir automaticamente (hierarquia/cargo)
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-slate-700">
+                            <input type="radio" name="em-emp-modo" checked={emEmpreendimentosModo === 'manual'} onChange={() => setEmEmpreendimentosModo('manual')} className="w-3.5 h-3.5 accent-sky-600" />
+                            Definir manualmente
+                          </label>
+                        </div>
+                        {emEmpreendimentosModo === 'manual' && (
+                          <div className="grid grid-cols-2 gap-2 bg-slate-50/60 border border-slate-100 rounded-lg p-2.5">
+                            {produtos.map(p => (
+                              <label key={p.id} className="flex items-center gap-2 text-xs text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={emEmpreendimentosSelecionados.has(p.id)}
+                                  onChange={e => {
+                                    setEmEmpreendimentosSelecionados(prev => {
+                                      const novo = new Set(prev);
+                                      if (e.target.checked) novo.add(p.id); else novo.delete(p.id);
+                                      return novo;
+                                    });
+                                  }}
+                                  className="w-4 h-4 accent-sky-600"
+                                />
+                                {p.name}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                      <button type="button" onClick={() => setMembroEditando(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={salvandoMembro}
+                        onClick={salvarEdicaoMembro}
+                        className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{salvandoMembro ? 'Salvando...' : 'Salvar alterações'}</span>
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => abrirEdicaoMembro(m)}
-                    className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-semibold rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer border border-sky-100 shrink-0"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                    <span>Editar cadastro</span>
-                  </button>
-                </div>
+                ) : (
+                  <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-50/60">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{m.nomeCompleto}</p>
+                      <p className="text-[11px] text-slate-400">{m.cargo} — {m.imobiliaria}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicaoMembro(m)}
+                      className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-semibold rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer border border-sky-100 shrink-0"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>Editar cadastro</span>
+                    </button>
+                  </div>
+                )
               ))}
             </div>
           )}
         </div>
       )}
 
+      {/* Enquanto uma edição de cadastro da equipe está aberta acima, o
+          restante da tela (filtros e lista de simulações) fica esmaecido em
+          tom de cinza claro, sem interação — foco visual no cartão de edição. */}
+      <div className={`space-y-6 transition-all duration-300 ${membroEditando ? 'opacity-40 grayscale pointer-events-none select-none' : ''}`}>
       {filtrosAbertos && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -522,12 +727,49 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <>
+            <div className="px-4 sm:px-5 py-2.5 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3 flex-wrap">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={todasFiltradasSelecionadas}
+                  onChange={alternarSelecionarTodas}
+                  className="w-4 h-4 accent-sky-600 cursor-pointer"
+                />
+                <span>
+                  {selecionadas.size > 0
+                    ? `${selecionadas.size} selecionada${selecionadas.size === 1 ? '' : 's'}`
+                    : `Selecionar todas (${filtradas.length})`}
+                </span>
+              </label>
+              {selecionadas.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setSelecionadas(new Set())} className="text-xs font-semibold text-slate-500 hover:text-slate-700 cursor-pointer">
+                    Limpar seleção
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmarExclusaoLote(true)}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-[11px] transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Excluir selecionadas ({selecionadas.size})</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="divide-y divide-slate-100">
             {filtradas.map((sim) => {
               const d = sim.dados || {};
               return (
                 <div key={sim.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/60 transition-all">
                   <div className="flex items-start gap-3 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selecionadas.has(sim.id)}
+                      onChange={() => alternarSelecao(sim.id)}
+                      className="w-4 h-4 accent-sky-600 cursor-pointer mt-1 shrink-0"
+                    />
                     <div className="p-2 rounded-xl bg-sky-50 text-sky-600 shrink-0">
                       <User className="w-4 h-4" />
                     </div>
@@ -596,8 +838,10 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
                 </div>
               );
             })}
-          </div>
+            </div>
+          </>
         )}
+      </div>
       </div>
 
       {/* MODAL: VISUALIZAR DETALHES */}
@@ -663,166 +907,15 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
         </div>
       )}
 
-      {/* MODAL: EDITAR CADASTRO DE UM MEMBRO DA EQUIPE */}
-      {membroEditando && (
-        <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
-          onClick={(e) => { if (e.target === e.currentTarget) setMembroEditando(null); }}
-        >
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">Editar cadastro de {membroEditando.nomeCompleto}</h3>
-            <p className="text-[11px] text-slate-400 -mt-3">
-              Só os campos que o Administrador autorizou você a editar aparecem aqui.
-            </p>
-
-            <div className="grid grid-cols-2 gap-3">
-              {camposAutorizados.has('nome') && (
-                <div className="col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Nome completo</label>
-                  <input type="text" value={emNome} onChange={e => setEmNome(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
-                </div>
-              )}
-              {camposAutorizados.has('telefone') && (
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Telefone</label>
-                  <input type="text" value={emTelefone} onChange={e => setEmTelefone(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
-                </div>
-              )}
-              {camposAutorizados.has('cpf') && (
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">CPF</label>
-                  <input type="text" value={emCpf} onChange={e => setEmCpf(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
-                </div>
-              )}
-              {camposAutorizados.has('imobiliaria') && (
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Imobiliária</label>
-                  <input type="text" value={emImobiliaria} onChange={e => setEmImobiliaria(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
-                </div>
-              )}
-              {camposAutorizados.has('creci') && (
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">CRECI <span className="font-normal text-slate-400">(opcional)</span></label>
-                  <input type="text" value={emCreci} onChange={e => setEmCreci(e.target.value)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs" />
-                </div>
-              )}
-            </div>
-
-            {(camposAutorizados.has('cargo') || camposAutorizados.has('superior')) && (
-              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
-                {camposAutorizados.has('cargo') && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Cargo</label>
-                    <select value={emCargo} onChange={e => setEmCargo(e.target.value as Cargo)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white">
-                      {CARGOS.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                )}
-                {camposAutorizados.has('superior') && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Superior hierárquico</label>
-                    <select value={emSuperiorId || ''} onChange={e => setEmSuperiorId(e.target.value || null)} className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white">
-                      <option value={usuarioId}>Eu mesmo</option>
-                      {equipe.filter(m => m.id !== membroEditando.id && !descendentesDoMembroEditando.has(m.id)).map(m => (
-                        <option key={m.id} value={m.id}>{m.nomeCompleto} — {m.cargo}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {camposAutorizados.has('telas') && (
-              <div className="pt-3 border-t border-slate-100">
-                <p className="text-[11px] font-bold text-slate-500 mb-2">Telas liberadas</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {TELAS_APP.map(t => (
-                    <label key={t.key} className="flex items-center gap-2 text-xs text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={emTelas.has(t.key)}
-                        onChange={e => {
-                          setEmTelas(prev => {
-                            const novo = new Set(prev);
-                            if (e.target.checked) novo.add(t.key); else novo.delete(t.key);
-                            return novo;
-                          });
-                        }}
-                        className="w-4 h-4 accent-sky-600"
-                      />
-                      {t.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {camposAutorizados.has('empreendimentos') && (
-              <div className="pt-3 border-t border-slate-100">
-                <p className="text-[11px] font-bold text-slate-500 mb-1">Empreendimentos liberados</p>
-                <p className="text-[11px] text-slate-400 mb-2">
-                  "Automaticamente" acompanha ao vivo o que está definido acima dele na hierarquia (ou o padrão do
-                  cargo). "Definir manualmente" trava a lista marcada abaixo.
-                </p>
-                <div className="flex flex-col gap-1.5 mb-2">
-                  <label className="flex items-center gap-2 text-xs text-slate-700">
-                    <input type="radio" name="em-emp-modo" checked={emEmpreendimentosModo === 'auto'} onChange={() => setEmEmpreendimentosModo('auto')} className="w-3.5 h-3.5 accent-sky-600" />
-                    Seguir automaticamente (hierarquia/cargo)
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-700">
-                    <input type="radio" name="em-emp-modo" checked={emEmpreendimentosModo === 'manual'} onChange={() => setEmEmpreendimentosModo('manual')} className="w-3.5 h-3.5 accent-sky-600" />
-                    Definir manualmente
-                  </label>
-                </div>
-                {emEmpreendimentosModo === 'manual' && (
-                  <div className="grid grid-cols-2 gap-2 bg-slate-50/60 border border-slate-100 rounded-lg p-2.5">
-                    {produtos.map(p => (
-                      <label key={p.id} className="flex items-center gap-2 text-xs text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={emEmpreendimentosSelecionados.has(p.id)}
-                          onChange={e => {
-                            setEmEmpreendimentosSelecionados(prev => {
-                              const novo = new Set(prev);
-                              if (e.target.checked) novo.add(p.id); else novo.delete(p.id);
-                              return novo;
-                            });
-                          }}
-                          className="w-4 h-4 accent-sky-600"
-                        />
-                        {p.name}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <button type="button" onClick={() => setMembroEditando(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={salvandoMembro}
-                onClick={salvarEdicaoMembro}
-                className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{salvandoMembro ? 'Salvando...' : 'Salvar alterações'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: CONFIRMAR EXCLUSÃO */}
+      {/* MODAL: CONFIRMAR EXCLUSÃO — fixo no topo da tela (não no centro do
+          viewport) para nunca "sumir" quando a lista está rolada bem para
+          baixo: aparece sempre no mesmo lugar, logo abaixo do topo. */}
       {confirmDeleteSim && (
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+          className="fixed inset-x-0 top-0 flex justify-center p-4 z-50 animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) setConfirmDeleteSim(null); }}
         >
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4 mt-4">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 shrink-0">
                 <AlertTriangle className="w-5 h-5" />
@@ -850,6 +943,46 @@ export const SavedSimulationsView: React.FC<SavedSimulationsViewProps> = ({ onEd
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{deletingId === confirmDeleteSim.id ? 'Excluindo...' : 'Excluir'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMAR EXCLUSÃO EM LOTE — mesmo posicionamento no topo. */}
+      {confirmarExclusaoLote && (
+        <div
+          className="fixed inset-x-0 top-0 flex justify-center p-4 z-50 animate-fade-in"
+          onClick={(e) => { if (e.target === e.currentTarget) setConfirmarExclusaoLote(false); }}
+        >
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 space-y-4 mt-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Excluir {selecionadas.size} simulaç{selecionadas.size === 1 ? 'ão' : 'ões'}?</h3>
+                <p className="text-xs text-slate-500">
+                  Serão removidas permanentemente para todos os usuários. Essa ação não pode ser desfeita.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmarExclusaoLote(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteLote}
+                disabled={excluindoLote}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{excluindoLote ? 'Excluindo...' : `Excluir ${selecionadas.size}`}</span>
               </button>
             </div>
           </div>

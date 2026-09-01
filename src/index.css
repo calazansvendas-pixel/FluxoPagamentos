@@ -23,6 +23,22 @@
   animation: fadeIn 0.25s ease-in-out forwards;
 }
 
+/* Destaque leve e breve ao abrir um painel de edição inline (ex.: "Editar
+   cadastro" da equipe em Simulações Salvas) — um flash sutil de fundo que
+   desaparece sozinho, sem exagerar. */
+@keyframes highlightPulse {
+  0% {
+    background-color: rgba(14, 165, 233, 0.09);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-highlight {
+  animation: highlightPulse 1.1s ease-out forwards;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

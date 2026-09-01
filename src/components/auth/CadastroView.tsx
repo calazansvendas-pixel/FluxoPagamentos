@@ -68,12 +68,12 @@ export const CadastroView: React.FC<CadastroViewProps> = ({ onSwitchToLogin }) =
           <div className="w-12 h-12 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center mx-auto mb-4">
             <Mail className="w-6 h-6" />
           </div>
-          <h1 className="text-lg font-bold text-slate-900 mb-2">Confirme seu e-mail</h1>
+          <h1 className="text-lg font-bold text-slate-900 mb-2">Cadastro enviado</h1>
           <p className="text-xs text-slate-500 leading-relaxed mb-1">
-            Enviamos um link de confirmação para <b className="text-slate-700">{email}</b>. Clique nele para validar seu cadastro.
+            Recebemos os dados de <b className="text-slate-700">{email}</b>.
           </p>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Depois de confirmar, faça login normalmente — vamos avisar que seu cadastro está em análise até o Administrador liberar seu acesso.
+            Um administrador vai revisar seu cadastro e liberar seu cargo e permissões em breve. Você já pode fazer login normalmente — vamos avisar que seu cadastro está em análise até lá.
           </p>
           <button type="button" onClick={onSwitchToLogin} className="mt-5 text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
             Voltar para o login
@@ -88,7 +88,7 @@ export const CadastroView: React.FC<CadastroViewProps> = ({ onSwitchToLogin }) =
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-8">
         <div className="text-center mb-6">
           <h1 className="text-lg font-bold text-slate-900">Criar sua conta</h1>
-          <p className="text-xs text-slate-500 mt-1">Preencha seus dados. Depois de confirmar o e-mail, um administrador libera seu acesso.</p>
+          <p className="text-xs text-slate-500 mt-1">Preencha seus dados. Um administrador revisa e libera seu acesso.</p>
         </div>
 
         {erro && (
