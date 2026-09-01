@@ -542,6 +542,26 @@ export const imoveisService = {
     }
   },
 
+  // Exclui várias simulações salvas de uma vez (seleção em lote na tela de
+  // Simulações Salvas). O RLS de `simulacoes` já restringe quais linhas cada
+  // usuário pode de fato apagar (a própria, ou qualquer uma se Administrador)
+  // — por isso devolvemos quantas foram realmente excluídas (via `.select()`
+  // no delete), para avisar quando o lote pedido for maior que o permitido.
+  async excluirSimulacoesEmLote(ids: string[]) {
+    if (ids.length === 0) return { success: true, excluidas: 0 };
+    try {
+      const { data, error } = await supabase.from('simulacoes').delete().in('id', ids).select('id');
+      if (error) {
+        console.error('Erro ao excluir simulações em lote no Supabase:', error);
+        return { success: false, error: error.message };
+      }
+      return { success: true, excluidas: data?.length ?? 0 };
+    } catch (e: any) {
+      console.warn('Erro ao excluir simulações em lote:', e);
+      return { success: false, error: e?.message || 'Erro de conexão' };
+    }
+  },
+
   // Rotina de Inicialização Automática (Verifica e insere dados iniciais se vazio)
   async inicializarBancoSeNecessario() {
     try {
