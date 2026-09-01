@@ -1621,6 +1621,30 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     pushFase(pSerie, '(Pós-Obra)');
   });
 
+  // O ITBI/Registro parcelado é um comprometimento de renda à parte, pago todo
+  // mês durante Obra e Pós-Obra independente das séries do Pró-Soluto — por
+  // isso entra no gráfico como suas próprias barras, e não some quando as
+  // séries do Pró-Soluto estão zeradas (ex.: Pró-Soluto inteiro levado para o
+  // Ato): o risco do ITBI continua existindo mesmo nesse cenário.
+  const pushItbiFase = (qtd: number, parcelaBruta: number, nome: string) => {
+    if (qtd <= 0 || parcelaBruta <= 0) return;
+    const subtotalBruto = qtd * parcelaBruta;
+    const percBase = baseLiquidaComITBI > 0 ? (subtotalBruto / baseLiquidaComITBI) * 100 : 0;
+    const percRenda = income > 0 ? (parcelaBruta / income) * 100 : 0;
+    barData.push({
+      name: nome,
+      percBase: Number(percBase.toFixed(2)),
+      percBaseRaw: percBase,
+      parcelaBruta,
+      percRenda: Number(percRenda.toFixed(2)),
+      percRendaRaw: percRenda,
+      qtdTotal: qtd,
+      labelFormatado: `${percRenda.toFixed(2)}%`
+    });
+  };
+  pushItbiFase(itbiObraTotalMeses, itbiParcelaObraValor, 'ITBI (Obra)');
+  pushItbiFase(itbiPosTotalMeses, itbiParcelaPosValor, 'ITBI (Pós-Obra)');
+
   const CustomBarTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
