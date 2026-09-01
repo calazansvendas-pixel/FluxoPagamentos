@@ -227,6 +227,30 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           return;
         }
 
+        // Algumas planilhas têm um cabeçalho mesclado verticalmente numa coluna específica
+        // (ex.: uma célula mesclada com "ITBI+Registro" numa linha e "1º Imóvel" na linha
+        // logo abaixo/acima) — como o texto de uma célula mesclada só existe na célula-âncora
+        // do Excel, a coluna vizinha "some" nessa linha e o nome não bate com nada. Para as
+        // colunas que ainda não foram reconhecidas na linha de cabeçalho escolhida, tenta de
+        // novo combinando o texto dela com o da linha imediatamente acima e abaixo, coluna a
+        // coluna, antes de considerar a coluna realmente ausente.
+        const linhasVizinhasCabecalho = [headerRowIndex - 1, headerRowIndex, headerRowIndex + 1].filter(r => r >= 0 && r < jsonData.length);
+        const totalColunasVizinhas = linhasVizinhasCabecalho.reduce((max, r) => Math.max(max, (jsonData[r] as any[])?.length || 0), 0);
+        const colunasJaUsadas = new Set(Object.values(colIndices));
+        for (let idx = 0; idx < totalColunasVizinhas; idx++) {
+          if (colunasJaUsadas.has(idx)) continue;
+          const textoCombinado = linhasVizinhasCabecalho.map(r => String((jsonData[r] as any[])?.[idx] ?? '')).join(' ');
+          const normCombinado = normalizeHeader(textoCombinado);
+          if (!normCombinado) continue;
+          for (const def of COLUMN_DEFINITIONS) {
+            if (colIndices[def.key] === undefined && def.match(normCombinado)) {
+              colIndices[def.key] = idx;
+              colunasJaUsadas.add(idx);
+              break;
+            }
+          }
+        }
+
         const colFase = colIndices["Fase"];
         const colTorre = colIndices["TORRE"];
         const colUnidade = colIndices["UNIDADE"];
