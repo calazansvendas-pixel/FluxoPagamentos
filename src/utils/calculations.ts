@@ -1329,9 +1329,15 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
 
     // PÓS-OBRA — teto total de % do Valor Utilizado, dividido pela
     // quantidade de parcelas; abaixo da parcela mínima, o bloco é zerado.
+    // Assim como a Mensal de Obra, é também uma parcela mensal recorrente —
+    // por isso respeita o MESMO teto rígido de % da renda (padrão 40%) da
+    // política de crédito, nunca podendo ultrapassá-lo mesmo que o teto de %
+    // do imóvel permitisse um valor maior.
     if (qtdParcelasPosObra > 0) {
       const posObraTetoTotal = valorUtilizado * ((p.pctPosObraMax ?? 5) / 100);
-      const natural = posObraTetoTotal / qtdParcelasPosObra;
+      const posObraTetoPorImovel = posObraTetoTotal / qtdParcelasPosObra;
+      const posObraCapRenda = renda > 0 ? renda * ((p.pctRiscoRenda ?? 40) / 100) : posObraTetoPorImovel;
+      const natural = Math.min(posObraTetoPorImovel, posObraCapRenda);
       valorPosObraParcela = (p.posObraValorManual !== null && p.posObraValorManual !== undefined)
         ? Math.max(0, p.posObraValorManual)
         : (natural < parcelaMinimaPosObra ? 0 : natural);
