@@ -982,9 +982,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // 3. REGRA DE DEDUÇÃO NO PRÓ-SOLUTO (SINAL RESTANTE):
   // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - 1ª Mensal - 2ª Mensal
-  // (Nota: o descontoAto já foi deduzido diretamente na formação do sinalTotal)
+  // - Comissão Apartada (Nota: o descontoAto já foi deduzido diretamente na formação do
+  // sinalTotal). A Comissão Apartada é paga por fora do contrato — reduz o Pró-Soluto
+  // (e, por tabela, a parcela, reconstruída a partir dele mais abaixo em baseCalculoParcela)
+  // pelo valor cheio da comissão. Em qualquer condição que não seja "Comissão Apartada",
+  // comissaoApartadaValor é sempre 0, então esta linha fica idêntica ao comportamento de antes.
   const proSolutoSinalRestante = hasUnitSelected
-    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d)
+    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d - comissaoApartadaValor)
     : 0;
   const proSoluto = proSolutoSinalRestante;
 
@@ -1420,6 +1424,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       dadosCompletos.mensais_qtd = qtdMensais;
       dadosCompletos.parcela_mensal = parcela;
       dadosCompletos.pro_soluto_total = proSolutoTotalPainel;
+      if (isComissaoApartada) {
+        dadosCompletos.comissao_apartada_valor = comissaoApartadaValor;
+        dadosCompletos.comissao_apartada_parcelas = comissaoApartadaParcelasQtd;
+        dadosCompletos.comissao_apartada_parcela_valor = comissaoApartadaParcelaValor;
+      }
     }
     return dadosCompletos;
   };

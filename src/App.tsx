@@ -429,12 +429,13 @@ export default function App({ perfil, onSair }: AppProps) {
   };
 
   // Ao alternar abas pelo menu lateral, sincroniza a condição ativa. "Sinal
-  // c/ Banco Direto" e "Parcelamento Morar" compartilham a mesma aba
-  // ('details'), então o item do menu manda também um "variant" indicando
-  // qual das duas condições deve ser priorizada ao entrar na tela.
+  // c/ Banco Direto", "Parcelamento Morar" e "Sinal c/ Banco Direto (Comissão
+  // Apartada)" compartilham a mesma aba ('details'), então o item do menu
+  // manda também um "variant" indicando qual das condições deve ser
+  // priorizada ao entrar na tela.
   const handleSidebarTabSelect = (tab: ActiveTab, variant?: ConditionKind) => {
     if (tab === 'details') {
-      const targetKind: ConditionKind = variant === 'parcelamento-morar' ? 'parcelamento-morar' : 'banco-direto';
+      const targetKind: ConditionKind = variant || 'banco-direto';
       // Se não temos produto ativo, inicializa com o primeiro
       if (!activeAnalysisProduct && produtosLiberados.length > 0) {
         const prodWithConds = ensureProductConditions({ ...produtosLiberados[0] });
