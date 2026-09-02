@@ -353,20 +353,16 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const pctAtoPremiadoCond = currentCond?.atoPremiadoPct ?? 0.10;
   const tetoDescontoAtoPremiado = Math.round(50000 * pctAtoPremiadoCond * 100) / 100;
 
-  // Comissão Apartada: % sobre o Preço de Tabela (precoTabelaOriginal — a
-  // referência importada, imune ao desconto à vista, igual às demais % desta
-  // tela). Ausente na política → 4% (mesmo padrão já citado no texto de
-  // política padrão do app). Só existe (>0) quando a condição é a variante
-  // "Comissão Apartada" — em qualquer outra condição fica em R$ 0,00, sem
-  // nenhum efeito no restante da conta.
+  // Comissão Apartada: % sobre o Preço de Tabela (precoTabelaOriginal) MENOS o
+  // Desconto do Ato Premiado — mesma base usada pela planilha de referência.
+  // Ausente na política → 4% (mesmo padrão já citado no texto de política
+  // padrão do app). Só existe (>0) quando a condição é a variante "Comissão
+  // Apartada" — em qualquer outra condição fica em R$ 0,00, sem nenhum efeito
+  // no restante da conta. O valor final (comissaoApartadaValor, que usa o
+  // Desconto já resolvido) é calculado mais abaixo, depois de descontoAto —
+  // ver o comentário lá para a explicação da referência circular envolvida.
   const pctComissaoApartadaCond = currentCond?.comissaoApartadaPct ?? 0.04;
-  const comissaoApartadaValor = (isComissaoApartada && hasUnitSelected)
-    ? Math.round(precoTabelaOriginal * pctComissaoApartadaCond * 100) / 100
-    : 0;
   const comissaoApartadaParcelasQtd = Math.max(1, comissaoParcelasManual ?? (currentCond?.comissaoApartadaParcelas ?? 6));
-  const comissaoApartadaParcelaValor = comissaoApartadaValor > 0
-    ? Math.round((comissaoApartadaValor / comissaoApartadaParcelasQtd) * 100) / 100
-    : 0;
 
   // ITBI depends on whether it's 1º Imóvel (Com Desconto) or 2º Imóvel (Sem Desconto)
   const itbiVal = (hasUnitSelected && matchingRow) 
@@ -795,17 +791,25 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // h) Pró-Soluto Líquido = Risco Máximo Apurado - Taxa Bancária;
       proSolutoLiquido = Math.max(0, riscoMaximoApuradoBruto - taxaBancaria);
 
+      // Comissão Apartada = (Preço de Tabela - Desconto do Ato Premiado) * %comissão — recalculada
+      // A CADA ITERAÇÃO com o atoPremiadoAtual corrente, porque a comissão depende do Desconto,
+      // que depende do Ato, que (nesta condição) depende da própria comissão: é uma referência
+      // circular de verdade, resolvida convergindo junto com o resto do laço (mesmo padrão já
+      // usado para o Ato Premiado). Em qualquer condição que não seja "Comissão Apartada", fica
+      // sempre 0, sem nenhum efeito no restante da conta.
+      const comissaoIteracaoAtual = isComissaoApartada
+        ? Math.max(0, (precoTabelaOriginal - atoPremiadoAtual) * pctComissaoApartadaCond)
+        : 0;
+
       // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Pró-Soluto Líquido - Comissão
       // Apartada — é o valor JÁ LÍQUIDO da taxa (e, na variante Comissão Apartada, também já
       // líquido da comissão) que sugere o Ato; não o bruto (Risco Máximo Apurado). A comissão
       // NUNCA entra nos passos acima (Risco Imóvel 25%, Risco Renda 35%, Taxa Bancária) — eles
-      // continuam sobre o valor cheio; só o Ato final é que sai líquido dela. Em qualquer
-      // condição que não seja "Comissão Apartada", comissaoApartadaValor é sempre 0, então esta
-      // linha fica idêntica ao comportamento de antes.
-      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido - comissaoApartadaValor);
+      // continuam sobre o valor cheio; só o Ato final é que sai líquido dela.
+      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido - comissaoIteracaoAtual);
 
       // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido - Comissão
-      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido - comissaoApartadaValor);
+      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido - comissaoIteracaoAtual);
 
       // j) novoAtoPremiado = pct do Pagamento Ato (Sinal Efetivo) caso o Ato Bruto seja >= 5000
       // pct vem da política do empreendimento (currentCond.atoPremiadoPct); ausente → 10%
@@ -912,6 +916,18 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // CASCATA DE AMORTIZAÇÃO DO FINANCIAMENTO (NOVA REGRA)
   const descontoAto = isAtoPremiadoEnabled ? novoAtoPremiado : 0;
+
+  // Comissão Apartada — valor FINAL, agora que o Desconto do Ato Premiado já está
+  // resolvido (mesma fórmula usada dentro do laço acima, mas com o desconto final
+  // em vez do valor ainda convergindo iteração a iteração). É este valor — não o
+  // intermediário do laço — que alimenta o card "Comissão a Pagar", a gravação da
+  // simulação e o desconto no Pró-Soluto Total mais abaixo.
+  const comissaoApartadaValor = isComissaoApartada
+    ? Math.max(0, Math.round((precoTabelaOriginal - descontoAto) * pctComissaoApartadaCond * 100) / 100)
+    : 0;
+  const comissaoApartadaParcelaValor = comissaoApartadaValor > 0
+    ? Math.round((comissaoApartadaValor / comissaoApartadaParcelasQtd) * 100) / 100
+    : 0;
 
   // 1. Cálculo do Teto dos Recursos Bancários/Negociados:
   // O montante máximo que pode ser negociado via banco/governo não pode ultrapassar o saldo restante do imóvel.
