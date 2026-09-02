@@ -1212,7 +1212,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const pctRestanteRenda = Math.max(0, 100 - pctRiscoParcelaRenda);
 
   // Gráfico 2: "Risco Pró-Soluto Total" (Fatia 1: Pró-Soluto Total c/ ITBI sobre a Base Líquida c/ ITBI | Fatia 2: Demais Recursos)
-  const valorRiscoProSoluto = proSolutoTotalPainel;
+  // Este indicador mostra o quanto do TETO de risco da política (25% imóvel / 35%
+  // renda, o que for menor) está sendo utilizado — por isso usa riscoMaximoApuradoBruto
+  // (o valor BRUTO, antes da Taxa Bancária e da Comissão Apartada), não
+  // proSolutoTotalPainel (que já é o Pró-Soluto de verdade, líquido dessas deduções,
+  // usado no Bloco 3/parcela). Usar o valor líquido aqui fazia o percentual ficar
+  // artificialmente abaixo do teto configurado (ex.: 24,9% em vez de 25,0%), como se a
+  // política não estivesse sendo usada no limite quando na verdade estava.
+  const valorRiscoProSoluto = riscoMaximoApuradoBruto;
   const pctRiscoProSoluto = baseVendaLiquidaComITBI > 0
     ? Math.min(100, Math.max(0, (valorRiscoProSoluto / baseVendaLiquidaComITBI) * 100))
     : 0;
