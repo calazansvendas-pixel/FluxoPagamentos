@@ -1969,9 +1969,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           </button>
         </div>
 
-        {/* LINHA 1: TORRE, UNIDADE, FASE, TIPOLOGIA */}
-        <div className="grid grid-cols-12 gap-2 text-xs w-full">
-          <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+        {/* LINHA 1: TORRE, UNIDADE, FASE, TIPOLOGIA — abaixo de sm (640px) vira grid de
+            2 colunas (pares empilhados), igual ao mesmo ajuste feito em DetailsView.tsx. */}
+        <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 text-xs w-full">
+          <div className="col-span-1 sm:col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
             <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
               TORRE *
             </label>
@@ -1987,7 +1988,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             </select>
           </div>
 
-          <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
             <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
               UNIDADE *
             </label>
@@ -2004,7 +2005,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             </select>
           </div>
 
-          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Fase</span>
             <input
               id="campo-fase-morar"
@@ -2015,7 +2016,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             />
           </div>
 
-          <div className="col-span-6 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-6 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Tipologia</span>
             <input
               type="text"
@@ -2027,9 +2028,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           </div>
         </div>
 
-        {/* LINHA 2: ÁREA PRIVATIVA, QUINTAL, PREÇO DE TABELA, AVALIAÇÃO BANCÁRIA */}
-        <div className="grid grid-cols-12 gap-2 text-xs w-full">
-          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+        {/* LINHA 2: ÁREA PRIVATIVA, QUINTAL, PREÇO DE TABELA, AVALIAÇÃO BANCÁRIA — mesma adaptação. */}
+        <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 text-xs w-full">
+          <div className="col-span-1 sm:col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Área Privativa</span>
             <input
               type="text"
@@ -2039,7 +2040,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             />
           </div>
 
-          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Quintal</span>
             <input
               type="text"
@@ -2049,7 +2050,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             />
           </div>
 
-          <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Preço de Tabela</span>
             <input
               type="text"
@@ -2059,7 +2060,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             />
           </div>
 
-          <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Avaliação Bancária</span>
             <input
               type="text"
@@ -2535,8 +2536,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
                   return (
                     <div key={originalIndex} className="bg-slate-50/70 hover:bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 space-y-1.5 transition-colors">
-                      <div className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-4 flex items-center gap-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                        <div className="col-span-1 sm:col-span-4 flex items-center gap-1">
                           <span className="text-[10px] font-bold text-slate-400">S{displayIndex}:</span>
                           <input
                             type="number"
@@ -2550,7 +2551,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                           <span className="font-bold text-slate-600 text-xs">X de</span>
                         </div>
 
-                        <div className="col-span-5">
+                        <div className="col-span-1 sm:col-span-5">
                           <div
                             className="w-full px-2 py-1 rounded border border-slate-200 bg-slate-100 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
                             title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
@@ -2559,7 +2560,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                           </div>
                         </div>
 
-                        <div className="col-span-3 text-right">
+                        <div className="col-span-1 sm:col-span-3 text-right">
                           <span className="text-[9px] text-slate-400 block font-medium">Subtotal</span>
                           <strong className="text-[11px] text-slate-800 font-bold">
                             {formatCurrency(subtotalSerie)}
@@ -2664,8 +2665,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
                   return (
                     <div key={originalIndex} className="bg-slate-50/70 hover:bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 space-y-1.5 transition-colors">
-                      <div className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-4 flex items-center gap-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                        <div className="col-span-1 sm:col-span-4 flex items-center gap-1">
                           <span className="text-[10px] font-bold text-slate-400">S{displayIndex}:</span>
                           <input
                             type="number"
@@ -2679,7 +2680,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                           <span className="font-bold text-slate-600 text-xs">X de</span>
                         </div>
 
-                        <div className="col-span-5">
+                        <div className="col-span-1 sm:col-span-5">
                           <div
                             className="w-full px-2 py-1 rounded border border-slate-200 bg-slate-100 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
                             title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
@@ -2688,7 +2689,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                           </div>
                         </div>
 
-                        <div className="col-span-3 text-right">
+                        <div className="col-span-1 sm:col-span-3 text-right">
                           <span className="text-[9px] text-slate-400 block font-medium">Subtotal</span>
                           <strong className="text-[11px] text-slate-800 font-bold">
                             {formatCurrency(subtotalSerie)}
