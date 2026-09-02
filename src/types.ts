@@ -26,6 +26,20 @@ export interface CommercialCondition {
   // padrão histórico de 10% para preservar simulações antigas.
   atoPremiadoPct?: number;
 
+  // Comissão Apartada — exclusiva da condição "Sinal c/ Banco Direto (Comissão
+  // Apartada)" (ver getConditionKind em utils/calculations.ts). A comissão é
+  // separada do fluxo de Ato/Pró-Soluto: os limites de risco (25% imóvel, 35%
+  // renda) continuam calculados sobre o valor CHEIO, sem desconto de comissão
+  // — só o Ato/Sinal final é que sai líquido dela (Distribuído − Comissão −
+  // Pró-Soluto Líquido). A comissão em si vira um parcelamento simples e
+  // independente (sem taxa bancária, sem limite de risco).
+  // % sobre o Preço de Tabela (decimal 0 a 1). Ausente/undefined → 4% (padrão
+  // já citado no texto de política padrão do app: "Comissão padrão: 4%").
+  comissaoApartadaPct?: number;
+  // Quantidade padrão de parcelas da comissão — editável na ficha por
+  // simulação, mas com este valor como sugestão inicial. Ausente → 6x.
+  comissaoApartadaParcelas?: number;
+
   // Campos específicos para a condição "Sinal c/ Morar"
   mesesObra?: number;
   mesesPos?: number;

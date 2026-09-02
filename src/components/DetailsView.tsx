@@ -113,6 +113,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [isEditingParc3, setIsEditingParc3] = useState<boolean>(false);
 
   const [qtdMensais, setQtdMensais] = useState<number>(condNumParcelas);
+  // Quantidade de parcelas da Comissão Apartada — sugestão vem da política
+  // (comissaoApartadaParcelas), mas é editável por simulação nesta ficha.
+  const [comissaoParcelasManual, setComissaoParcelasManual] = useState<number | null>(null);
 
   // Condição comercial "Parcelamento Morar": mesmo layout desta tela (Sinal c/
   // Banco Direto), mas com o Bloco 3 substituído por um motor de cálculo próprio
@@ -121,6 +124,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // lineares de obra, intermediárias semestrais, parcela final (chaves) e
   // parcelamento pós-obra, todos calculados a partir da política de crédito.
   const isParcelamentoMorar = getConditionKind(currentCond?.name) === 'parcelamento-morar';
+
+  // Condição comercial "Sinal c/ Banco Direto (Comissão Apartada)": mesma tela e
+  // mesmíssimo motor de cálculo do Banco Direto comum — a única diferença é que a
+  // comissão da corretora sai do fluxo de Ato/Pró-Soluto e vira um parcelamento
+  // próprio e independente (ver comissaoApartadaValor mais abaixo e o ponto de
+  // desconto dentro do laço iterativo do Ato).
+  const isComissaoApartada = getConditionKind(currentCond?.name) === 'banco-direto-comissao-apartada';
 
   // O que este cargo pode ver no PDF exportado — definido pelo Administrador
   // em "Configurar Exportação de PDF". Busca de novo sempre que o cargo ou a
@@ -231,6 +241,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
+    setComissaoParcelasManual(null);
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
     }
@@ -342,6 +353,21 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const pctAtoPremiadoCond = currentCond?.atoPremiadoPct ?? 0.10;
   const tetoDescontoAtoPremiado = Math.round(50000 * pctAtoPremiadoCond * 100) / 100;
 
+  // Comissão Apartada: % sobre o Preço de Tabela (precoTabelaOriginal — a
+  // referência importada, imune ao desconto à vista, igual às demais % desta
+  // tela). Ausente na política → 4% (mesmo padrão já citado no texto de
+  // política padrão do app). Só existe (>0) quando a condição é a variante
+  // "Comissão Apartada" — em qualquer outra condição fica em R$ 0,00, sem
+  // nenhum efeito no restante da conta.
+  const pctComissaoApartadaCond = currentCond?.comissaoApartadaPct ?? 0.04;
+  const comissaoApartadaValor = (isComissaoApartada && hasUnitSelected)
+    ? Math.round(precoTabelaOriginal * pctComissaoApartadaCond * 100) / 100
+    : 0;
+  const comissaoApartadaParcelasQtd = Math.max(1, comissaoParcelasManual ?? (currentCond?.comissaoApartadaParcelas ?? 6));
+  const comissaoApartadaParcelaValor = comissaoApartadaValor > 0
+    ? Math.round((comissaoApartadaValor / comissaoApartadaParcelasQtd) * 100) / 100
+    : 0;
+
   // ITBI depends on whether it's 1º Imóvel (Com Desconto) or 2º Imóvel (Sem Desconto)
   const itbiVal = (hasUnitSelected && matchingRow) 
     ? (isFirstHomeLocal ? parseCurrency(matchingRow[8]) : parseCurrency(matchingRow[9]))
@@ -416,6 +442,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
+    setComissaoParcelasManual(null);
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
     }
@@ -768,12 +795,17 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // h) Pró-Soluto Líquido = Risco Máximo Apurado - Taxa Bancária;
       proSolutoLiquido = Math.max(0, riscoMaximoApuradoBruto - taxaBancaria);
 
-      // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Pró-Soluto Líquido — é o
-      // valor JÁ LÍQUIDO da taxa que sugere o Ato, não o bruto (Risco Máximo Apurado).
-      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido);
+      // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Pró-Soluto Líquido - Comissão
+      // Apartada — é o valor JÁ LÍQUIDO da taxa (e, na variante Comissão Apartada, também já
+      // líquido da comissão) que sugere o Ato; não o bruto (Risco Máximo Apurado). A comissão
+      // NUNCA entra nos passos acima (Risco Imóvel 25%, Risco Renda 35%, Taxa Bancária) — eles
+      // continuam sobre o valor cheio; só o Ato final é que sai líquido dela. Em qualquer
+      // condição que não seja "Comissão Apartada", comissaoApartadaValor é sempre 0, então esta
+      // linha fica idêntica ao comportamento de antes.
+      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido - comissaoApartadaValor);
 
-      // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido
-      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido);
+      // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido - Comissão
+      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido - comissaoApartadaValor);
 
       // j) novoAtoPremiado = pct do Pagamento Ato (Sinal Efetivo) caso o Ato Bruto seja >= 5000
       // pct vem da política do empreendimento (currentCond.atoPremiadoPct); ausente → 10%
@@ -1132,6 +1164,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
+    setComissaoParcelasManual(null);
     if (onShowToast) {
       onShowToast('Fluxo de pagamento redefinido para as condições padrão.');
     }
@@ -2474,6 +2507,75 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
             </div>
           ))}
+
+          {/* COMISSÃO A PAGAR — só na condição "Sinal c/ Banco Direto (Comissão Apartada)".
+              Parcelamento simples e independente: não passa por taxa bancária nem por
+              nenhum limite de risco, e não altera o Ato nem o Pró-Soluto (já saem líquidos
+              dela, ver comissaoApartadaValor). */}
+          {isComissaoApartada && (
+            <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-fuchsia-50 text-fuchsia-600">
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Comissão a Pagar
+                  </h3>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5 text-xs">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Comissão Total</span>
+                  <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
+                    {formatCurrency(comissaoApartadaValor)}
+                  </strong>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Qtd. Parcelas
+                  </label>
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="number"
+                      value={comissaoApartadaParcelasQtd > 0 ? comissaoApartadaParcelasQtd : ''}
+                      min="1"
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        if (rawVal === '') {
+                          setComissaoParcelasManual(1);
+                          return;
+                        }
+                        const val = parseInt(rawVal, 10);
+                        if (isNaN(val)) return;
+                        setComissaoParcelasManual(Math.max(1, val));
+                      }}
+                      onBlur={() => {
+                        if (!comissaoApartadaParcelasQtd || comissaoApartadaParcelasQtd < 1) {
+                          setComissaoParcelasManual(1);
+                        }
+                      }}
+                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-fuchsia-700 text-center focus:outline-none focus:border-fuchsia-600 text-xs"
+                    />
+                    <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Valor da Parcela</span>
+                  <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
+                    {formatCurrency(comissaoApartadaParcelaValor)}
+                  </strong>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-500 leading-relaxed px-1">
+                Parcelamento simples, sem taxa bancária nem limites de risco — só divide a comissão pelo número de parcelas. Não afeta o Ato, o Pró-Soluto nem os indicadores de comprometimento de renda exibidos nesta ficha.
+              </p>
+            </div>
+          )}
 
         </div>
 

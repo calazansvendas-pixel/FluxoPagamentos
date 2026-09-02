@@ -79,17 +79,25 @@ export function calculatePricePMT(principal: number, ratePerMonthPct: number, nu
  * seu nome contém "morar", mas usa a tela/motor de "Sinal c/ Banco Direto"
  * com o Bloco 3 substituído, não a tela da Ficha Morar.
  */
-export type ConditionKind = 'sinal-morar' | 'parcelamento-morar' | 'banco-direto';
+export type ConditionKind = 'sinal-morar' | 'parcelamento-morar' | 'banco-direto' | 'banco-direto-comissao-apartada';
 
 export function getConditionKind(condName: string | undefined | null): ConditionKind {
   const lower = (condName || '').toLowerCase();
   if (lower.includes('parcelamento') && lower.includes('morar')) return 'parcelamento-morar';
   if (lower.includes('morar') || lower.includes('incc') || lower.includes('obra') || lower.includes('ipca')) return 'sinal-morar';
+  // Variante do Sinal c/ Banco Direto com a comissão separada do fluxo de
+  // Ato/Pró-Soluto (ver comissaoApartadaPct em types.ts) — reconhecida pelo
+  // nome conter "comiss" (ex.: "Sinal c/ Banco Direto (Comissão Apartada)").
+  if (lower.includes('comiss')) return 'banco-direto-comissao-apartada';
   return 'banco-direto';
 }
 
 export function isParcelamentoMorarCondition(condName: string | undefined | null): boolean {
   return getConditionKind(condName) === 'parcelamento-morar';
+}
+
+export function isComissaoApartadaCondition(condName: string | undefined | null): boolean {
+  return getConditionKind(condName) === 'banco-direto-comissao-apartada';
 }
 
 /**
