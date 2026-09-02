@@ -1,4 +1,5 @@
 import React, { useState, Suspense, lazy } from 'react';
+import { X, ListChecks } from 'lucide-react';
 import { ActiveTab, CommercialCondition, PerfilUsuario, Product, SelectedUnit, SimulationData, TableInfo } from './types';
 import type { SavedSimulationRecord } from './components/SavedSimulationsView';
 import { INITIAL_PRODUCTS } from './data/initialProducts';
@@ -306,6 +307,15 @@ export default function App({ perfil, onSair }: AppProps) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isNewProductModalOpen, setIsNewProductModalOpen] = useState<boolean>(false);
 
+  // Seletor de condição comercial exibido quando o empreendimento ativo tem
+  // mais de uma condição no mesmo grupo do menu lateral (ver
+  // handleSidebarTabSelect).
+  const [conditionPicker, setConditionPicker] = useState<{
+    tab: ActiveTab;
+    product: Product;
+    candidates: CommercialCondition[];
+  } | null>(null);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -433,40 +443,46 @@ export default function App({ perfil, onSair }: AppProps) {
   // Apartada)" compartilham a mesma aba ('details'), então o item do menu
   // manda também um "variant" indicando qual das condições deve ser
   // priorizada ao entrar na tela.
+  //
+  // Um empreendimento pode ter mais de uma condição comercial dentro do
+  // mesmo grupo (ex.: duas variantes de "Sinal c/ Banco Direto" com nomes
+  // diferentes) — nesse caso a aba não escolhe mais a primeira
+  // automaticamente: abre o seletor (conditionPicker) para o usuário
+  // escolher qual delas quer abrir.
   const handleSidebarTabSelect = (tab: ActiveTab, variant?: ConditionKind) => {
-    if (tab === 'details') {
-      const targetKind: ConditionKind = variant || 'banco-direto';
-      // Se não temos produto ativo, inicializa com o primeiro
-      if (!activeAnalysisProduct && produtosLiberados.length > 0) {
-        const prodWithConds = ensureProductConditions({ ...produtosLiberados[0] });
-        setActiveAnalysisProduct(prodWithConds);
-        const targetCond = prodWithConds.conditions.find(c => getConditionKind(c.name) === targetKind)
-          || prodWithConds.conditions.find(c => !isMorarCondition(c.name))
-          || prodWithConds.conditions[0];
-        setActiveAnalysisCondition(targetCond);
-      } else if (activeAnalysisProduct) {
-        const prodWithConds = ensureProductConditions({ ...activeAnalysisProduct });
+    const targetKind: ConditionKind = tab === 'details' ? (variant || 'banco-direto') : 'sinal-morar';
+
+    let prodWithConds: Product | null = null;
+    if (!activeAnalysisProduct && produtosLiberados.length > 0) {
+      prodWithConds = ensureProductConditions({ ...produtosLiberados[0] });
+      setActiveAnalysisProduct(prodWithConds);
+    } else if (activeAnalysisProduct) {
+      prodWithConds = ensureProductConditions({ ...activeAnalysisProduct });
+    }
+
+    if (prodWithConds) {
+      const candidates = tab === 'details'
+        ? prodWithConds.conditions.filter(c => getConditionKind(c.name) === targetKind)
+        : prodWithConds.conditions.filter(c => isMorarCondition(c.name));
+
+      if (candidates.length > 1) {
+        setConditionPicker({ tab, product: prodWithConds, candidates });
+        return;
+      }
+
+      if (tab === 'details') {
         const currentKind = activeAnalysisCondition ? getConditionKind(activeAnalysisCondition.name) : undefined;
-        if (currentKind !== targetKind) {
-          const targetCond = prodWithConds.conditions.find(c => getConditionKind(c.name) === targetKind)
-            || (currentKind === 'sinal-morar' ? prodWithConds.conditions.find(c => !isMorarCondition(c.name)) : undefined);
+        if (!activeAnalysisCondition || currentKind !== targetKind) {
+          const targetCond = candidates[0]
+            || prodWithConds.conditions.find(c => !isMorarCondition(c.name))
+            || prodWithConds.conditions[0];
           if (targetCond) {
             setActiveAnalysisCondition(targetCond);
           }
         }
-      }
-    } else if (tab === 'ficha-morar') {
-      // Se não temos produto ativo, inicializa com o primeiro
-      if (!activeAnalysisProduct && produtosLiberados.length > 0) {
-        const prodWithConds = ensureProductConditions({ ...produtosLiberados[0] });
-        setActiveAnalysisProduct(prodWithConds);
-        const morarCond = prodWithConds.conditions.find(c => isMorarCondition(c.name)) || prodWithConds.conditions[0];
-        setActiveAnalysisCondition(morarCond);
-      } else if (activeAnalysisProduct) {
-        const prodWithConds = ensureProductConditions({ ...activeAnalysisProduct });
-        // Se a condição atual for Banco Direto, ajusta para uma condição Morar se disponível
-        if (activeAnalysisCondition && !isMorarCondition(activeAnalysisCondition.name)) {
-          const morarCond = prodWithConds.conditions.find(c => isMorarCondition(c.name));
+      } else {
+        if (!activeAnalysisCondition || !isMorarCondition(activeAnalysisCondition.name)) {
+          const morarCond = candidates[0] || prodWithConds.conditions[0];
           if (morarCond) {
             setActiveAnalysisCondition(morarCond);
           }
@@ -476,6 +492,17 @@ export default function App({ perfil, onSair }: AppProps) {
 
     setActiveTab(tab);
     window.scrollTo(0, 0);
+  };
+
+  // Confirma a escolha feita no seletor de condições comerciais (aberto
+  // quando o empreendimento ativo tem mais de uma condição no mesmo grupo).
+  const handleConfirmConditionPicker = (cond: CommercialCondition) => {
+    if (!conditionPicker) return;
+    setActiveAnalysisProduct(conditionPicker.product);
+    setActiveAnalysisCondition(cond);
+    setActiveTab(conditionPicker.tab);
+    window.scrollTo(0, 0);
+    setConditionPicker(null);
   };
 
   const handleUnitSelectChange = (productId: string, unit: SelectedUnit) => {
@@ -762,6 +789,53 @@ export default function App({ perfil, onSair }: AppProps) {
             onSaveNewProduct={handleSaveNewProduct}
           />
         </Suspense>
+      )}
+
+      {/* MODAL: SELETOR DE CONDIÇÃO COMERCIAL (mais de uma condição no mesmo grupo do menu) */}
+      {conditionPicker && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConditionPicker(null);
+          }}
+        >
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 relative">
+            <button
+              type="button"
+              onClick={() => setConditionPicker(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-sky-50 text-sky-600 shrink-0">
+                <ListChecks className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Selecionar Condição Comercial
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {conditionPicker.product.name} tem mais de uma condição neste grupo. Escolha qual abrir:
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              {conditionPicker.candidates.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => handleConfirmConditionPicker(c)}
+                  className="w-full text-left px-4 py-3 bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 rounded-xl text-xs font-semibold text-slate-700 hover:text-sky-700 transition-all cursor-pointer"
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* TOAST NOTIFICATION */}
