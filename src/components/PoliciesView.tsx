@@ -108,7 +108,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // Taxa Bancária (%) — exclusiva do Sinal c/ Banco Direto: reduz o Risco
   // Máximo Apurado que sugere o Ato (Imóvel) e o "Pró-Soluto Total c/ ITBI"
   // exibido em tela; a parcela (Tabela Price) usa o valor antes do desconto.
-  const [taxaAssinaturaContratoStr, setTaxaAssinaturaContratoStr] = useState<string>('0,00');
+  const [taxaAssinaturaContratoStr, setTaxaAssinaturaContratoStr] = useState<string>('0,0000');
   // % do Ato Premiado — desconto comercial aplicado em cima do Ato Efetivo. Antes
   // era fixo em 10% em todos os cálculos; agora vem por condição comercial e
   // pode ficar zerado (0%). Padrão histórico continua sendo 10%.
@@ -372,7 +372,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setTaxaJuros1Str(formatDecimalBR(t1, 2, 2));
     setMesesTabela2Str(String(m2));
     setTaxaJuros2Str(formatDecimalBR(t2, 2, 2));
-    setTaxaAssinaturaContratoStr(formatDecimalBR(ta, 2, 2));
+    setTaxaAssinaturaContratoStr(formatDecimalBR(ta, 4, 4));
     setAtoPremiadoPctStr(formatDecimalBR(apPct, 2, 2));
     setComissaoApartadaPctStr(formatDecimalBR(caPct, 2, 2));
     setComissaoApartadaParcelasStr(String(caParcelas));
@@ -745,7 +745,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setTaxaJuros1Str(formatDecimalBR(parsedTaxa1, 2, 2));
     setMesesTabela2Str(String(parsedMeses2));
     setTaxaJuros2Str(formatDecimalBR(parsedTaxa2, 2, 2));
-    setTaxaAssinaturaContratoStr(formatDecimalBR(parsedTaxaAssinaturaContrato, 2, 2));
+    setTaxaAssinaturaContratoStr(formatDecimalBR(parsedTaxaAssinaturaContrato, 4, 4));
     setAtoPremiadoPctStr(formatDecimalBR(parsedAtoPremiadoPctInput, 2, 2));
     setComissaoApartadaPctStr(formatDecimalBR(parsedComissaoApartadaPctInput, 2, 2));
     setComissaoApartadaParcelasStr(String(parsedComissaoApartadaParcelas));
@@ -2093,7 +2093,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         onChange={(e) => setTaxaAssinaturaContratoStr(e.target.value)}
                         onBlur={() => {
                           const parsed = parseDecimal(taxaAssinaturaContratoStr, 0);
-                          setTaxaAssinaturaContratoStr(formatDecimalBR(parsed, 2, 4));
+                          setTaxaAssinaturaContratoStr(formatDecimalBR(parsed, 4, 4));
                         }}
                         className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-amber-700 text-center focus:outline-none focus:border-sky-600 text-xs"
                       />
