@@ -69,6 +69,10 @@ export default function App({ perfil, onSair }: AppProps) {
     return 'simulator';
   });
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  // Gaveta do menu lateral em telas pequenas (abaixo de md) — independente de
+  // isSidebarCollapsed, que só controla a largura (ícone x completo) do menu
+  // estático em telas médias/grandes. Ver Sidebar.tsx.
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [currentDate, setCurrentDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -638,7 +642,13 @@ export default function App({ perfil, onSair }: AppProps) {
         currentDate={currentDate}
         onDateChange={setCurrentDate}
         onResetAll={handleResetAll}
-        onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
+        onToggleSidebar={() => {
+          // Um botão só: em md+ alterna largura (ícone x completo) do menu
+          // estático; abaixo de md abre/fecha a gaveta. Os dois estados são
+          // inofensivos fora do seu próprio breakpoint (ver Sidebar.tsx).
+          setIsSidebarCollapsed(prev => !prev);
+          setIsMobileSidebarOpen(prev => !prev);
+        }}
         onNavigateHome={() => setActiveTab('simulator')}
         usuarioNome={perfil.nomeCompleto}
         usuarioCargo={perfil.cargo}
@@ -654,6 +664,8 @@ export default function App({ perfil, onSair }: AppProps) {
           isCollapsed={isSidebarCollapsed}
           activeConditionKind={activeAnalysisCondition ? getConditionKind(activeAnalysisCondition.name) : undefined}
           telasLiberadas={telasLiberadas}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
         />
 
         {/* MAIN VIEW AREA */}

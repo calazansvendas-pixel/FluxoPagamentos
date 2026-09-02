@@ -2240,7 +2240,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       <span className="text-[9.5px] text-slate-400 font-semibold">A partir de {pmMensalObraDataInicio}</span>
                     )}
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-1.5">
                     <PmCampoEditavel
                       label="Qtd. Meses"
                       tipo="inteiro"
@@ -2391,7 +2391,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       Não utilizado — prazo de obra reduzido do sugerido.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-1.5">
                       <PmCampoEditavel
                         label="Qtd. Meses"
                         tipo="inteiro"
@@ -2458,7 +2458,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 <span>Juros: <strong className="text-sky-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5 text-xs">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2.5 text-xs">
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
                     Qtd. Mensais
@@ -2557,7 +2557,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5 text-xs">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2.5 text-xs">
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
                   <span className="block text-[10px] font-bold text-slate-400 uppercase">Comissão Total</span>
                   <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
