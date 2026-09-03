@@ -1318,6 +1318,7 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
 
   let atoAposAntecipadas = sinalMinimoCalculado;
   let descontoAtoPremiado = 0;
+  let valorUtilizado = 0;
   let valorMensalObra = 0;
   let valorMensalObraTotal = 0;
   let valoresSemestrais: number[] = [];
@@ -1335,7 +1336,7 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     descontoAtoPremiado = (p.isAtoPremiadoEnabled && pctAtoPremiadoPM > 0)
       ? calcularDescontoAtoPremiado(atoAposAntecipadas, pctAtoPremiadoPM)
       : 0;
-    const valorUtilizado = Math.max(0, price - descontoAtoPremiado - recursos);
+    valorUtilizado = Math.max(0, price - descontoAtoPremiado - recursos);
 
     // MENSAL DE OBRA — teto rígido de % da renda (padrão 40%), usado no valor
     // cheio por padrão (nunca zerada pela parcela mínima — apenas avisada).
@@ -1405,15 +1406,49 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     antecipadasRestante = mensaisAntecipadas - atoAbsorvidoAntecipadas;
   }
 
+  const atoMaximoPossivel = Math.max(0, price - recursos - descontoAtoPremiado);
+  const atoEfetivo = Math.min(atoAposAntecipadas, atoMaximoPossivel);
+
+  // RATEIO PROPORCIONAL entre Mensal de Obra e Pós-Obra: até aqui, os dois vinham
+  // sempre do próprio teto individual (mensalObraCapRenda / "natural" do pós-obra,
+  // acima) — cada um tratado como se seu teto cheio estivesse sempre garantido.
+  // Nada impedia a SOMA dos dois tetos de passar do que realmente sobra do imóvel
+  // depois do Ato (já no piso mínimo, sem poder cair mais) + Semestrais + Chaves —
+  // e quando isso acontecia, o excesso simplesmente se empilhava em cima do preço
+  // (Sinal Total > Preço do imóvel, o que não existe na prática: o cliente nunca
+  // paga mais do que o imóvel custa). A correção: quando os dois tetos juntos não
+  // cabem no que sobra, os dois encolhem juntos, na MESMA proporção entre si —
+  // nunca um único bloco absorve o corte sozinho. Blocos com valor manual (o
+  // corretor digitou) ficam de fora do rateio — são tratados como fixos, e o
+  // corte (se precisar) recai só sobre o(s) bloco(s) automático(s).
+  const mensalObraIsManual = p.mensalObraValorManual !== null && p.mensalObraValorManual !== undefined;
+  const posObraIsManual = p.posObraValorManual !== null && p.posObraValorManual !== undefined;
+  const somaMaximosFlexiveis =
+    (mensalObraIsManual ? 0 : valorMensalObraTotal) + (posObraIsManual ? 0 : valorPosObraTotal);
+  const totalFixo =
+    (mensalObraIsManual ? valorMensalObraTotal : 0) + (posObraIsManual ? valorPosObraTotal : 0);
+  const disponivelFlexiveis = Math.max(0, valorUtilizado - atoEfetivo - totalSemestrais - valorChaves - totalFixo);
+  const fatorRateio = somaMaximosFlexiveis > 0
+    ? Math.min(1, disponivelFlexiveis / somaMaximosFlexiveis)
+    : 1;
+
+  if (!mensalObraIsManual) {
+    valorMensalObraTotal = valorMensalObraTotal * fatorRateio;
+    valorMensalObra = nMensaisObra > 0 ? valorMensalObraTotal / nMensaisObra : 0;
+  }
+  if (!posObraIsManual) {
+    valorPosObraTotal = valorPosObraTotal * fatorRateio;
+    valorPosObraParcela = qtdParcelasPosObra > 0 ? valorPosObraTotal / qtdParcelasPosObra : 0;
+  }
+
   // Antecipadas que não couberam no abatimento do Ato (raro: Ato já no piso
-  // mínimo) reduzem o total das Mensais de Obra.
+  // mínimo) reduzem o total das Mensais de Obra — depois do rateio acima, para
+  // não distorcer a proporção entre Mensal de Obra e Pós-Obra.
   if (antecipadasRestante > 0) {
     valorMensalObraTotal = Math.max(0, valorMensalObraTotal - antecipadasRestante);
     valorMensalObra = nMensaisObra > 0 ? valorMensalObraTotal / nMensaisObra : 0;
   }
 
-  const atoMaximoPossivel = Math.max(0, price - recursos - descontoAtoPremiado);
-  const atoEfetivo = Math.min(atoAposAntecipadas, atoMaximoPossivel);
   const saldoAPagarDireto = valorMensalObraTotal + totalSemestrais + valorChaves + valorPosObraTotal;
 
   const abaixoParcelaMinimaMensalObra = nMensaisObra > 0 && valorMensalObra > 0 && valorMensalObra < parcelaMinimaMensalObra - 0.005;
