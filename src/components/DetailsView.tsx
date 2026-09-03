@@ -1235,7 +1235,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // usado no Bloco 3/parcela). Usar o valor líquido aqui fazia o percentual ficar
   // artificialmente abaixo do teto configurado (ex.: 24,9% em vez de 25,0%), como se a
   // política não estivesse sendo usada no limite quando na verdade estava.
-  const valorRiscoProSoluto = riscoMaximoApuradoBruto;
+  // No pagamento à vista não existe Pró-Soluto nenhum (o cliente já paga o imóvel
+  // inteiro no Ato) — riscoMaximoApuradoBruto continua sendo só o TETO teórico da
+  // política (25%/35%, calculado em cima do valor do imóvel, independente de haver
+  // ou não financiamento de fato), então sem esta trava o gráfico mostraria um risco
+  // de Pró-Soluto que nunca é usado. Mesma lógica já aplicada ao ITBI (valorTotalITBI
+  // acima) e ao Risco Parcela/Renda (valorRiscoParcela, que já zera via `parcela`).
+  const valorRiscoProSoluto = isPagamentoAVistaAtivoManual ? 0 : riscoMaximoApuradoBruto;
   const pctRiscoProSoluto = baseVendaLiquidaComITBI > 0
     ? Math.min(100, Math.max(0, (valorRiscoProSoluto / baseVendaLiquidaComITBI) * 100))
     : 0;
