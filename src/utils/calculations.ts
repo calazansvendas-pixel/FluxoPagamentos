@@ -378,6 +378,12 @@ export interface MorarEngineResult {
   maxFluxoGeral: number;
   tetoPosGlobal: number;
   parcelaMensalITBI: number;
+  // ITBI no Ato sugerido pelo motor — igual ao informado em params.atoITBI,
+  // exceto quando o valor plano de ITBI/mês precisou ceder espaço ao teto de
+  // renda de algum balde (parcela + ITBI); nesse caso vem MAIOR que o
+  // informado, com o excedente já embutido. Nunca vem menor — o motor só
+  // eleva, nunca reduz o que o corretor digitou em "ITBI no Ato".
+  itbiAtoSugerido: number;
   mesesTotaisGeral: number;
   obraSeries: MorarSerieResult[];
   posSeries: MorarSerieResult[];
@@ -436,12 +442,51 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const capacidadeRendaObra = mObra.reduce((soma, qtd, idx) => soma + capacidadeRendaPorBalde(idx) * (qtd || 0), 0);
   const capacidadeRendaPos = mPos.reduce((soma, qtd, idx) => soma + capacidadeRendaPorBalde(idx) * (qtd || 0), 0);
 
-  // ITBI Mensal = ITBI Restante a parcelar / (meses Obra + meses Pós)
-  const itbiRestante = Math.max(0, itbiRegistro - (params.atoITBI || 0));
-  const parcelaMensalITBIExato = (mesesTotaisGeral > 0 && itbiRestante > 0)
+  // ITBI Mensal = ITBI Restante a parcelar / (meses Obra + meses Pós) — mas nunca
+  // pode furar o teto de renda de nenhum balde quando somado à parcela do
+  // Pró-Soluto daquele balde (o MESMO teto usado na distribuição das séries mais
+  // abaixo: parcela + ITBI ≤ pctAno% da renda — ver capacidadeRendaPorBalde acima
+  // e o comentário de capRendaMesPorBalde mais abaixo). Antes, o valor plano
+  // (itbiRestante / mesesTotaisGeral) não respeitava nenhum teto: ao reduzir a
+  // quantidade de meses (aumentando essa parcela), ela furava o risco de renda
+  // sem aviso, e o excedente não ia pra lugar nenhum — nem virava parcela (a
+  // parcela do Pró-Soluto, capada, só ia a zero), nem virava Ato. Agora, quando
+  // o valor plano sozinho já passa do teto de algum balde (mesmo com a parcela
+  // do Pró-Soluto daquele balde já zerada), o excedente migra para o ITBI no
+  // Ato (itbiAtoSugerido) — nunca para o Ato (Imóvel), que é uma conta à parte.
+  // Sem meses nenhum pra parcelar (Obra e Pós-Obra ambos zerados), o ITBI
+  // inteiro vai para o Ato. Converge em poucas voltas: mover mais para o Ato
+  // reduz a parcela mensal de ITBI (igual em todo mês), o que também alivia os
+  // demais baldes na mesma passada.
+  const atoITBIInformado = Math.max(0, params.atoITBI || 0);
+  let itbiAtoEfetivo = atoITBIInformado;
+  let itbiRestante = Math.max(0, itbiRegistro - itbiAtoEfetivo);
+  let parcelaMensalITBIExato = (mesesTotaisGeral > 0 && itbiRestante > 0)
     ? (itbiRestante / mesesTotaisGeral)
     : 0;
+
+  if (mesesTotaisGeral <= 0) {
+    itbiAtoEfetivo = itbiRegistro;
+    itbiRestante = 0;
+    parcelaMensalITBIExato = 0;
+  } else {
+    for (let iter = 0; iter < 20; iter++) {
+      let excedente = 0;
+      for (let idx = 0; idx < 6; idx++) {
+        const cap = capacidadeRendaPorBalde(idx);
+        if (cap === Infinity || parcelaMensalITBIExato <= cap) continue;
+        if ((mObra[idx] || 0) > 0) excedente += (parcelaMensalITBIExato - cap) * mObra[idx];
+        if ((mPos[idx] || 0) > 0) excedente += (parcelaMensalITBIExato - cap) * mPos[idx];
+      }
+      if (excedente < 0.01) break;
+      itbiAtoEfetivo = Math.min(itbiRegistro, itbiAtoEfetivo + excedente);
+      itbiRestante = Math.max(0, itbiRegistro - itbiAtoEfetivo);
+      parcelaMensalITBIExato = itbiRestante > 0 ? (itbiRestante / mesesTotaisGeral) : 0;
+    }
+  }
+
   const parcelaMensalITBI = Math.round(parcelaMensalITBIExato * 100) / 100;
+  const itbiAtoSugerido = Math.round(itbiAtoEfetivo * 100) / 100;
 
   // Sinal Total s/ ITBI = Preço Tabela - (Financiamento + Subsídio + FGTS)
   const totalNegociado = financiamento + subsidio + fgts;
@@ -795,6 +840,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     maxFluxoGeral,
     tetoPosGlobal,
     parcelaMensalITBI,
+    itbiAtoSugerido,
     mesesTotaisGeral,
     obraSeries,
     posSeries,
