@@ -80,10 +80,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? Number(currentCond.numParcelas)
     : (currentProd?.numParcelas !== undefined ? Number(currentProd.numParcelas) : 60);
 
-  // Carrega os valores de Prazo Faixa 1 e Prazo Faixa 2 do produto/condição selecionado
-  const prazoFaixa1 = Number(currentCond?.mesesTabela1) || 0;
-  const prazoFaixa2 = Number(currentCond?.mesesTabela2) || 0;
-  const limiteMaximoParcelas = Math.max(prazoFaixa1, prazoFaixa2, condNumParcelas, 1);
+  // Teto de parcelas: exatamente o "Nº Parcelas" da política de crédito — nunca
+  // o maior entre ele e as faixas de juros (mesesTabela1/2, que só definem qual
+  // taxa se aplica, não quantas parcelas a política permite). Se a política
+  // prevê 30 parcelas, 30 é o máximo que o corretor consegue digitar aqui.
+  const limiteMaximoParcelas = Math.max(1, condNumParcelas);
   // Menor "Qtd. Mensais" que o corretor pode digitar nesta ficha — vem da
   // política de crédito da condição (padrão 1, comportamento histórico); pode
   // ser reduzida a 0 para permitir quitar o Pró-Soluto inteiro no Ato.
@@ -107,6 +108,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [valAtoITBI, setValAtoITBI] = useState<number>(0);
   const [itbiInputText, setItbiInputText] = useState<string>('');
   const [isEditingITBI, setIsEditingITBI] = useState<boolean>(false);
+  // Piso digitado pelo CORRETOR em "ITBI no Ato" (null = nenhum; o valor
+  // exibido em valAtoITBI pode estar 100% ou parcialmente elevado por
+  // migração automática — ver itbiAtoSugeridoBanco mais abaixo). Guardado à
+  // parte pelo mesmo motivo do FichaMorar.tsx: reaproveitar o próprio
+  // valAtoITBI como piso faria uma migração automática anterior "grudar" e
+  // nunca descer quando a Qtd. Mensais aumenta de novo.
+  const [itbiAtoManualFloor, setItbiAtoManualFloor] = useState<number | null>(null);
 
   const [isAtoPremiadoEnabled, setIsAtoPremiadoEnabled] = useState<boolean>(true);
 
@@ -228,6 +236,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingAto(false);
     setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
+    setItbiAtoManualFloor(null);
     setItbiInputText('');
     setIsEditingITBI(false);
     setValParc2(0);
@@ -423,6 +432,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingAto(false);
     setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
+    setItbiAtoManualFloor(null);
     setItbiInputText('');
     setIsEditingITBI(false);
     setIsAtoPremiadoEnabled(true);
@@ -740,14 +750,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         })
     : [];
 
-  // ITBI ainda não alocado para "Pagamento ITBI no Ato" — precisa vir ANTES do
-  // laço iterativo abaixo: o piso do Ato (Imóvel) daquele laço usa este saldo
-  // (nunca o ITBI cheio) para não pedir, no Ato, um ITBI que o corretor já
-  // separou no campo dedicado (ver comentário completo mais abaixo, onde
-  // despCartoriasEfetivas usa o mesmo saldoITBI).
+  // ITBI ainda não alocado para "Pagamento ITBI no Ato" DIGITADO pelo corretor
+  // (itbiAtoManualFloor, não o valAtoITBI exibido em tela — que pode já incluir
+  // uma migração automática anterior, ver mais abaixo). É o ponto de partida
+  // para a migração automática: o quanto ainda "precisa de um lugar".
   const valorTotalITBI = isPagamentoAVistaAtivoManual ? 0 : despCartorias;
-  const atoITBIValidado = Math.min(valAtoITBI, valorTotalITBI);
-  const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
+  const itbiFloorManual = Math.min(itbiAtoManualFloor ?? 0, valorTotalITBI);
+  const saldoITBIAntesDaMigracao = Math.max(0, valorTotalITBI - itbiFloorManual);
 
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
@@ -767,9 +776,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const vpValRiscoRenda = riskCalcInitial.vpVal;
   const riscoImovelPctDec = (currentCond?.riscoImovelPct !== undefined ? currentCond.riscoImovelPct : 25) / 100;
 
-  let atoPremiadoAtual = 0;
-  let iteracoes = 0;
-
   let sinalTotalSemITBI = 0;
   let sinalTotalComITBI = 0;
   let baseRiscoImovel = 0;
@@ -778,38 +784,62 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   let taxaBancaria = 0;
   let proSolutoLiquido = 0;
   let pagamentoAtoSinalEfetivo = 0;
+  let atoPremiadoAtual = 0;
+  // ITBI que este laço conseguiu manter parcelável (nunca mais que o saldo
+  // ainda não alocado, nem mais que o teto de risco/renda apurado abaixo).
+  let saldoITBIEfetivo = saldoITBIAntesDaMigracao;
 
-  if (hasUnitSelected && price > 0) {
+  // Laço interno: resolve a referência circular do Ato Premiado (mesmo de
+  // sempre) para um dado `saldoITBIParam`. Extraído em função porque agora
+  // precisa rodar mais de uma vez — uma para cada tentativa do laço externo
+  // de migração automática de ITBI logo abaixo.
+  const resolverAtoPremiado = (saldoITBIParam: number) => {
+    let sinalSemITBILocal = 0;
+    let sinalComITBILocal = 0;
+    let baseRiscoLocal = 0;
+    let valorRiscoLocal = 0;
+    let riscoMaximoLocal = 0;
+    let taxaBancariaLocal = 0;
+    let proSolutoLiquidoLocal = 0;
+    let pagamentoAtoLocal = 0;
+    let atoPremiadoLocal = 0;
+    let iteracoes = 0;
+
     while (iteracoes < 1000) {
       // a) Recursos Aprovados = (Max Financiamento + Subsídio + FGTS) -> totalNegoc
       // b) GAP Inicial = (Preço de Tabela) - Recursos Aprovados -> gapInicial
       // c) Sinal Total s/ ITBI = GAP Inicial - atoPremiadoAtual
-      sinalTotalSemITBI = Math.max(0, gapInicial - atoPremiadoAtual);
+      sinalSemITBILocal = Math.max(0, gapInicial - atoPremiadoLocal);
 
-      // d) Sinal Total c/ ITBI = (Sinal Total s/ ITBI) + ITBI/Despesas Cartorárias AINDA NÃO
-      // alocadas para "Pagamento ITBI no Ato" (saldoITBI, não despCartorias cheio) — a parte que
-      // o corretor já separou naquele campo não precisa de proteção nenhuma aqui, ela já está
-      // paga; usar o ITBI cheio pediria, no piso do Ato (Imóvel), um ITBI que já está coberto em
-      // outro campo, contando o mesmo ITBI duas vezes. Sem nada digitado em "ITBI no Ato",
-      // saldoITBI === despCartorias e esta conta fica idêntica à de antes.
-      sinalTotalComITBI = sinalTotalSemITBI + saldoITBI;
+      // d) Sinal Total c/ ITBI = (Sinal Total s/ ITBI) + ITBI ainda parcelável
+      // (saldoITBIParam, não despCartorias cheio nem o saldo ainda sem migrar) —
+      // a parte já alocada (manualmente ou por migração automática) não precisa
+      // de proteção nenhuma aqui, ela já está paga; usar o ITBI cheio pediria,
+      // no piso do Ato (Imóvel), um ITBI que já está coberto em outro campo,
+      // contando o mesmo ITBI duas vezes. Sem nenhuma alocação, saldoITBIParam
+      // === despCartorias e esta conta fica idêntica à de antes.
+      sinalComITBILocal = sinalSemITBILocal + saldoITBIParam;
 
-      // e) Base Risco Imóvel = (MAX(Preço Tabela, Avaliação Banco) + ITBI restante) - atoPremiadoAtual
-      baseRiscoImovel = Math.max(0, (maxPriceEval + saldoITBI) - atoPremiadoAtual);
+      // e) Base Risco Imóvel = (MAX(Preço Tabela, Avaliação Banco) + ITBI parcelável) - atoPremiadoAtual
+      baseRiscoLocal = Math.max(0, (maxPriceEval + saldoITBIParam) - atoPremiadoLocal);
 
       // e) Valor Risco Imóvel = Base Risco Imóvel * (% Risco Imóvel);
-      valorRiscoImovel = baseRiscoImovel * riscoImovelPctDec;
+      valorRiscoLocal = baseRiscoLocal * riscoImovelPctDec;
 
-      // f) Risco Máximo Apurado (Bruto) = MIN(VP Risco Renda, Valor Risco Imóvel);
-      riscoMaximoApuradoBruto = (vpValRiscoRenda > 0) 
-        ? Math.min(vpValRiscoRenda, valorRiscoImovel) 
-        : valorRiscoImovel;
+      // f) Risco Máximo Apurado (Bruto) = MIN(VP Risco Renda, Valor Risco Imóvel).
+      // Checa `income > 0` (cliente com renda declarada), não `vpValRiscoRenda > 0`:
+      // o teto de renda pode legitimamente ser 0 quando a Qtd. Mensais é 0 (sem
+      // meses, não há capacidade nenhuma) — cair no ramo "sem teto de renda"
+      // nesse caso ignoraria essa trava justamente no cenário que ela precisa cobrir.
+      riscoMaximoLocal = (income > 0)
+        ? Math.min(vpValRiscoRenda, valorRiscoLocal)
+        : valorRiscoLocal;
 
       // g) Taxa Bancária (Taxa de Assinatura de Contrato, da política) = Risco Máximo Apurado * taxa;
-      taxaBancaria = riscoMaximoApuradoBruto * (taxaAssinaturaContratoPct / 100);
+      taxaBancariaLocal = riscoMaximoLocal * (taxaAssinaturaContratoPct / 100);
 
       // h) Pró-Soluto Líquido = Risco Máximo Apurado - Taxa Bancária;
-      proSolutoLiquido = Math.max(0, riscoMaximoApuradoBruto - taxaBancaria);
+      proSolutoLiquidoLocal = Math.max(0, riscoMaximoLocal - taxaBancariaLocal);
 
       // Comissão Apartada = (Preço de Tabela - Desconto do Ato Premiado) * %comissão — recalculada
       // A CADA ITERAÇÃO com o atoPremiadoAtual corrente, porque a comissão depende do Desconto,
@@ -818,7 +848,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // usado para o Ato Premiado). Em qualquer condição que não seja "Comissão Apartada", fica
       // sempre 0, sem nenhum efeito no restante da conta.
       const comissaoIteracaoAtual = isComissaoApartada
-        ? Math.max(0, (precoTabelaOriginal - atoPremiadoAtual) * pctComissaoApartadaCond)
+        ? Math.max(0, (precoTabelaOriginal - atoPremiadoLocal) * pctComissaoApartadaCond)
         : 0;
 
       // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Pró-Soluto Líquido - Comissão
@@ -826,37 +856,97 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // líquido da comissão) que sugere o Ato; não o bruto (Risco Máximo Apurado). A comissão
       // NUNCA entra nos passos acima (Risco Imóvel 25%, Risco Renda 35%, Taxa Bancária) — eles
       // continuam sobre o valor cheio; só o Ato final é que sai líquido dela.
-      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido - comissaoIteracaoAtual);
+      pagamentoAtoLocal = Math.max(0, sinalComITBILocal - proSolutoLiquidoLocal - comissaoIteracaoAtual);
 
       // Ato Bruto Apurado = (Sinal Total c/ ITBI restante antes do desconto) - Pró-Soluto Líquido - Comissão
-      const atoBrutoCalculado = Math.max(0, (gapInicial + saldoITBI) - proSolutoLiquido - comissaoIteracaoAtual);
+      const atoBrutoCalculado = Math.max(0, (gapInicial + saldoITBIParam) - proSolutoLiquidoLocal - comissaoIteracaoAtual);
 
       // j) novoAtoPremiado = pct do Pagamento Ato (Sinal Efetivo) caso o Ato Bruto seja >= 5000
       // pct vem da política do empreendimento (currentCond.atoPremiadoPct); ausente → 10%
       const novoAtoPremiado = (isAtoPremiadoEnabled && pctAtoPremiadoCond > 0 && atoBrutoCalculado >= 5000)
-        ? Math.min(pagamentoAtoSinalEfetivo * pctAtoPremiadoCond, tetoDescontoAtoPremiado)
+        ? Math.min(pagamentoAtoLocal * pctAtoPremiadoCond, tetoDescontoAtoPremiado)
         : 0;
 
       // 2. CONDIÇÃO DE PARADA: Tolerância zero para bater os centavos do Excel
-      if (Math.abs(novoAtoPremiado - atoPremiadoAtual) < 0.0001) {
-        atoPremiadoAtual = novoAtoPremiado;
+      if (Math.abs(novoAtoPremiado - atoPremiadoLocal) < 0.0001) {
+        atoPremiadoLocal = novoAtoPremiado;
         break;
       }
 
-      atoPremiadoAtual = novoAtoPremiado;
+      atoPremiadoLocal = novoAtoPremiado;
       iteracoes++;
     }
+
+    return {
+      sinalSemITBI: sinalSemITBILocal,
+      sinalComITBI: sinalComITBILocal,
+      baseRisco: baseRiscoLocal,
+      valorRisco: valorRiscoLocal,
+      riscoMaximo: riscoMaximoLocal,
+      taxaBancaria: taxaBancariaLocal,
+      proSolutoLiquido: proSolutoLiquidoLocal,
+      pagamentoAto: pagamentoAtoLocal,
+      atoPremiado: atoPremiadoLocal
+    };
+  };
+
+  if (hasUnitSelected && price > 0) {
+    // Laço externo: migra para "ITBI no Ato" (nunca para o Ato (Imóvel), que é
+    // uma conta à parte) o quanto do ITBI ainda sem alocação não cabe dentro do
+    // teto de risco/renda apurado (riscoMaximo) — mesmo espírito do mecanismo já
+    // usado no Sinal c/ Morar (itbiAtoSugerido): quando a Qtd. Mensais diminui e
+    // sobra menos espaço pra parcelar, o ITBI cede primeiro, e só o que ainda
+    // faltar depois disso é que segue inflando o Ato (Imóvel) via pagamentoAto,
+    // exatamente como já acontecia. Converge em poucas voltas: reduzir
+    // saldoITBIEfetivo também reduz ligeiramente o próprio teto (ele soma no
+    // Risco Imóvel), então cada tentativa refina a anterior.
+    let resultado = resolverAtoPremiado(saldoITBIEfetivo);
+    for (let i = 0; i < 20; i++) {
+      const novoSaldoEfetivo = Math.max(0, Math.min(saldoITBIAntesDaMigracao, resultado.riscoMaximo));
+      if (Math.abs(novoSaldoEfetivo - saldoITBIEfetivo) < 0.01) break;
+      saldoITBIEfetivo = novoSaldoEfetivo;
+      resultado = resolverAtoPremiado(saldoITBIEfetivo);
+    }
+
+    sinalTotalSemITBI = resultado.sinalSemITBI;
+    sinalTotalComITBI = resultado.sinalComITBI;
+    baseRiscoImovel = resultado.baseRisco;
+    valorRiscoImovel = resultado.valorRisco;
+    riscoMaximoApuradoBruto = resultado.riscoMaximo;
+    taxaBancaria = resultado.taxaBancaria;
+    proSolutoLiquido = resultado.proSolutoLiquido;
+    pagamentoAtoSinalEfetivo = resultado.pagamentoAto;
+    atoPremiadoAtual = resultado.atoPremiado;
 
     // 1. TRAVA DO ATO MÍNIMO (PISO DA POLÍTICA DE CRÉDITO) & REDISTRIBUIÇÃO OBRIGATÓRIA
     if (pagamentoAtoSinalEfetivo < sinalMinimoVal) {
       pagamentoAtoSinalEfetivo = sinalMinimoVal;
       atoPremiadoAtual = 0; // Regra dos 10% não se aplica se não atingir 5k
-      const baseDividaTotal = gapInicial + saldoITBI;
+      const baseDividaTotal = gapInicial + saldoITBIEfetivo;
       riscoMaximoApuradoBruto = Math.max(0, baseDividaTotal - pagamentoAtoSinalEfetivo);
       taxaBancaria = riscoMaximoApuradoBruto * (taxaAssinaturaContratoPct / 100);
       proSolutoLiquido = riscoMaximoApuradoBruto - taxaBancaria;
     }
   }
+
+  // "ITBI no Ato" total = o que o corretor digitou manualmente + o que a
+  // migração automática precisou elevar pra não estourar o teto de risco/renda
+  // apurado acima (nunca inflando o Ato (Imóvel) — ver resolverAtoPremiado).
+  // Sem nenhuma migração necessária, itbiAtoSugeridoBanco === itbiFloorManual e
+  // tudo fica idêntico ao comportamento anterior.
+  const itbiAtoSugeridoBanco = itbiFloorManual + Math.max(0, saldoITBIAntesDaMigracao - saldoITBIEfetivo);
+  const atoITBIValidado = Math.min(itbiAtoSugeridoBanco, valorTotalITBI);
+  const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
+
+  // Mantém o state valAtoITBI (usado pelo input controlado, PDF, gravação da
+  // simulação etc.) sincronizado com a sugestão fresca acima — sobe OU desce
+  // livremente conforme a Qtd. Mensais muda, nunca abaixo do piso manual
+  // (itbiAtoManualFloor, já embutido em itbiAtoSugeridoBanco).
+  useEffect(() => {
+    if (Math.abs(itbiAtoSugeridoBanco - valAtoITBI) > 0.005) {
+      setValAtoITBI(itbiAtoSugeridoBanco);
+    }
+  }, [itbiAtoSugeridoBanco, valAtoITBI]);
 
   const atoMinimoCalculado = hasUnitSelected ? Math.max(sinalMinimoVal, pagamentoAtoSinalEfetivo) : 0;
   const sinalTotalOriginal = gapInicial;
@@ -1184,6 +1274,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingAto(false);
     setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
+    setItbiAtoManualFloor(null);
     setItbiInputText('');
     setIsEditingITBI(false);
     setValParc2(0);
@@ -2066,7 +2157,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             valorTotalITBI={valorTotalITBI}
             isFirstHome={isFirstHomeLocal}
             onToggleFirstHome={() => setIsFirstHomeLocal(prev => !prev)}
-            onITBIChange={(novoVal) => setValAtoITBI(novoVal)}
+            onITBIChange={(novoVal) => {
+              setValAtoITBI(novoVal);
+              // Guarda como piso manual — as próximas recalculagens (ex.: ao
+              // mudar a Qtd. Mensais) partem dele, nunca de uma migração
+              // automática anterior que porventura já esteja maior na tela.
+              setItbiAtoManualFloor(novoVal > 0 ? novoVal : null);
+            }}
             descontoAto={isParcelamentoMorar ? pm.descontoAtoPremiado : descontoAto}
             isAtoPremiadoActive={isAtoPremiadoEnabled}
             onToggleAtoPremiado={(ativo) => {
