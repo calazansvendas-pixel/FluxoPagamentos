@@ -1264,6 +1264,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       setAtoInputText(formatCurrency(engineResult.atoResidual));
       setItbiObraValorManual(engineResult.parcelaMensalITBI);
       setItbiPosValorManual(engineResult.parcelaMensalITBI);
+      if (engineResult.itbiAtoSugerido > atoITBIValidado + 0.005) {
+        setValAtoITBI(engineResult.itbiAtoSugerido);
+        setItbiAtoInputText(formatCurrency(engineResult.itbiAtoSugerido));
+      }
     }
   }, [sinalLiquidoTotalEfetivo, hasUnitSelected, isManualObra, isManualPos, valAtoManual, sinalMinimoVal, currentCond, income, despCartoriasEfetivas, atoITBIValidado, price, evaluation, maxFinanc, subsidy, fgts, isAtoPremiadoEnabled]);
 
@@ -2526,7 +2530,17 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         setIsEditingObraTotal(true);
                         setObraQtdText(String(totalParcObra));
                       }}
-                      onChange={(e) => setObraQtdText(e.target.value)}
+                      onChange={(e) => {
+                        // Recalcula a cada mudança (clique nas setinhas ou dígito
+                        // digitado) — não espera o campo perder o foco, mesmo
+                        // padrão já usado no "X de" de cada série logo abaixo.
+                        const raw = e.target.value;
+                        setObraQtdText(raw);
+                        const val = parseInt(raw, 10);
+                        if (!isNaN(val) && val >= 0) {
+                          handleTotalObraParcelasChange(val);
+                        }
+                      }}
                       onBlur={(e) => {
                         setIsEditingObraTotal(false);
                         const val = parseInt(e.target.value, 10);
@@ -2648,7 +2662,14 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                         setIsEditingPosTotal(true);
                         setPosQtdText(String(totalParcPos));
                       }}
-                      onChange={(e) => setPosQtdText(e.target.value)}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setPosQtdText(raw);
+                        const val = parseInt(raw, 10);
+                        if (!isNaN(val) && val >= 0) {
+                          handleTotalPosParcelasChange(val);
+                        }
+                      }}
                       onBlur={(e) => {
                         setIsEditingPosTotal(false);
                         const val = parseInt(e.target.value, 10);
