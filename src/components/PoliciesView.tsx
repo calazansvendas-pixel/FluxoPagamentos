@@ -98,6 +98,10 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
   // String states for flexible decimal and numeric inputs (accepts both ',' and '.')
   const [numParcelasStr, setNumParcelasStr] = useState<string>('72');
+  // Menor "Qtd. Mensais" que o corretor pode digitar na ficha — padrão 1
+  // (comportamento histórico); pode ser reduzida até 0 para permitir quitar o
+  // Pró-Soluto inteiro no Ato quando não há mais parcelas.
+  const [parcelasMinimasStr, setParcelasMinimasStr] = useState<string>('1');
   const [sinalMinimo, setSinalMinimo] = useState<string>('R$ 2.000,00');
   const [riscoRendaStr, setRiscoRendaStr] = useState<string>('30,0');
   const [riscoImovelStr, setRiscoImovelStr] = useState<string>('25,0');
@@ -108,11 +112,16 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // Taxa Bancária (%) — exclusiva do Sinal c/ Banco Direto: reduz o Risco
   // Máximo Apurado que sugere o Ato (Imóvel) e o "Pró-Soluto Total c/ ITBI"
   // exibido em tela; a parcela (Tabela Price) usa o valor antes do desconto.
-  const [taxaAssinaturaContratoStr, setTaxaAssinaturaContratoStr] = useState<string>('0,00');
+  const [taxaAssinaturaContratoStr, setTaxaAssinaturaContratoStr] = useState<string>('0,0000');
   // % do Ato Premiado — desconto comercial aplicado em cima do Ato Efetivo. Antes
   // era fixo em 10% em todos os cálculos; agora vem por condição comercial e
   // pode ficar zerado (0%). Padrão histórico continua sendo 10%.
   const [atoPremiadoPctStr, setAtoPremiadoPctStr] = useState<string>('10,00');
+  // Comissão Apartada — exclusiva da condição "Sinal c/ Banco Direto (Comissão
+  // Apartada)": % sobre o Preço de Tabela (padrão 4%) e quantidade padrão de
+  // parcelas (padrão 6x, editável na ficha por simulação).
+  const [comissaoApartadaPctStr, setComissaoApartadaPctStr] = useState<string>('4,00');
+  const [comissaoApartadaParcelasStr, setComissaoApartadaParcelasStr] = useState<string>('6');
   const [policyText, setPolicyText] = useState<string>('');
   // % de Desconto à Vista: comum a todas as condições comerciais de todos os
   // produtos (não é exclusivo de Sinal c/ Morar ou Parcelamento Morar) —
@@ -300,6 +309,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const isMorar = condKind === 'sinal-morar';
     const isParcelamentoMorar = condKind === 'parcelamento-morar';
     const numP = source.numParcelas !== undefined ? source.numParcelas : 72;
+    const parcelasMin = source.parcelasMinimas !== undefined ? source.parcelasMinimas : 1;
     const rr = source.riscoRendaPct !== undefined ? source.riscoRendaPct : (isParcelamentoMorar ? 40 : 30);
     const ri = source.percMaxProSolutoGlobal !== undefined
       ? source.percMaxProSolutoGlobal
@@ -315,6 +325,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     // Padrão histórico do Ato Premiado é 10% — só se a política tiver um valor
     // gravado explicitamente (inclusive 0) é que ela sobrescreve o padrão.
     const apPct = source.atoPremiadoPct !== undefined ? Math.round(source.atoPremiadoPct * 10000) / 100 : 10;
+    // Comissão Apartada: padrão 4% quando a política não define.
+    const caPct = source.comissaoApartadaPct !== undefined ? Math.round(source.comissaoApartadaPct * 10000) / 100 : 4;
+    const caParcelas = source.comissaoApartadaParcelas !== undefined ? source.comissaoApartadaParcelas : 6;
 
     const mo = source.mesesObra !== undefined ? source.mesesObra : 33;
     const mp = source.mesesPos !== undefined ? source.mesesPos : 27;
@@ -356,6 +369,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setEditingFase(fase);
 
     setNumParcelasStr(String(numP));
+    setParcelasMinimasStr(String(parcelasMin));
     setSinalMinimo(formattedSinal);
     setRiscoRendaStr(formatDecimalBR(rr, 1, 2));
     setRiscoImovelStr(formatDecimalBR(ri, 1, 2));
@@ -364,8 +378,10 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setTaxaJuros1Str(formatDecimalBR(t1, 2, 2));
     setMesesTabela2Str(String(m2));
     setTaxaJuros2Str(formatDecimalBR(t2, 2, 2));
-    setTaxaAssinaturaContratoStr(formatDecimalBR(ta, 2, 2));
+    setTaxaAssinaturaContratoStr(formatDecimalBR(ta, 4, 4));
     setAtoPremiadoPctStr(formatDecimalBR(apPct, 2, 2));
+    setComissaoApartadaPctStr(formatDecimalBR(caPct, 2, 2));
+    setComissaoApartadaParcelasStr(String(caParcelas));
 
     setMesesObraStr(String(mo));
     setMesesPosStr(String(mp));
@@ -398,6 +414,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
   // Dynamic parsed numeric values for live calculations
   const numParcelas = parseIntFlexible(numParcelasStr, 1);
+  // Piso 0 é um valor válido (permite ao corretor zerar a Qtd. Mensais na
+  // ficha) — não cai de volta para 1 como um valor "inválido".
+  const parcelasMinimas = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
   const riscoRendaPct = parseDecimal(riscoRendaStr, 30);
   const riscoImovelPct = parseDecimal(riscoImovelStr, 25);
   const riscoPosPct = parseDecimal(riscoPosStr, 8);
@@ -410,6 +429,10 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // decimal (0.10), então precisa dividir por 100 ao salvar e multiplicar ao ler.
   const atoPremiadoPctInput = parseDecimal(atoPremiadoPctStr, 10);
   const atoPremiadoPctSalvar = Math.max(0, atoPremiadoPctInput) / 100;
+  // Comissão Apartada: mesma convenção (input em % humano, campo salvo em decimal).
+  const comissaoApartadaPctInput = parseDecimal(comissaoApartadaPctStr, 4);
+  const comissaoApartadaPctSalvar = Math.max(0, comissaoApartadaPctInput) / 100;
+  const comissaoApartadaParcelasNum = Math.max(1, parseIntFlexible(comissaoApartadaParcelasStr, 6));
 
   // Parâmetros Morar calculados dinamicamente
   const mesesObra = Math.max(0, parseIntFlexible(mesesObraStr, 0));
@@ -459,6 +482,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     return {
       numParcelas: isCurrentMorar ? totalMesesMorar : numParcelas,
+      parcelasMinimas,
       sinalMinimo: formattedCurrentSinal,
       riscoRendaPct,
       riscoImovelPct,
@@ -471,6 +495,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       taxaJuros2,
       taxaAssinaturaContratoPct,
       atoPremiadoPct: atoPremiadoPctSalvar,
+      comissaoApartadaPct: comissaoApartadaPctSalvar,
+      comissaoApartadaParcelas: comissaoApartadaParcelasNum,
       mesesObra,
       mesesPos,
       globalSerie1Pct,
@@ -605,6 +631,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       id: newCondId,
       name: trimmedName,
       numParcelas: 72,
+      parcelasMinimas: 1,
       sinalMinimo: 'R$ 2.000,00',
       riscoRendaPct: isNewParcelamentoMorar ? 40 : 30,
       riscoImovelPct: 25,
@@ -673,6 +700,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     // Coleta o estado completo e normaliza os inputs decimais e inteiros
     const parsedNumParcelas = Math.max(0, parseIntFlexible(numParcelasStr, 72));
+    const parsedParcelasMinimas = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
     const parsedSinalMinimoNum = resolveSinalMinimo(sinalMinimo);
     const formattedSinalMinimo = formatCurrency(parsedSinalMinimoNum);
     const parsedRiscoRenda = parseDecimal(riscoRendaStr, 30);
@@ -684,6 +712,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const parsedTaxaAssinaturaContrato = parseDecimal(taxaAssinaturaContratoStr, 0);
     const parsedAtoPremiadoPctInput = Math.max(0, parseDecimal(atoPremiadoPctStr, 10));
     const parsedAtoPremiadoPct = parsedAtoPremiadoPctInput / 100;
+    const parsedComissaoApartadaPctInput = Math.max(0, parseDecimal(comissaoApartadaPctStr, 4));
+    const parsedComissaoApartadaPct = parsedComissaoApartadaPctInput / 100;
+    const parsedComissaoApartadaParcelas = Math.max(1, parseIntFlexible(comissaoApartadaParcelasStr, 6));
 
     const parsedMesesObra = Math.max(0, parseIntFlexible(mesesObraStr, 33));
     const parsedMesesPos = Math.max(0, parseIntFlexible(mesesPosStr, 27));
@@ -718,6 +749,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     // Atualiza a formatação visual dos inputs ao salvar
     setNumParcelasStr(String(isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas));
+    setParcelasMinimasStr(String(parsedParcelasMinimas));
     setSinalMinimo(formattedSinalMinimo);
     setRiscoRendaStr(formatDecimalBR(parsedRiscoRenda, 1, 2));
     setRiscoImovelStr(formatDecimalBR(parsedRiscoImovel, 1, 2));
@@ -726,8 +758,10 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setTaxaJuros1Str(formatDecimalBR(parsedTaxa1, 2, 2));
     setMesesTabela2Str(String(parsedMeses2));
     setTaxaJuros2Str(formatDecimalBR(parsedTaxa2, 2, 2));
-    setTaxaAssinaturaContratoStr(formatDecimalBR(parsedTaxaAssinaturaContrato, 2, 2));
+    setTaxaAssinaturaContratoStr(formatDecimalBR(parsedTaxaAssinaturaContrato, 4, 4));
     setAtoPremiadoPctStr(formatDecimalBR(parsedAtoPremiadoPctInput, 2, 2));
+    setComissaoApartadaPctStr(formatDecimalBR(parsedComissaoApartadaPctInput, 2, 2));
+    setComissaoApartadaParcelasStr(String(parsedComissaoApartadaParcelas));
 
     setMesesObraStr(String(parsedMesesObra));
     setMesesPosStr(String(parsedMesesPos));
@@ -756,6 +790,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     const savedParams: Partial<CommercialCondition> = {
       numParcelas: isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas,
+      parcelasMinimas: parsedParcelasMinimas,
       sinalMinimo: formattedSinalMinimo,
       riscoRendaPct: parsedRiscoRenda,
       riscoImovelPct: parsedRiscoImovel,
@@ -768,6 +803,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       taxaJuros2: parsedTaxa2,
       taxaAssinaturaContratoPct: parsedTaxaAssinaturaContrato,
       atoPremiadoPct: parsedAtoPremiadoPct,
+      comissaoApartadaPct: parsedComissaoApartadaPct,
+      comissaoApartadaParcelas: parsedComissaoApartadaParcelas,
       mesesObra: parsedMesesObra,
       mesesPos: parsedMesesPos,
       globalSerie1Pct: parsedGlobal1,
@@ -864,6 +901,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     : false;
   const isParcelamentoMorarCondition = activeCondObj
     ? getConditionKind(activeCondObj.name) === 'parcelamento-morar'
+    : false;
+  const isComissaoApartadaCondition = activeCondObj
+    ? getConditionKind(activeCondObj.name) === 'banco-direto-comissao-apartada'
     : false;
 
   const baseMaiorVendaAvaliacao = Math.max(propertyPrice, propertyEvaluation);
@@ -1875,6 +1915,29 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     </div>
                   </div>
 
+                  {/* PARCELAS MÍNIMAS: menor "Qtd. Mensais" que o corretor pode digitar na
+                      ficha (padrão 1, comportamento histórico); reduzir até 0 permite quitar
+                      o Pró-Soluto inteiro no Ato quando não sobra mais parcela nenhuma. */}
+                  <div className="lg:col-span-2">
+                    <label className="block font-semibold text-slate-700 mb-1 truncate" title="Menor quantidade de parcelas que o corretor pode digitar na ficha (0 permite quitar tudo no Ato)">
+                      Parcelas Mín.
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={parcelasMinimasStr}
+                        onChange={(e) => setParcelasMinimasStr(e.target.value)}
+                        onBlur={() => {
+                          const val = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
+                          setParcelasMinimasStr(String(val));
+                        }}
+                        className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-500 text-xs pointer-events-none">X</span>
+                    </div>
+                  </div>
+
                   {/* 2. SINAL MÍNIMO */}
                   <div className="lg:col-span-3">
                     <label className="block font-semibold text-slate-700 mb-1">
@@ -2067,7 +2130,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         onChange={(e) => setTaxaAssinaturaContratoStr(e.target.value)}
                         onBlur={() => {
                           const parsed = parseDecimal(taxaAssinaturaContratoStr, 0);
-                          setTaxaAssinaturaContratoStr(formatDecimalBR(parsed, 2, 4));
+                          setTaxaAssinaturaContratoStr(formatDecimalBR(parsed, 4, 4));
                         }}
                         className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-amber-700 text-center focus:outline-none focus:border-sky-600 text-xs"
                       />
@@ -2075,6 +2138,57 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* COMISSÃO APARTADA — só na condição "Sinal c/ Banco Direto (Comissão Apartada)" */}
+                {isComissaoApartadaCondition && (
+                  <div className="pt-3 border-t border-sky-100/80 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200/80">
+                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual sobre o Preço de Tabela que define o valor total da comissão. Ela sai do fluxo de Ato/Pró-Soluto e vira um parcelamento próprio, sem taxa bancária nem limite de risco.">
+                        Comissão Apartada (%)
+                      </label>
+                      <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
+                        % sobre o Preço de Tabela. Os limites de risco (25% imóvel, 35% renda) continuam sobre o valor cheio — só o Ato final sai líquido desta comissão.
+                      </p>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={comissaoApartadaPctStr}
+                          onChange={(e) => setComissaoApartadaPctStr(e.target.value)}
+                          onBlur={() => {
+                            const parsed = Math.max(0, parseDecimal(comissaoApartadaPctStr, 4));
+                            setComissaoApartadaPctStr(formatDecimalBR(parsed, 2, 2));
+                          }}
+                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-fuchsia-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                        />
+                        <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">%</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-slate-200/80">
+                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Quantidade padrão de parcelas da comissão — sugestão inicial, editável por simulação na própria ficha.">
+                        Parcelas Padrão da Comissão
+                      </label>
+                      <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
+                        Sugestão inicial ao abrir a ficha; o corretor pode ajustar em cada simulação.
+                      </p>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={comissaoApartadaParcelasStr}
+                          onChange={(e) => setComissaoApartadaParcelasStr(e.target.value)}
+                          onBlur={() => {
+                            const parsed = Math.max(1, parseIntFlexible(comissaoApartadaParcelasStr, 6));
+                            setComissaoApartadaParcelasStr(String(parsed));
+                          }}
+                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-fuchsia-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                        />
+                        <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">X</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* TERCEIRA LINHA: VALOR PRESENTE (VP EXCEL) E LIMITES DE RISCO (3 CARDS DIVIDIDOS EM 1/3 CADA) */}
                 <div className="pt-3 border-t border-sky-100/80 grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">

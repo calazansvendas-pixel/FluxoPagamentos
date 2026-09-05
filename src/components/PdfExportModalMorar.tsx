@@ -310,12 +310,15 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
           </div>
         )}
 
-        {/* ÁREA DE PRÉ-VISUALIZAÇÃO / CAPTURA */}
-        <div className="p-4 sm:p-6 overflow-y-auto bg-slate-100 flex justify-center items-start flex-1">
-          
+        {/* ÁREA DE PRÉ-VISUALIZAÇÃO / CAPTURA — o "papel" não encolhe abaixo de
+            min-w (mesma razão do PdfExportModal.tsx: preservar a fidelidade da
+            pré-visualização do PDF exportado); em telas de celular a área rola
+            na horizontal em vez de espremer o grid interno. */}
+        <div className="p-4 sm:p-6 overflow-auto bg-slate-100 flex justify-center items-start flex-1">
+
           <div
             id="pdf-content-area-morar"
-            className="bg-white p-6 sm:p-7 rounded-xl shadow-md border border-slate-200 w-full max-w-[820px] text-slate-900 space-y-3.5 print:p-0 print:shadow-none print:border-none print:max-w-none"
+            className="bg-white p-6 sm:p-7 rounded-xl shadow-md border border-slate-200 w-full min-w-[520px] max-w-[820px] text-slate-900 space-y-3.5 print:p-0 print:shadow-none print:border-none print:max-w-none"
             style={{ minHeight: '1080px' }}
           >
             {/* 1. TOPO: LOGO / CABEÇALHO DA CONSTRUTORA & EMPREENDIMENTO */}

@@ -47,7 +47,10 @@ export interface SimulationResult {
  * Calcula o Valor Presente (PV) dado PMT, taxa decimal e prazo
  */
 export function calcularValorPresente(pmt: number, taxa: number, n: number): number {
-  if (taxa <= 0) return (pmt || 0) * (n || 1);
+  // `n` pode legitimamente ser 0 (nenhuma parcela) — nesse caso o Valor
+  // Presente é 0, não 1 parcela. `n || 1` tratava 0 como "ausente" e caía num
+  // valor de 1 parcela, mascarando um prazo genuinamente zerado.
+  if (taxa <= 0) return (pmt || 0) * Math.max(0, n || 0);
   return (pmt || 0) * ((1 - Math.pow(1 + taxa, -n)) / taxa);
 }
 
@@ -79,17 +82,25 @@ export function calculatePricePMT(principal: number, ratePerMonthPct: number, nu
  * seu nome contém "morar", mas usa a tela/motor de "Sinal c/ Banco Direto"
  * com o Bloco 3 substituído, não a tela da Ficha Morar.
  */
-export type ConditionKind = 'sinal-morar' | 'parcelamento-morar' | 'banco-direto';
+export type ConditionKind = 'sinal-morar' | 'parcelamento-morar' | 'banco-direto' | 'banco-direto-comissao-apartada';
 
 export function getConditionKind(condName: string | undefined | null): ConditionKind {
   const lower = (condName || '').toLowerCase();
   if (lower.includes('parcelamento') && lower.includes('morar')) return 'parcelamento-morar';
   if (lower.includes('morar') || lower.includes('incc') || lower.includes('obra') || lower.includes('ipca')) return 'sinal-morar';
+  // Variante do Sinal c/ Banco Direto com a comissão separada do fluxo de
+  // Ato/Pró-Soluto (ver comissaoApartadaPct em types.ts) — reconhecida pelo
+  // nome conter "comiss" (ex.: "Sinal c/ Banco Direto (Comissão Apartada)").
+  if (lower.includes('comiss')) return 'banco-direto-comissao-apartada';
   return 'banco-direto';
 }
 
 export function isParcelamentoMorarCondition(condName: string | undefined | null): boolean {
   return getConditionKind(condName) === 'parcelamento-morar';
+}
+
+export function isComissaoApartadaCondition(condName: string | undefined | null): boolean {
+  return getConditionKind(condName) === 'banco-direto-comissao-apartada';
 }
 
 /**
@@ -370,6 +381,12 @@ export interface MorarEngineResult {
   maxFluxoGeral: number;
   tetoPosGlobal: number;
   parcelaMensalITBI: number;
+  // ITBI no Ato sugerido pelo motor — igual ao informado em params.atoITBI,
+  // exceto quando o valor plano de ITBI/mês precisou ceder espaço ao teto de
+  // renda de algum balde (parcela + ITBI); nesse caso vem MAIOR que o
+  // informado, com o excedente já embutido. Nunca vem menor — o motor só
+  // eleva, nunca reduz o que o corretor digitou em "ITBI no Ato".
+  itbiAtoSugerido: number;
   mesesTotaisGeral: number;
   obraSeries: MorarSerieResult[];
   posSeries: MorarSerieResult[];
@@ -428,12 +445,51 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   const capacidadeRendaObra = mObra.reduce((soma, qtd, idx) => soma + capacidadeRendaPorBalde(idx) * (qtd || 0), 0);
   const capacidadeRendaPos = mPos.reduce((soma, qtd, idx) => soma + capacidadeRendaPorBalde(idx) * (qtd || 0), 0);
 
-  // ITBI Mensal = ITBI Restante a parcelar / (meses Obra + meses Pós)
-  const itbiRestante = Math.max(0, itbiRegistro - (params.atoITBI || 0));
-  const parcelaMensalITBIExato = (mesesTotaisGeral > 0 && itbiRestante > 0)
+  // ITBI Mensal = ITBI Restante a parcelar / (meses Obra + meses Pós) — mas nunca
+  // pode furar o teto de renda de nenhum balde quando somado à parcela do
+  // Pró-Soluto daquele balde (o MESMO teto usado na distribuição das séries mais
+  // abaixo: parcela + ITBI ≤ pctAno% da renda — ver capacidadeRendaPorBalde acima
+  // e o comentário de capRendaMesPorBalde mais abaixo). Antes, o valor plano
+  // (itbiRestante / mesesTotaisGeral) não respeitava nenhum teto: ao reduzir a
+  // quantidade de meses (aumentando essa parcela), ela furava o risco de renda
+  // sem aviso, e o excedente não ia pra lugar nenhum — nem virava parcela (a
+  // parcela do Pró-Soluto, capada, só ia a zero), nem virava Ato. Agora, quando
+  // o valor plano sozinho já passa do teto de algum balde (mesmo com a parcela
+  // do Pró-Soluto daquele balde já zerada), o excedente migra para o ITBI no
+  // Ato (itbiAtoSugerido) — nunca para o Ato (Imóvel), que é uma conta à parte.
+  // Sem meses nenhum pra parcelar (Obra e Pós-Obra ambos zerados), o ITBI
+  // inteiro vai para o Ato. Converge em poucas voltas: mover mais para o Ato
+  // reduz a parcela mensal de ITBI (igual em todo mês), o que também alivia os
+  // demais baldes na mesma passada.
+  const atoITBIInformado = Math.max(0, params.atoITBI || 0);
+  let itbiAtoEfetivo = atoITBIInformado;
+  let itbiRestante = Math.max(0, itbiRegistro - itbiAtoEfetivo);
+  let parcelaMensalITBIExato = (mesesTotaisGeral > 0 && itbiRestante > 0)
     ? (itbiRestante / mesesTotaisGeral)
     : 0;
+
+  if (mesesTotaisGeral <= 0) {
+    itbiAtoEfetivo = itbiRegistro;
+    itbiRestante = 0;
+    parcelaMensalITBIExato = 0;
+  } else {
+    for (let iter = 0; iter < 20; iter++) {
+      let excedente = 0;
+      for (let idx = 0; idx < 6; idx++) {
+        const cap = capacidadeRendaPorBalde(idx);
+        if (cap === Infinity || parcelaMensalITBIExato <= cap) continue;
+        if ((mObra[idx] || 0) > 0) excedente += (parcelaMensalITBIExato - cap) * mObra[idx];
+        if ((mPos[idx] || 0) > 0) excedente += (parcelaMensalITBIExato - cap) * mPos[idx];
+      }
+      if (excedente < 0.01) break;
+      itbiAtoEfetivo = Math.min(itbiRegistro, itbiAtoEfetivo + excedente);
+      itbiRestante = Math.max(0, itbiRegistro - itbiAtoEfetivo);
+      parcelaMensalITBIExato = itbiRestante > 0 ? (itbiRestante / mesesTotaisGeral) : 0;
+    }
+  }
+
   const parcelaMensalITBI = Math.round(parcelaMensalITBIExato * 100) / 100;
+  const itbiAtoSugerido = Math.round(itbiAtoEfetivo * 100) / 100;
 
   // Sinal Total s/ ITBI = Preço Tabela - (Financiamento + Subsídio + FGTS)
   const totalNegociado = financiamento + subsidio + fgts;
@@ -462,27 +518,36 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
   // Esta função resolve o Ato olhando só para o PREÇO do imóvel (risco máximo %
   // sobre a base). `calcularAtoMinimoDaPolitica`, logo abaixo, embrulha este
   // resultado aplicando também o teto por RENDA.
+  //
+  // Usa `itbiRestante` (ITBI ainda não alocado para "ITBI no Ato" acima) em vez
+  // do ITBI total (`itbiRegistro`) em toda esta função: a parte do ITBI que já
+  // foi separada para itbiAtoEfetivo/itbiAtoSugerido não precisa mais de
+  // proteção nenhuma daqui, ela já está paga. Usar o ITBI cheio faria esta
+  // conta pedir Ato (Imóvel) de novo para cobrir um ITBI que já está coberto em
+  // outro campo — contando o mesmo ITBI duas vezes. Quando não há nenhum
+  // atoITBI/itbiAtoEfetivo ainda definido, itbiRestante == itbiRegistro e o
+  // resultado desta função é idêntico ao de antes.
   const calcularAtoMinimoPorPreco = (): { atoResidual: number; descontoAto: number; baseCalculoComITBI: number; totalProSolutoMaximo: number } => {
     if (!isAtoPremiadoAtivoEfetivo) {
       const descontoAtoCalc = 0;
-      const baseCalc = Math.max(0, Math.round((precoTabela + itbiRegistro) * 100) / 100);
+      const baseCalc = Math.max(0, Math.round((precoTabela + itbiRestante) * 100) / 100);
       const proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
-      const atoCalc = (sinalSemITBI + itbiRegistro) - proSolutoMax;
+      const atoCalc = (sinalSemITBI + itbiRestante) - proSolutoMax;
       const sinalMinimoFloorSemPremio = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
       const atoCalcFinal = Math.max(sinalMinimoFloorSemPremio, Math.round(atoCalc * 100) / 100);
       return { atoResidual: atoCalcFinal, descontoAto: descontoAtoCalc, baseCalculoComITBI: baseCalc, totalProSolutoMaximo: proSolutoMax };
     }
 
     // Resolução Circular / Iterativa Exata do Excel da Morar:
-    // Base Líquida com ITBI = (Preço Tabela - Desconto Ato) + ITBI Total
+    // Base Líquida com ITBI = (Preço Tabela - Desconto Ato) + ITBI Restante
     // Total Pró-Soluto = Base Líquida * 17%
-    // Ato Imóvel = (Sinal Total + ITBI Total) - Total Pró-Soluto - Desconto Ato
+    // Ato Imóvel = (Sinal Total + ITBI Restante) - Total Pró-Soluto - Desconto Ato
     //
     // Hipótese 1: Ato >= 50.000 -> Desconto fixo de (pct * 50.000)
     const descontoAtoFlat50k = Math.round(50000 * pctAtoPremiado * 100) / 100;
-    const baseCom5k = (precoTabela - descontoAtoFlat50k) + itbiRegistro;
+    const baseCom5k = (precoTabela - descontoAtoFlat50k) + itbiRestante;
     const proSoluto5k = Math.round(baseCom5k * pctMaxProSoluto * 100) / 100;
-    const atoCom5k = (sinalSemITBI + itbiRegistro) - proSoluto5k - descontoAtoFlat50k;
+    const atoCom5k = (sinalSemITBI + itbiRestante) - proSoluto5k - descontoAtoFlat50k;
     const sinalMinimoFloor = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
 
     if (atoCom5k >= 50000) {
@@ -497,32 +562,32 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     // Hipótese 2: Ato >= 5.000 e < 50.000 -> Desconto de pct sobre o próprio Ato
     // Fórmula analítica: ato = [(Sinal + ITBI) - (Preço Tabela + ITBI) * pctMaxProSoluto] / (1 + pct - (pct * pctMaxProSoluto))
     const denom = 1 + pctAtoPremiado - (pctAtoPremiado * pctMaxProSoluto);
-    const num = (sinalSemITBI + itbiRegistro) - ((precoTabela + itbiRegistro) * pctMaxProSoluto);
+    const num = (sinalSemITBI + itbiRestante) - ((precoTabela + itbiRestante) * pctMaxProSoluto);
     const atoAnalitico = denom > 0 ? num / denom : 0;
 
     if (atoAnalitico >= 5000 && atoAnalitico < 50000) {
       let atoResidualCalc = Math.round(atoAnalitico * 100) / 100;
       let descontoAtoCalc = Math.round(atoResidualCalc * pctAtoPremiado * 100) / 100;
-      let baseCalc = Math.round(((precoTabela - descontoAtoCalc) + itbiRegistro) * 100) / 100;
+      let baseCalc = Math.round(((precoTabela - descontoAtoCalc) + itbiRestante) * 100) / 100;
       let proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
 
       // Ajuste de centavos fino para convergência perfeita
-      atoResidualCalc = Math.max(0, Math.round(((sinalSemITBI + itbiRegistro) - proSolutoMax - descontoAtoCalc) * 100) / 100);
+      atoResidualCalc = Math.max(0, Math.round(((sinalSemITBI + itbiRestante) - proSolutoMax - descontoAtoCalc) * 100) / 100);
       descontoAtoCalc = Math.round(atoResidualCalc * pctAtoPremiado * 100) / 100;
-      baseCalc = Math.round(((precoTabela - descontoAtoCalc) + itbiRegistro) * 100) / 100;
+      baseCalc = Math.round(((precoTabela - descontoAtoCalc) + itbiRestante) * 100) / 100;
       proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
-      atoResidualCalc = Math.max(sinalMinimoFloor, Math.round(((sinalSemITBI + itbiRegistro) - proSolutoMax - descontoAtoCalc) * 100) / 100);
+      atoResidualCalc = Math.max(sinalMinimoFloor, Math.round(((sinalSemITBI + itbiRestante) - proSolutoMax - descontoAtoCalc) * 100) / 100);
 
       return { atoResidual: atoResidualCalc, descontoAto: descontoAtoCalc, baseCalculoComITBI: baseCalc, totalProSolutoMaximo: proSolutoMax };
     }
 
     // Hipótese 3: Ato < 5.000 -> Desconto de R$ 0,00 (Ex: Unidade B-603)
-    // Base Líquida com ITBI = (Preço Tabela - 0) + ITBI Total
+    // Base Líquida com ITBI = (Preço Tabela - 0) + ITBI Restante
     // Total Pró-Soluto (17,00%) = Base Líquida * 0.17
-    // Ato Imóvel = (Sinal Total + ITBI Total) - Total Pró-Soluto - Desconto Ato
-    const baseCalc = Math.round((precoTabela + itbiRegistro) * 100) / 100;
+    // Ato Imóvel = (Sinal Total + ITBI Restante) - Total Pró-Soluto - Desconto Ato
+    const baseCalc = Math.round((precoTabela + itbiRestante) * 100) / 100;
     const proSolutoMax = Math.round(baseCalc * pctMaxProSoluto * 100) / 100;
-    const atoCalc = (sinalSemITBI + itbiRegistro) - proSolutoMax;
+    const atoCalc = (sinalSemITBI + itbiRestante) - proSolutoMax;
     return {
       descontoAto: 0,
       baseCalculoComITBI: baseCalc,
@@ -550,7 +615,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     // fixo correto (base - capacidade) / 1,092, fechando alguns reais abaixo do
     // valor da planilha de referência.
     const capacidadeRendaTotalCom = (desconto: number): number => {
-      const baseCom = Math.max(0, Math.round(((precoTabela - desconto) + itbiRegistro) * 100) / 100);
+      const baseCom = Math.max(0, Math.round(((precoTabela - desconto) + itbiRestante) * 100) / 100);
       const maxRiscoPosCom = Math.round(baseCom * pctMaxPos * 100) / 100;
       return Math.min(maxRiscoPosCom, capacidadeRendaPos) + capacidadeRendaObra;
     };
@@ -565,7 +630,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     // do Ato Premiado pode mudar de faixa com o novo Ato (ex.: cruzar os
     // R$ 50.000,00), então converge em algumas voltas — mesmo padrão de
     // "ajuste fino" já usado na Hipótese 2 acima.
-    const base = sinalSemITBI + itbiRegistro;
+    const base = sinalSemITBI + itbiRestante;
     const sinalMinimoFloorRenda = params.sinalMinimo && params.sinalMinimo > 0 ? params.sinalMinimo : 0;
     let atoAjustado = porPreco.atoResidual + (porPreco.totalProSolutoMaximo - capacidadeRendaInicial);
     let descontoAjustado = porPreco.descontoAto;
@@ -576,7 +641,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
       atoAjustado = Math.round((base - capacidadeAjustada - descontoAjustado) * 100) / 100;
     }
     atoAjustado = Math.max(sinalMinimoFloorRenda, atoAjustado);
-    const baseAjustada = Math.max(0, Math.round(((precoTabela - descontoAjustado) + itbiRegistro) * 100) / 100);
+    const baseAjustada = Math.max(0, Math.round(((precoTabela - descontoAjustado) + itbiRestante) * 100) / 100);
 
     return {
       atoResidual: atoAjustado,
@@ -787,6 +852,7 @@ export function calculateMorarFlowEngine(params: MorarEngineParams): MorarEngine
     maxFluxoGeral,
     tetoPosGlobal,
     parcelaMensalITBI,
+    itbiAtoSugerido,
     mesesTotaisGeral,
     obraSeries,
     posSeries,
@@ -818,7 +884,10 @@ export function calcularSimulacaoFluxo(params: FinancialParams): SimulationResul
   const itbiRegistro = params.itbiRegistro || 0;
   const percentualRiscoImovel = params.percentualRiscoImovel !== undefined ? params.percentualRiscoImovel : 20;
   const percentualRiscoRenda = params.percentualRiscoRenda !== undefined ? params.percentualRiscoRenda : 35;
-  const prazoMeses = params.prazoMeses || 60;
+  // `!== undefined` (não `||`) para respeitar um prazo explicitamente 0 —
+  // uma política pode permitir reduzir o número de parcelas até zero, e
+  // `0 || 60` voltaria a tratar isso como o padrão de 60 meses.
+  const prazoMeses = params.prazoMeses !== undefined ? params.prazoMeses : 60;
   const pisoSinal = params.sinalMinimo !== undefined && params.sinalMinimo > 0 ? params.sinalMinimo : 2000;
 
   // 1. Taxa de juros mensal
@@ -1310,6 +1379,7 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
 
   let atoAposAntecipadas = sinalMinimoCalculado;
   let descontoAtoPremiado = 0;
+  let valorUtilizado = 0;
   let valorMensalObra = 0;
   let valorMensalObraTotal = 0;
   let valoresSemestrais: number[] = [];
@@ -1327,7 +1397,7 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     descontoAtoPremiado = (p.isAtoPremiadoEnabled && pctAtoPremiadoPM > 0)
       ? calcularDescontoAtoPremiado(atoAposAntecipadas, pctAtoPremiadoPM)
       : 0;
-    const valorUtilizado = Math.max(0, price - descontoAtoPremiado - recursos);
+    valorUtilizado = Math.max(0, price - descontoAtoPremiado - recursos);
 
     // MENSAL DE OBRA — teto rígido de % da renda (padrão 40%), usado no valor
     // cheio por padrão (nunca zerada pela parcela mínima — apenas avisada).
@@ -1397,15 +1467,49 @@ export function calcularParcelamentoMorar(p: ParcelamentoMorarParams): Parcelame
     antecipadasRestante = mensaisAntecipadas - atoAbsorvidoAntecipadas;
   }
 
+  const atoMaximoPossivel = Math.max(0, price - recursos - descontoAtoPremiado);
+  const atoEfetivo = Math.min(atoAposAntecipadas, atoMaximoPossivel);
+
+  // RATEIO PROPORCIONAL entre Mensal de Obra e Pós-Obra: até aqui, os dois vinham
+  // sempre do próprio teto individual (mensalObraCapRenda / "natural" do pós-obra,
+  // acima) — cada um tratado como se seu teto cheio estivesse sempre garantido.
+  // Nada impedia a SOMA dos dois tetos de passar do que realmente sobra do imóvel
+  // depois do Ato (já no piso mínimo, sem poder cair mais) + Semestrais + Chaves —
+  // e quando isso acontecia, o excesso simplesmente se empilhava em cima do preço
+  // (Sinal Total > Preço do imóvel, o que não existe na prática: o cliente nunca
+  // paga mais do que o imóvel custa). A correção: quando os dois tetos juntos não
+  // cabem no que sobra, os dois encolhem juntos, na MESMA proporção entre si —
+  // nunca um único bloco absorve o corte sozinho. Blocos com valor manual (o
+  // corretor digitou) ficam de fora do rateio — são tratados como fixos, e o
+  // corte (se precisar) recai só sobre o(s) bloco(s) automático(s).
+  const mensalObraIsManual = p.mensalObraValorManual !== null && p.mensalObraValorManual !== undefined;
+  const posObraIsManual = p.posObraValorManual !== null && p.posObraValorManual !== undefined;
+  const somaMaximosFlexiveis =
+    (mensalObraIsManual ? 0 : valorMensalObraTotal) + (posObraIsManual ? 0 : valorPosObraTotal);
+  const totalFixo =
+    (mensalObraIsManual ? valorMensalObraTotal : 0) + (posObraIsManual ? valorPosObraTotal : 0);
+  const disponivelFlexiveis = Math.max(0, valorUtilizado - atoEfetivo - totalSemestrais - valorChaves - totalFixo);
+  const fatorRateio = somaMaximosFlexiveis > 0
+    ? Math.min(1, disponivelFlexiveis / somaMaximosFlexiveis)
+    : 1;
+
+  if (!mensalObraIsManual) {
+    valorMensalObraTotal = valorMensalObraTotal * fatorRateio;
+    valorMensalObra = nMensaisObra > 0 ? valorMensalObraTotal / nMensaisObra : 0;
+  }
+  if (!posObraIsManual) {
+    valorPosObraTotal = valorPosObraTotal * fatorRateio;
+    valorPosObraParcela = qtdParcelasPosObra > 0 ? valorPosObraTotal / qtdParcelasPosObra : 0;
+  }
+
   // Antecipadas que não couberam no abatimento do Ato (raro: Ato já no piso
-  // mínimo) reduzem o total das Mensais de Obra.
+  // mínimo) reduzem o total das Mensais de Obra — depois do rateio acima, para
+  // não distorcer a proporção entre Mensal de Obra e Pós-Obra.
   if (antecipadasRestante > 0) {
     valorMensalObraTotal = Math.max(0, valorMensalObraTotal - antecipadasRestante);
     valorMensalObra = nMensaisObra > 0 ? valorMensalObraTotal / nMensaisObra : 0;
   }
 
-  const atoMaximoPossivel = Math.max(0, price - recursos - descontoAtoPremiado);
-  const atoEfetivo = Math.min(atoAposAntecipadas, atoMaximoPossivel);
   const saldoAPagarDireto = valorMensalObraTotal + totalSemestrais + valorChaves + valorPosObraTotal;
 
   const abaixoParcelaMinimaMensalObra = nMensaisObra > 0 && valorMensalObra > 0 && valorMensalObra < parcelaMinimaMensalObra - 0.005;
