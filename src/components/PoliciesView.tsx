@@ -98,6 +98,10 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
   // String states for flexible decimal and numeric inputs (accepts both ',' and '.')
   const [numParcelasStr, setNumParcelasStr] = useState<string>('72');
+  // Menor "Qtd. Mensais" que o corretor pode digitar na ficha — padrão 1
+  // (comportamento histórico); pode ser reduzida até 0 para permitir quitar o
+  // Pró-Soluto inteiro no Ato quando não há mais parcelas.
+  const [parcelasMinimasStr, setParcelasMinimasStr] = useState<string>('1');
   const [sinalMinimo, setSinalMinimo] = useState<string>('R$ 2.000,00');
   const [riscoRendaStr, setRiscoRendaStr] = useState<string>('30,0');
   const [riscoImovelStr, setRiscoImovelStr] = useState<string>('25,0');
@@ -305,6 +309,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     const isMorar = condKind === 'sinal-morar';
     const isParcelamentoMorar = condKind === 'parcelamento-morar';
     const numP = source.numParcelas !== undefined ? source.numParcelas : 72;
+    const parcelasMin = source.parcelasMinimas !== undefined ? source.parcelasMinimas : 1;
     const rr = source.riscoRendaPct !== undefined ? source.riscoRendaPct : (isParcelamentoMorar ? 40 : 30);
     const ri = source.percMaxProSolutoGlobal !== undefined
       ? source.percMaxProSolutoGlobal
@@ -364,6 +369,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     setEditingFase(fase);
 
     setNumParcelasStr(String(numP));
+    setParcelasMinimasStr(String(parcelasMin));
     setSinalMinimo(formattedSinal);
     setRiscoRendaStr(formatDecimalBR(rr, 1, 2));
     setRiscoImovelStr(formatDecimalBR(ri, 1, 2));
@@ -408,6 +414,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
   // Dynamic parsed numeric values for live calculations
   const numParcelas = parseIntFlexible(numParcelasStr, 1);
+  // Piso 0 é um valor válido (permite ao corretor zerar a Qtd. Mensais na
+  // ficha) — não cai de volta para 1 como um valor "inválido".
+  const parcelasMinimas = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
   const riscoRendaPct = parseDecimal(riscoRendaStr, 30);
   const riscoImovelPct = parseDecimal(riscoImovelStr, 25);
   const riscoPosPct = parseDecimal(riscoPosStr, 8);
@@ -473,6 +482,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     return {
       numParcelas: isCurrentMorar ? totalMesesMorar : numParcelas,
+      parcelasMinimas,
       sinalMinimo: formattedCurrentSinal,
       riscoRendaPct,
       riscoImovelPct,
@@ -621,6 +631,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       id: newCondId,
       name: trimmedName,
       numParcelas: 72,
+      parcelasMinimas: 1,
       sinalMinimo: 'R$ 2.000,00',
       riscoRendaPct: isNewParcelamentoMorar ? 40 : 30,
       riscoImovelPct: 25,
@@ -689,6 +700,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     // Coleta o estado completo e normaliza os inputs decimais e inteiros
     const parsedNumParcelas = Math.max(0, parseIntFlexible(numParcelasStr, 72));
+    const parsedParcelasMinimas = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
     const parsedSinalMinimoNum = resolveSinalMinimo(sinalMinimo);
     const formattedSinalMinimo = formatCurrency(parsedSinalMinimoNum);
     const parsedRiscoRenda = parseDecimal(riscoRendaStr, 30);
@@ -737,6 +749,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     // Atualiza a formatação visual dos inputs ao salvar
     setNumParcelasStr(String(isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas));
+    setParcelasMinimasStr(String(parsedParcelasMinimas));
     setSinalMinimo(formattedSinalMinimo);
     setRiscoRendaStr(formatDecimalBR(parsedRiscoRenda, 1, 2));
     setRiscoImovelStr(formatDecimalBR(parsedRiscoImovel, 1, 2));
@@ -777,6 +790,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     const savedParams: Partial<CommercialCondition> = {
       numParcelas: isCurrentMorar ? (parsedMesesObra + parsedMesesPos) : parsedNumParcelas,
+      parcelasMinimas: parsedParcelasMinimas,
       sinalMinimo: formattedSinalMinimo,
       riscoRendaPct: parsedRiscoRenda,
       riscoImovelPct: parsedRiscoImovel,
@@ -1894,6 +1908,29 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         onBlur={() => {
                           const val = Math.max(0, parseIntFlexible(numParcelasStr, 72));
                           setNumParcelasStr(String(val));
+                        }}
+                        className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
+                      />
+                      <span className="absolute right-3 font-extrabold text-slate-500 text-xs pointer-events-none">X</span>
+                    </div>
+                  </div>
+
+                  {/* PARCELAS MÍNIMAS: menor "Qtd. Mensais" que o corretor pode digitar na
+                      ficha (padrão 1, comportamento histórico); reduzir até 0 permite quitar
+                      o Pró-Soluto inteiro no Ato quando não sobra mais parcela nenhuma. */}
+                  <div className="lg:col-span-2">
+                    <label className="block font-semibold text-slate-700 mb-1 truncate" title="Menor quantidade de parcelas que o corretor pode digitar na ficha (0 permite quitar tudo no Ato)">
+                      Parcelas Mín.
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={parcelasMinimasStr}
+                        onChange={(e) => setParcelasMinimasStr(e.target.value)}
+                        onBlur={() => {
+                          const val = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
+                          setParcelasMinimasStr(String(val));
                         }}
                         className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
                       />

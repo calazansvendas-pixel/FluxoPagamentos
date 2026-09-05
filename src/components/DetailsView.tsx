@@ -84,6 +84,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const prazoFaixa1 = Number(currentCond?.mesesTabela1) || 0;
   const prazoFaixa2 = Number(currentCond?.mesesTabela2) || 0;
   const limiteMaximoParcelas = Math.max(prazoFaixa1, prazoFaixa2, condNumParcelas, 1);
+  // Menor "Qtd. Mensais" que o corretor pode digitar nesta ficha — vem da
+  // política de crédito da condição (padrão 1, comportamento histórico); pode
+  // ser reduzida a 0 para permitir quitar o Pró-Soluto inteiro no Ato.
+  const parcelasMinimasCond = currentCond?.parcelasMinimas !== undefined
+    ? Math.max(0, Number(currentCond.parcelasMinimas))
+    : 1;
 
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
@@ -734,6 +740,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         })
     : [];
 
+  // ITBI ainda não alocado para "Pagamento ITBI no Ato" — precisa vir ANTES do
+  // laço iterativo abaixo: o piso do Ato (Imóvel) daquele laço usa este saldo
+  // (nunca o ITBI cheio) para não pedir, no Ato, um ITBI que o corretor já
+  // separou no campo dedicado (ver comentário completo mais abaixo, onde
+  // despCartoriasEfetivas usa o mesmo saldoITBI).
+  const valorTotalITBI = isPagamentoAVistaAtivoManual ? 0 : despCartorias;
+  const atoITBIValidado = Math.min(valAtoITBI, valorTotalITBI);
+  const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
+
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
     currentProd,
@@ -771,11 +786,16 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // c) Sinal Total s/ ITBI = GAP Inicial - atoPremiadoAtual
       sinalTotalSemITBI = Math.max(0, gapInicial - atoPremiadoAtual);
 
-      // d) Sinal Total c/ ITBI = (Sinal Total s/ ITBI) + Despesas Cartorárias e ITBI
-      sinalTotalComITBI = sinalTotalSemITBI + despCartorias;
+      // d) Sinal Total c/ ITBI = (Sinal Total s/ ITBI) + ITBI/Despesas Cartorárias AINDA NÃO
+      // alocadas para "Pagamento ITBI no Ato" (saldoITBI, não despCartorias cheio) — a parte que
+      // o corretor já separou naquele campo não precisa de proteção nenhuma aqui, ela já está
+      // paga; usar o ITBI cheio pediria, no piso do Ato (Imóvel), um ITBI que já está coberto em
+      // outro campo, contando o mesmo ITBI duas vezes. Sem nada digitado em "ITBI no Ato",
+      // saldoITBI === despCartorias e esta conta fica idêntica à de antes.
+      sinalTotalComITBI = sinalTotalSemITBI + saldoITBI;
 
-      // e) Base Risco Imóvel = (MAX(Preço Tabela, Avaliação Banco) + ITBI) - atoPremiadoAtual
-      baseRiscoImovel = Math.max(0, (maxPriceEval + despCartorias) - atoPremiadoAtual);
+      // e) Base Risco Imóvel = (MAX(Preço Tabela, Avaliação Banco) + ITBI restante) - atoPremiadoAtual
+      baseRiscoImovel = Math.max(0, (maxPriceEval + saldoITBI) - atoPremiadoAtual);
 
       // e) Valor Risco Imóvel = Base Risco Imóvel * (% Risco Imóvel);
       valorRiscoImovel = baseRiscoImovel * riscoImovelPctDec;
@@ -808,8 +828,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       // continuam sobre o valor cheio; só o Ato final é que sai líquido dela.
       pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido - comissaoIteracaoAtual);
 
-      // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido - Comissão
-      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido - comissaoIteracaoAtual);
+      // Ato Bruto Apurado = (Sinal Total c/ ITBI restante antes do desconto) - Pró-Soluto Líquido - Comissão
+      const atoBrutoCalculado = Math.max(0, (gapInicial + saldoITBI) - proSolutoLiquido - comissaoIteracaoAtual);
 
       // j) novoAtoPremiado = pct do Pagamento Ato (Sinal Efetivo) caso o Ato Bruto seja >= 5000
       // pct vem da política do empreendimento (currentCond.atoPremiadoPct); ausente → 10%
@@ -831,7 +851,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     if (pagamentoAtoSinalEfetivo < sinalMinimoVal) {
       pagamentoAtoSinalEfetivo = sinalMinimoVal;
       atoPremiadoAtual = 0; // Regra dos 10% não se aplica se não atingir 5k
-      const baseDividaTotal = gapInicial + despCartorias;
+      const baseDividaTotal = gapInicial + saldoITBI;
       riscoMaximoApuradoBruto = Math.max(0, baseDividaTotal - pagamentoAtoSinalEfetivo);
       taxaBancaria = riscoMaximoApuradoBruto * (taxaAssinaturaContratoPct / 100);
       proSolutoLiquido = riscoMaximoApuradoBruto - taxaBancaria;
@@ -965,15 +985,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   }
 
-  // 3. REGRA ISOLADA PARA DESPESAS CARTORÁRIAS & ITBI:
+  // 3. REGRA ISOLADA PARA DESPESAS CARTORÁRIAS & ITBI (calculada aqui embaixo,
+  // logo antes de ser usada no laço iterativo abaixo — ver mais acima, perto de
+  // "gapInicial", onde despCartorias é definida):
   // O saldo de ITBI e Despesas Cartorárias NUNCA deve ser amortizado pelo excedente do Pagamento do Ato.
   // O ITBI/Despesas só é reduzido/abatido se o usuário preencher expressamente o campo "PAGAMENTO ITBI NO ATO".
   // Exceção: o botão "Pgtº à vista" zera o ITBI (fica por conta do cliente a
   // partir do Habite-se) — o botão "Parcelado/À Vista" mais simples nunca
   // mexe nisso, deixa o ITBI em aberto normalmente.
-  const valorTotalITBI = isPagamentoAVistaAtivoManual ? 0 : despCartorias;
-  const atoITBIValidado = Math.min(valAtoITBI, valorTotalITBI);
-  const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
   const despCartoriasEfetivas = saldoITBI;
 
   // Base Líquida c/ ITBI da Operação
@@ -2476,13 +2495,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   <div className="relative flex items-center justify-center">
                     <input
                       type="number"
-                      value={qtdMensais > 0 ? qtdMensais : ''}
-                      min="1"
+                      value={(qtdMensais > 0 || (qtdMensais === 0 && parcelasMinimasCond === 0)) ? qtdMensais : ''}
+                      min={parcelasMinimasCond}
                       max={limiteMaximoParcelas}
                       onChange={(e) => {
                         const rawVal = e.target.value;
                         if (rawVal === '') {
-                          setQtdMensais(0);
+                          setQtdMensais(parcelasMinimasCond === 0 ? 0 : parcelasMinimasCond);
                           return;
                         }
                         const val = parseInt(rawVal, 10);
@@ -2493,15 +2512,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                           alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
                           return;
                         }
-                        if (val < 1) {
-                          setQtdMensais(1);
+                        if (val < parcelasMinimasCond) {
+                          setQtdMensais(parcelasMinimasCond);
                           return;
                         }
                         setQtdMensais(val);
                       }}
                       onBlur={() => {
-                        if (!qtdMensais || qtdMensais < 1) {
-                          setQtdMensais(1);
+                        if (qtdMensais < parcelasMinimasCond) {
+                          setQtdMensais(parcelasMinimasCond);
                         } else if (qtdMensais > limiteMaximoParcelas) {
                           setQtdMensais(limiteMaximoParcelas);
                           alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);

@@ -2,6 +2,12 @@ export interface CommercialCondition {
   id: string;
   name: string;
   numParcelas: number;
+  // Menor quantidade de parcelas que o corretor pode digitar em "Qtd. Mensais"
+  // na ficha (Sinal c/ Banco Direto e Sinal c/ Banco Direto Comissão Apartada).
+  // Padrão 1 (comportamento histórico); a política pode reduzir até 0, caso em
+  // que o Pró-Soluto inteiro (mensal + ITBI ainda não alocado) precisa ser
+  // pago no Ato — não há mais parcela nenhuma para carregá-lo.
+  parcelasMinimas?: number;
   sinalMinimo: string;
   riscoRendaPct: number;
   riscoImovelPct: number;
