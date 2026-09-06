@@ -21,11 +21,6 @@ export interface FluxoEntradaConstrutoraProps {
   // onde existe Pró-Soluto parcelado a ser trazido inteiro para o Ato).
   isAVistaActive?: boolean;
   onToggleAVista?: (ativo: boolean) => void;
-  // Comissão Apartada (opcional — só usada nas condições em que a comissão é
-  // paga à parte, fora do Ato). Já vem líquida do que o Ato (Imóvel) acima
-  // exibe: mostrada aqui só pra deixar visível pro corretor que esse valor
-  // existe e não está embutido no Ato.
-  comissaoApartadaValor?: number;
 
   // Card 2: ITBI no Ato (opcional — condições sem ITBI/registro, como o
   // Parcelamento Morar, escondem este card e usam grade de 2 colunas)
@@ -61,7 +56,6 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
   onShowToast,
   isAVistaActive = false,
   onToggleAVista,
-  comissaoApartadaValor = 0,
   hideITBI = false,
   valAtoITBI = 0,
   valorTotalITBI = 0,
@@ -273,11 +267,6 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
               placeholder={valorAtoMinimo > 0 ? formatCurrency(valorAtoMinimo) : 'R$ 0,00'}
               className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
             />
-            {comissaoApartadaValor > 0 && (
-              <p className="mt-1 text-[9px] text-fuchsia-700 font-semibold text-center whitespace-nowrap" title="Comissão paga à parte pela construtora — não está incluída no Ato (Imóvel) acima.">
-                + {formatCurrency(comissaoApartadaValor)} de comissão (paga à parte)
-              </p>
-            )}
           </div>
 
           {/* CARD 2: ITBI NO ATO (oculto quando esta condição não usa ITBI/registro) */}

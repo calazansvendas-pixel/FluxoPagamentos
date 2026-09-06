@@ -2180,7 +2180,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             valorAto={isParcelamentoMorar ? pm.atoEfetivo : atoAposMensais}
             valorAtoMinimo={isParcelamentoMorar ? pm.sinalMinimoCalculado : atoMinimoCalculado}
             valorAtoMaximo={isParcelamentoMorar ? pm.atoMaximoPossivel : atoMaximoPossivel}
-            comissaoApartadaValor={isComissaoApartada ? comissaoApartadaValor : 0}
             onAtoChange={(novoVal) => {
               setValAtoManual(novoVal);
             }}
