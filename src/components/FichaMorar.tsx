@@ -1317,6 +1317,39 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     const proSolutoGlobalParam = currentCond?.percMaxProSolutoGlobal ?? currentCond?.riscoImovelPct ?? 17.0;
     const posObraGlobalParam = currentCond?.percMaxPosObra ?? currentCond?.riscoPosPct ?? 8.0;
 
+    // Se o Ato (Imóvel) exibido agora já destoa da sugestão automática atual
+    // (antes de qualquer coisa mudar aqui), é porque o CORRETOR digitou aquele
+    // valor de propósito — é o "sinal" que o cliente dele topou dar, então
+    // mudar a Qtd. Meses não pode mais apagá-lo com uma sugestão nova. Nesse
+    // caso o valor digitado é passado ao motor como piso (nunca reduzido, só
+    // elevado se a política de crédito exigir mais com o novo prazo — ver
+    // calculateMorarFlowEngine). Sem isso, valAtoManual mesmo não-nulo ainda é
+    // só a sugestão automática pinada por uma recalculagem anterior, livre
+    // para ser substituída de novo.
+    const atoFoiDigitadoPeloUsuario = valAtoManual !== null && Math.abs(valAtoManual - atoSugeridoResidual) >= 0.01;
+    const atoManualParam = atoFoiDigitadoPeloUsuario ? valAtoManual : undefined;
+
+    // Aplica o resultado do motor no Ato (Imóvel): se o corretor não tinha
+    // digitado nada, aceita a sugestão livremente, como sempre. Se tinha, só
+    // atualiza quando o motor precisou elevá-lo (piso da política) — nunca
+    // quando ele bateria exatamente no valor já digitado, preservando o
+    // sinal do corretor sem sobrescrevê-lo à toa.
+    const aplicarAtoResultante = (atoResidual: number) => {
+      if (!atoFoiDigitadoPeloUsuario) {
+        setValAtoManual(atoResidual);
+        setAtoInputText(formatCurrency(atoResidual));
+        return;
+      }
+      if (atoResidual > (valAtoManual as number) + 0.005) {
+        setValAtoManual(atoResidual);
+        setAtoInputText(formatCurrency(atoResidual));
+        if (onShowToast) {
+          onShowToast(`O Ato (Imóvel) digitado precisou subir para ${formatCurrency(atoResidual)}: com o novo prazo, o piso exigido pela política de crédito é maior.`);
+        }
+      }
+      // Senão, mantém o valor digitado como está — não mexe em valAtoManual/atoInputText.
+    };
+
     // Regra 1: Se o usuário reduziu os meses de Obra abaixo do padrão da política:
     if (novoTotalObra < mesesObraPadraoPolitica) {
       // 1. Zerar o período de Pós-Obra
@@ -1340,7 +1373,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: itbiAtoManualFloor ?? 0,
-        isAtoPremiadoEnabled
+        isAtoPremiadoEnabled,
+        atoManual: atoManualParam
       });
 
       const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1353,8 +1387,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
       setFaixasObra(mObraArr);
       setFaixasPos(mPosArr);
-      setValAtoManual(engineResult.atoResidual);
-      setAtoInputText(formatCurrency(engineResult.atoResidual));
+      aplicarAtoResultante(engineResult.atoResidual);
       setItbiObraValorManual(engineResult.parcelaMensalITBI);
       setItbiPosValorManual(0);
       // Prazo curto pode fazer o ITBI/mês furar o teto de renda do balde — o
@@ -1394,7 +1427,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: itbiAtoManualFloor ?? 0,
-        isAtoPremiadoEnabled
+        isAtoPremiadoEnabled,
+        atoManual: atoManualParam
       });
 
       const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1402,8 +1436,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
       setFaixasObra(mObraArr);
       setFaixasPos(mPosArr);
-      setValAtoManual(engineResult.atoResidual);
-      setAtoInputText(formatCurrency(engineResult.atoResidual));
+      aplicarAtoResultante(engineResult.atoResidual);
       setItbiObraValorManual(engineResult.parcelaMensalITBI);
       setItbiPosValorManual(engineResult.parcelaMensalITBI);
       setValAtoITBI(engineResult.itbiAtoSugerido);
@@ -1435,6 +1468,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
     const mesesObraAtual = totalParcObra > 0 ? totalParcObra : mesesObraPadraoPolitica;
 
+    // Mesma regra de recalcularFluxoObraMeses: um Ato (Imóvel) que já destoa
+    // da sugestão automática atual foi digitado de propósito pelo corretor —
+    // preserva esse valor (só o motor pode elevá-lo, se a política exigir).
+    const atoFoiDigitadoPeloUsuario = valAtoManual !== null && Math.abs(valAtoManual - atoSugeridoResidual) >= 0.01;
+    const atoManualParam = atoFoiDigitadoPeloUsuario ? valAtoManual : undefined;
+
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
 
@@ -1455,7 +1494,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       sinalMinimo: sinalMinimoVal,
       atoITBI: itbiAtoManualFloor ?? 0,
       isAtoPremiadoEnabled,
-      atoPremiadoPct: pctAtoPremiadoCond
+      atoPremiadoPct: pctAtoPremiadoCond,
+      atoManual: atoManualParam
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1465,8 +1505,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
     setFaixasObra(mObraArr);
     setFaixasPos(mPosArr);
-    setValAtoManual(engineResult.atoResidual);
-    setAtoInputText(formatCurrency(engineResult.atoResidual));
+    if (!atoFoiDigitadoPeloUsuario) {
+      setValAtoManual(engineResult.atoResidual);
+      setAtoInputText(formatCurrency(engineResult.atoResidual));
+    } else if (engineResult.atoResidual > (valAtoManual as number) + 0.005) {
+      setValAtoManual(engineResult.atoResidual);
+      setAtoInputText(formatCurrency(engineResult.atoResidual));
+      if (onShowToast) {
+        onShowToast(`O Ato (Imóvel) digitado precisou subir para ${formatCurrency(engineResult.atoResidual)}: com o novo prazo, o piso exigido pela política de crédito é maior.`);
+      }
+    }
     setItbiObraValorManual(engineResult.parcelaMensalITBI);
     setItbiPosValorManual(novoTotalPos > 0 ? engineResult.parcelaMensalITBI : 0);
     // Sempre sincroniza com a sugestão fresca do motor (nunca abaixo do piso
