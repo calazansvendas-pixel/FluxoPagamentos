@@ -415,8 +415,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   // Dynamic parsed numeric values for live calculations
   const numParcelas = parseIntFlexible(numParcelasStr, 1);
   // Piso 0 é um valor válido (permite ao corretor zerar a Qtd. Mensais na
-  // ficha) — não cai de volta para 1 como um valor "inválido".
-  const parcelasMinimas = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
+  // ficha) — não cai de volta para 1 como um valor "inválido". Nunca pode
+  // passar do "Nº Parcelas": um piso maior que o próprio teto não faz sentido.
+  const parcelasMinimas = Math.min(numParcelas, Math.max(0, parseIntFlexible(parcelasMinimasStr, 1)));
   const riscoRendaPct = parseDecimal(riscoRendaStr, 30);
   const riscoImovelPct = parseDecimal(riscoImovelStr, 25);
   const riscoPosPct = parseDecimal(riscoPosStr, 8);
@@ -700,7 +701,8 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     // Coleta o estado completo e normaliza os inputs decimais e inteiros
     const parsedNumParcelas = Math.max(0, parseIntFlexible(numParcelasStr, 72));
-    const parsedParcelasMinimas = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
+    // Nunca pode passar do "Nº Parcelas": um piso maior que o próprio teto não faz sentido.
+    const parsedParcelasMinimas = Math.min(parsedNumParcelas, Math.max(0, parseIntFlexible(parcelasMinimasStr, 1)));
     const parsedSinalMinimoNum = resolveSinalMinimo(sinalMinimo);
     const formattedSinalMinimo = formatCurrency(parsedSinalMinimoNum);
     const parsedRiscoRenda = parseDecimal(riscoRendaStr, 30);
@@ -1908,6 +1910,14 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         onBlur={() => {
                           const val = Math.max(0, parseIntFlexible(numParcelasStr, 72));
                           setNumParcelasStr(String(val));
+                          // Se o Nº Parcelas caiu abaixo do piso já configurado em
+                          // "Parcelas Mín.", o piso desce junto — nunca pode ficar
+                          // maior que o próprio teto.
+                          const pisoAtual = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
+                          if (pisoAtual > val) {
+                            setParcelasMinimasStr(String(val));
+                            onShowToast(`Parcelas Mín. ajustado para ${val}x para não passar do novo Nº Parcelas.`);
+                          }
                         }}
                         className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
                       />
@@ -1930,7 +1940,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         onChange={(e) => setParcelasMinimasStr(e.target.value)}
                         onBlur={() => {
                           const val = Math.max(0, parseIntFlexible(parcelasMinimasStr, 1));
-                          setParcelasMinimasStr(String(val));
+                          if (val > numParcelas) {
+                            setParcelasMinimasStr(String(numParcelas));
+                            onShowToast(`Parcelas Mín. não pode passar do Nº Parcelas (${numParcelas}x). Ajustado.`);
+                          } else {
+                            setParcelasMinimasStr(String(val));
+                          }
                         }}
                         className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
                       />
