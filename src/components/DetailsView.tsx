@@ -3,7 +3,7 @@ import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Bu
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, resolverTetoAtoComDescontoEComissao, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
 import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
 import { pdfPermissoesService } from '../services/pdfPermissoesService';
@@ -969,8 +969,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const baseAVista = hasUnitSelected
     ? Math.max(0, precoTabelaOriginal - (maxFinanc + subsidy + fgts) - somaMensais)
     : 0;
+  // Comissão Apartada é paga por fora do contrato — quem escolhe "Pgtº à
+  // vista" também não deve embutir esse valor no Ato, senão o cliente estaria
+  // cobrindo a comissão sem ela aparecer separada em lugar nenhum. Mesmo ponto
+  // fixo de cima, só que agora também descontando a comissão (ver
+  // resolverTetoAtoComDescontoEComissao) — em condições que não são Comissão
+  // Apartada, cai exatamente no comportamento de antes.
   const atoAposMensaisAVistaTarget = hasUnitSelected
-    ? resolverTetoAtoComDesconto(baseAVista, isAtoPremiadoEnabled, pctAtoPremiadoCond)
+    ? resolverTetoAtoComDescontoEComissao(baseAVista, isAtoPremiadoEnabled, pctAtoPremiadoCond, isComissaoApartada, pctComissaoApartadaCond, precoTabelaOriginal)
     : 0;
   // valAtoManual é o Ato ANTES da absorção das mensais (mesma convenção já usada pelo
   // onAtoChange existente do FluxoEntradaConstrutora), então somamos de volta.
@@ -988,8 +994,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // conseguia lançar no Ato o valor do Ato Premiado A MAIS do que realmente
   // devia — o Pró-Soluto era clampado em R$ 0,00 e a diferença sumia da tela.
   // Mesma abordagem já usada na ficha "Sinal c/ Morar" (FichaMorar.tsx).
+  // Mesmo motivo do atoAposMensaisAVistaTarget acima: numa Comissão Apartada,
+  // esse teto (o maior Ato digitável à mão) também precisa deixar espaço pra
+  // comissão — senão o corretor consegue digitar um Ato que estoura o que
+  // sobra pra pagar o corretor à parte.
   const atoMaximoPossivel = hasUnitSelected
-    ? resolverTetoAtoComDesconto(Math.max(0, price - subsidy), isAtoPremiadoEnabled, pctAtoPremiadoCond)
+    ? resolverTetoAtoComDescontoEComissao(Math.max(0, price - subsidy), isAtoPremiadoEnabled, pctAtoPremiadoCond, isComissaoApartada, pctComissaoApartadaCond, precoTabelaOriginal)
     : 0;
 
   const atoImovelDigitadoBruto = (valAtoManual !== null && valAtoManual >= atoMinimoCalculado)
@@ -1112,16 +1122,38 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // (e, por tabela, a parcela, reconstruída a partir dele mais abaixo em baseCalculoParcela)
   // pelo valor cheio da comissão. Em qualquer condição que não seja "Comissão Apartada",
   // comissaoApartadaValor é sempre 0, então esta linha fica idêntica ao comportamento de antes.
-  const proSolutoSinalRestante = hasUnitSelected
+  const proSolutoSinalRestanteSemTravaParcela = hasUnitSelected
     ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d - comissaoApartadaValor)
     : 0;
-  const proSoluto = proSolutoSinalRestante;
 
   // 2. PRÓ-SOLUTO TOTAL C/ ITBI (RISCO MÁX):
   // Isole e utilize o saldo devedor restante das despesas de ITBI/Cartório:
   // ITBI_Restante = Math.max(0, DespesasCartorariasTotal - PagamentoITBINoAto)
   // ProSolutoTotalComITBI = ProSolutoSinalRestante + ITBI_Restante
   const itbiRestante = saldoITBI;
+  const proSolutoTotalParceladoSemTravaParcela = hasUnitSelected
+    ? Math.max(0, proSolutoSinalRestanteSemTravaParcela + itbiRestante)
+    : 0;
+
+  // TRAVA DA PARCELA NO TETO DE RISCO (o mesmo riscoMaximoApuradoBruto usado
+  // acima para sugerir o Ato — min(25% do imóvel, X% da renda presente-valorado)):
+  // sem isso, a 1ª parcela do Pró-Soluto/Banco Direto podia ultrapassar o teto,
+  // porque proSolutoSinalRestante é reconstruído aqui por uma conta separada
+  // (Sinal Total - Ato - Mensais - Comissão) que não fica presa a esse teto. O
+  // que não couber migra pro Ato (Imóvel): o cliente traz mais na entrada em
+  // vez de financiar acima do que a política permite.
+  const baseCalculoParcelaSemTravaParcela = taxaAssinaturaContratoPct < 100
+    ? proSolutoTotalParceladoSemTravaParcela / (1 - taxaAssinaturaContratoPct / 100)
+    : proSolutoTotalParceladoSemTravaParcela;
+  const excessoRiscoParcela = (hasUnitSelected && riscoMaximoApuradoBruto > 0)
+    ? Math.max(0, baseCalculoParcelaSemTravaParcela - riscoMaximoApuradoBruto)
+    : 0;
+  const fatorLiquidoTaxaAssinatura = taxaAssinaturaContratoPct < 100 ? (1 - taxaAssinaturaContratoPct / 100) : 1;
+  const extraAtoPorTravaParcela = Math.round(excessoRiscoParcela * fatorLiquidoTaxaAssinatura * 100) / 100;
+
+  atoAposMensais += extraAtoPorTravaParcela;
+  const proSolutoSinalRestante = Math.max(0, proSolutoSinalRestanteSemTravaParcela - extraAtoPorTravaParcela);
+  const proSoluto = proSolutoSinalRestante;
   const proSolutoTotalParcelado = hasUnitSelected
     ? Math.max(0, proSolutoSinalRestante + itbiRestante)
     : 0;
@@ -2148,6 +2180,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             valorAto={isParcelamentoMorar ? pm.atoEfetivo : atoAposMensais}
             valorAtoMinimo={isParcelamentoMorar ? pm.sinalMinimoCalculado : atoMinimoCalculado}
             valorAtoMaximo={isParcelamentoMorar ? pm.atoMaximoPossivel : atoMaximoPossivel}
+            comissaoApartadaValor={isComissaoApartada ? comissaoApartadaValor : 0}
             onAtoChange={(novoVal) => {
               setValAtoManual(novoVal);
             }}

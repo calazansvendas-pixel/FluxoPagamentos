@@ -231,6 +231,47 @@ export function resolverTetoAtoComDesconto(base: number, isAtoPremiadoEnabled: b
   return Math.max(0, Math.round(baseValida * 100) / 100);
 }
 
+/**
+ * Mesmo ponto fixo de resolverTetoAtoComDesconto, mas também descontando a
+ * Comissão Apartada quando a condição comercial for essa: ato* = base -
+ * calcularDescontoAtoPremiado(ato*) - comissao(ato*), onde comissao(ato*) =
+ * (precoTabela - calcularDescontoAtoPremiado(ato*)) * pctComissaoApartada —
+ * a MESMA fórmula usada no restante do fluxo (ver comissaoApartadaValor em
+ * DetailsView.tsx). Sem comissão apartada, cai exatamente no comportamento de
+ * resolverTetoAtoComDesconto (a malha converge em 1 volta, com comissaoAtual = 0).
+ * Usado nos pontos que hoje resolvem "o Ato que quita tudo de uma vez" (botão
+ * "Pgtº à vista" e o teto de um Ato digitado manualmente) — sem isso, esses
+ * caminhos deixavam a comissão embutida no Ato em vez de descontada dele.
+ */
+export function resolverTetoAtoComDescontoEComissao(
+  baseSemComissao: number,
+  isAtoPremiadoEnabled: boolean,
+  pctAtoPremiado: number,
+  isComissaoApartada: boolean,
+  pctComissaoApartada: number,
+  precoTabela: number
+): number {
+  if (!isComissaoApartada || !(pctComissaoApartada > 0)) {
+    return resolverTetoAtoComDesconto(baseSemComissao, isAtoPremiadoEnabled, pctAtoPremiado);
+  }
+
+  let comissaoAtual = 0;
+  let resultado = 0;
+  for (let i = 0; i < 100; i++) {
+    const baseAjustada = Math.max(0, baseSemComissao - comissaoAtual);
+    resultado = resolverTetoAtoComDesconto(baseAjustada, isAtoPremiadoEnabled, pctAtoPremiado);
+    const descontoAtoAtual = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(resultado, pctAtoPremiado) : 0;
+    const novaComissao = Math.max(0, Math.round((precoTabela - descontoAtoAtual) * pctComissaoApartada * 100) / 100);
+    if (Math.abs(novaComissao - comissaoAtual) < 0.0001) {
+      comissaoAtual = novaComissao;
+      break;
+    }
+    comissaoAtual = novaComissao;
+  }
+
+  return resultado;
+}
+
 export interface MorarMonthsDecomposition {
   obra: number[];
   pos: number[];
