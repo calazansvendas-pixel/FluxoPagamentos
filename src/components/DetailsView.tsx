@@ -1116,21 +1116,29 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     : 0;
 
   // 3. REGRA DE DEDUÇÃO NO PRÓ-SOLUTO (SINAL RESTANTE):
-  // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - 1ª Mensal - 2ª Mensal
-  // - Comissão Apartada (Nota: o descontoAto já foi deduzido diretamente na formação do
-  // sinalTotal). A Comissão Apartada é paga por fora do contrato — reduz o Pró-Soluto
-  // (e, por tabela, a parcela, reconstruída a partir dele mais abaixo em baseCalculoParcela)
-  // pelo valor cheio da comissão. Em qualquer condição que não seja "Comissão Apartada",
-  // comissaoApartadaValor é sempre 0, então esta linha fica idêntica ao comportamento de antes.
+  // Pró-Soluto (Sinal Restante) = proSolutoLiquido (já resolvido lá em cima,
+  // no laço de convergência do Ato — já líquido de Ato, Comissão Apartada e
+  // Taxa Bancária/Assinatura de Contrato) menos o que ainda falta abater das
+  // Mensais 30d/60d que não coube no Ato (saldoParaAbater), menos o ITBI que
+  // continua parcelável (itbiRestante, abaixo).
+  //
+  // Antes, essa conta era refeita do zero a partir de Sinal Total - Ato -
+  // Mensais - Comissão. Isso bate exatamente com proSolutoLiquido enquanto o
+  // Ato vem do próprio laço — mas diverge sempre que a TRAVA DO ATO MÍNIMO
+  // (piso da política) entra em ação: ali o Ato é fixado no piso em vez de vir
+  // do laço, e a Taxa Bancária (que o laço já tinha descontado de
+  // proSolutoLiquido) não estava sendo descontada de novo nessa reconstrução —
+  // inflando a base da parcela por exatamente o valor da Taxa Bancária, e
+  // empurrando esse tanto pro Ato à toa quando a trava de risco da parcela
+  // (mais abaixo) comparava com o teto. Usar proSolutoLiquido direto elimina
+  // essa divergência nos dois casos (piso ativo ou não).
+  const itbiRestante = saldoITBI;
   const proSolutoSinalRestanteSemTravaParcela = hasUnitSelected
-    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d - comissaoApartadaValor)
+    ? Math.max(0, proSolutoLiquido - saldoParaAbater - itbiRestante)
     : 0;
 
   // 2. PRÓ-SOLUTO TOTAL C/ ITBI (RISCO MÁX):
-  // Isole e utilize o saldo devedor restante das despesas de ITBI/Cartório:
-  // ITBI_Restante = Math.max(0, DespesasCartorariasTotal - PagamentoITBINoAto)
   // ProSolutoTotalComITBI = ProSolutoSinalRestante + ITBI_Restante
-  const itbiRestante = saldoITBI;
   const proSolutoTotalParceladoSemTravaParcela = hasUnitSelected
     ? Math.max(0, proSolutoSinalRestanteSemTravaParcela + itbiRestante)
     : 0;
