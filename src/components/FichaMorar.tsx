@@ -834,13 +834,26 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
   // TOTALIZADOR DISTRIBUÍDO EM TEMPO REAL
   // Distribuído = Ato (Imóvel) + Desconto Ato + ITBI no Ato + Parcelas Líquidas da Construtora + ITBI Parcelado Total
-  const totalDistribuido = Math.round(
+  //
+  // O corretor nunca deve ver aqui uma sobra de centavos pra resolver — cada
+  // pedaço acima já é arredondado à parte (Math.round(...*100)/100), e somar
+  // vários valores JÁ arredondados pode fechar alguns centavos acima ou abaixo
+  // do "Total com ITBI" nominal (sinalTotalComITBIEfetivo), mesmo quando cada
+  // conta individual está certa — arredondamento em cascata, não um erro de
+  // fórmula. Por isso o resíduo é absorvido aqui, na hora de montar o total,
+  // no Pró-Soluto (não no Ato): o Ato alimenta o Desconto do Ato Premiado (que
+  // é uma fração DELE mesmo), então ajustar o Ato também move o Desconto, e o
+  // resíduo nunca fecha — tentar isso à base de tentativa e erro (um efeito
+  // que reajusta o Ato e vê se fechou) chegou a entrar num loop infinito de
+  // re-render. O Pró-Soluto não alimenta mais nenhuma outra conta aqui, então
+  // absorve o resíduo uma única vez, sem laço, sem estado e sem risco de loop.
+  const totalDistribuidoAntesDoResiduo = Math.round(
     ((Number(valorAtoEfetivo) || 0) + (Number(descontoAto) || 0) + (Number(atoITBIValidado) || 0) + somaParcelasLiquidasEfetivas + somaTotalITBI) * 100
   ) / 100;
-
-  // DIFERENÇA EM TEMPO REAL ENTRE DISTRIBUÍDO E COM ITBI
-  const diferencaDistribuicao = Math.round((totalDistribuido - sinalTotalComITBIEfetivo) * 100) / 100;
-  const isDistribuicaoValidada = hasUnitSelected && Math.abs(diferencaDistribuicao) <= 0.10;
+  const residuoArredondamento = hasUnitSelected
+    ? Math.round((sinalTotalComITBIEfetivo - totalDistribuidoAntesDoResiduo) * 100) / 100
+    : 0;
+  const totalDistribuido = Math.round((totalDistribuidoAntesDoResiduo + residuoArredondamento) * 100) / 100;
 
   // INDICADORES DE RISCO E COMPROMETIMENTO
   const baseLiquidaComITBI = hasUnitSelected 
@@ -1285,22 +1298,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     }
   }, [sinalLiquidoTotalEfetivo, hasUnitSelected, isManualObra, isManualPos, valAtoManual, sinalMinimoVal, currentCond, income, despCartoriasEfetivas, itbiAtoManualFloor, price, evaluation, maxFinanc, subsidy, fgts, isAtoPremiadoEnabled]);
 
-  // AÇÃO DE AJUSTAR FLUXO (REBALANCEAMENTO INSTANTÂNEO DO ATO OU DA CURVA)
-  const handleAjustarFluxo = () => {
-    if (valAtoManual !== null) {
-      // Se o Ato foi editado manualmente, ajusta o Ato para absorver a diferença residual exata
-      const novoAto = Math.max(0, Math.round((valAtoManual - diferencaDistribuicao) * 100) / 100);
-      setValAtoManual(novoAto);
-      setAtoInputText(formatCurrency(novoAto));
-      if (onShowToast) {
-        onShowToast(`Ato ajustado para ${formatCurrency(novoAto)} para igualar 100% ao valor Com ITBI.`);
-      }
-    } else {
-      // Se o Ato for automático, aplica a curva oficial Morar
-      aplicarDistribuicaoOficialMorar();
-    }
-  };
-
   const mesesObraPadraoPolitica = currentCond?.mesesObra ?? 33;
   const mesesPosPadraoPolitica = currentCond?.mesesPos ?? 27;
 
@@ -1485,39 +1482,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         ? `Pós-Obra ajustado para ${novoTotalPos} meses (${mesesObraAtual + novoTotalPos} meses totais). ITBI/mês (${formatCurrency(engineResult.parcelaMensalITBI)}) respeitando o teto de renda, com ${formatCurrency(engineResult.itbiAtoSugerido)} movido para o ITBI no Ato.`
         : `Pós-Obra ajustado para ${novoTotalPos} meses (${mesesObraAtual + novoTotalPos} meses totais). ITBI rediluído para ${formatCurrency(engineResult.parcelaMensalITBI)}/mês.`);
     }
-  };
-
-  // Manipuladores de edição das faixas
-  const handleUpdateFaixaObra = (index: number, field: 'qtd' | 'valor', value: number) => {
-    if (field === 'qtd') {
-      const copy = [...faixasObra];
-      copy[index] = { ...copy[index], qtd: value };
-      const newTotal = copy.reduce((acc, f) => acc + (Number(f.qtd) || 0), 0);
-      handleTotalObraParcelasChange(newTotal);
-      return;
-    }
-    setIsManualObra(true);
-    setFaixasObra(prev => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
-  };
-
-  const handleUpdateFaixaPos = (index: number, field: 'qtd' | 'valor', value: number) => {
-    if (field === 'qtd') {
-      const copy = [...faixasPos];
-      copy[index] = { ...copy[index], qtd: value };
-      const newTotal = copy.reduce((acc, f) => acc + (Number(f.qtd) || 0), 0);
-      handleTotalPosParcelasChange(newTotal);
-      return;
-    }
-    setIsManualPos(true);
-    setFaixasPos(prev => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
   };
 
   const handleFinishITBIEdit = (rawText: string) => {
@@ -2248,22 +2212,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-slate-800">Distribuído:</span>
                 {hasUnitSelected && (
-                  isDistribuicaoValidada ? (
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                      <Check className="w-3 h-3 text-emerald-600" />
-                      100% Validado
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleAjustarFluxo}
-                      className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-all cursor-pointer flex items-center gap-1"
-                      title="Clique para recalcular e rebalancear automaticamente o fluxo"
-                    >
-                      <RotateCcw className="w-2.5 h-2.5 text-amber-700" />
-                      <span>Ajustar Fluxo ({diferencaDistribuicao > 0 ? `+${formatCurrency(diferencaDistribuicao)}` : formatCurrency(diferencaDistribuicao)})</span>
-                    </button>
-                  )
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    100% Validado
+                  </span>
                 )}
               </div>
               <strong className="text-xs sm:text-sm font-black text-sky-700">
@@ -2634,15 +2586,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                         <div className="col-span-1 sm:col-span-4 flex items-center gap-1">
                           <span className="text-[10px] font-bold text-slate-400">S{displayIndex}:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={faixa.qtd}
-                            onChange={(e) => handleUpdateFaixaObra(originalIndex, 'qtd', parseInt(e.target.value, 10) || 0)}
-                            className="morar-input w-11 bg-white hover:bg-slate-100 focus:bg-white px-1 py-1 rounded border border-dashed border-slate-300 font-bold text-sky-700 text-center text-xs focus:outline-none focus:border-sky-500 transition-all"
-                            title="Quantidade de Parcelas"
-                          />
+                          <div
+                            className="w-11 bg-slate-100 px-1 py-1 rounded border border-slate-200 font-bold text-slate-700 text-center text-xs cursor-not-allowed"
+                            title="Calculado automaticamente a partir da Qtd. Meses de Obra acima — não editável."
+                          >
+                            {faixa.qtd}
+                          </div>
                           <span className="font-bold text-slate-600 text-xs">X de</span>
                         </div>
 
@@ -2770,15 +2719,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                         <div className="col-span-1 sm:col-span-4 flex items-center gap-1">
                           <span className="text-[10px] font-bold text-slate-400">S{displayIndex}:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={faixa.qtd}
-                            onChange={(e) => handleUpdateFaixaPos(originalIndex, 'qtd', parseInt(e.target.value, 10) || 0)}
-                            className="morar-input w-11 bg-white hover:bg-slate-100 focus:bg-white px-1 py-1 rounded border border-dashed border-slate-300 font-bold text-indigo-700 text-center text-xs focus:outline-none focus:border-indigo-500 transition-all"
-                            title="Quantidade de Parcelas"
-                          />
+                          <div
+                            className="w-11 bg-slate-100 px-1 py-1 rounded border border-slate-200 font-bold text-slate-700 text-center text-xs cursor-not-allowed"
+                            title="Calculado automaticamente a partir da Qtd. Meses de Pós-Obra acima — não editável."
+                          >
+                            {faixa.qtd}
+                          </div>
                           <span className="font-bold text-slate-600 text-xs">X de</span>
                         </div>
 
