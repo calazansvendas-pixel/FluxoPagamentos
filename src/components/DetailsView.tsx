@@ -3,7 +3,7 @@ import { ArrowLeft, RotateCcw, KeyRound, FileCheck2, Calculator, ShieldCheck, Bu
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDateMonthYear, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, calculatePricePMT, calcularParcelaPrice, resolveConditionForTorre, resolverTetoAtoComDesconto, resolverTetoAtoComDescontoEComissao, getConditionKind, calcularParcelamentoMorar, monthsBetweenDates, subtractMonthsFromDate, contarSemestraisJunhoDezembro, gerarDatasSemestrais } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
 import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
 import { pdfPermissoesService } from '../services/pdfPermissoesService';
@@ -80,10 +80,17 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     ? Number(currentCond.numParcelas)
     : (currentProd?.numParcelas !== undefined ? Number(currentProd.numParcelas) : 60);
 
-  // Carrega os valores de Prazo Faixa 1 e Prazo Faixa 2 do produto/condição selecionado
-  const prazoFaixa1 = Number(currentCond?.mesesTabela1) || 0;
-  const prazoFaixa2 = Number(currentCond?.mesesTabela2) || 0;
-  const limiteMaximoParcelas = Math.max(prazoFaixa1, prazoFaixa2, condNumParcelas, 1);
+  // Teto de parcelas: exatamente o "Nº Parcelas" da política de crédito — nunca
+  // o maior entre ele e as faixas de juros (mesesTabela1/2, que só definem qual
+  // taxa se aplica, não quantas parcelas a política permite). Se a política
+  // prevê 30 parcelas, 30 é o máximo que o corretor consegue digitar aqui.
+  const limiteMaximoParcelas = Math.max(1, condNumParcelas);
+  // Menor "Qtd. Mensais" que o corretor pode digitar nesta ficha — vem da
+  // política de crédito da condição (padrão 1, comportamento histórico); pode
+  // ser reduzida a 0 para permitir quitar o Pró-Soluto inteiro no Ato.
+  const parcelasMinimasCond = currentCond?.parcelasMinimas !== undefined
+    ? Math.max(0, Number(currentCond.parcelasMinimas))
+    : 1;
 
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
@@ -101,6 +108,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [valAtoITBI, setValAtoITBI] = useState<number>(0);
   const [itbiInputText, setItbiInputText] = useState<string>('');
   const [isEditingITBI, setIsEditingITBI] = useState<boolean>(false);
+  // Piso digitado pelo CORRETOR em "ITBI no Ato" (null = nenhum; o valor
+  // exibido em valAtoITBI pode estar 100% ou parcialmente elevado por
+  // migração automática — ver itbiAtoSugeridoBanco mais abaixo). Guardado à
+  // parte pelo mesmo motivo do FichaMorar.tsx: reaproveitar o próprio
+  // valAtoITBI como piso faria uma migração automática anterior "grudar" e
+  // nunca descer quando a Qtd. Mensais aumenta de novo.
+  const [itbiAtoManualFloor, setItbiAtoManualFloor] = useState<number | null>(null);
 
   const [isAtoPremiadoEnabled, setIsAtoPremiadoEnabled] = useState<boolean>(true);
 
@@ -113,6 +127,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [isEditingParc3, setIsEditingParc3] = useState<boolean>(false);
 
   const [qtdMensais, setQtdMensais] = useState<number>(condNumParcelas);
+  // Quantidade de parcelas da Comissão Apartada — sugestão vem da política
+  // (comissaoApartadaParcelas), mas é editável por simulação nesta ficha.
+  const [comissaoParcelasManual, setComissaoParcelasManual] = useState<number | null>(null);
 
   // Condição comercial "Parcelamento Morar": mesmo layout desta tela (Sinal c/
   // Banco Direto), mas com o Bloco 3 substituído por um motor de cálculo próprio
@@ -121,6 +138,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // lineares de obra, intermediárias semestrais, parcela final (chaves) e
   // parcelamento pós-obra, todos calculados a partir da política de crédito.
   const isParcelamentoMorar = getConditionKind(currentCond?.name) === 'parcelamento-morar';
+
+  // Condição comercial "Sinal c/ Banco Direto (Comissão Apartada)": mesma tela e
+  // mesmíssimo motor de cálculo do Banco Direto comum — a única diferença é que a
+  // comissão da corretora sai do fluxo de Ato/Pró-Soluto e vira um parcelamento
+  // próprio e independente (ver comissaoApartadaValor mais abaixo e o ponto de
+  // desconto dentro do laço iterativo do Ato).
+  const isComissaoApartada = getConditionKind(currentCond?.name) === 'banco-direto-comissao-apartada';
 
   // O que este cargo pode ver no PDF exportado — definido pelo Administrador
   // em "Configurar Exportação de PDF". Busca de novo sempre que o cargo ou a
@@ -212,6 +236,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingAto(false);
     setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
+    setItbiAtoManualFloor(null);
     setItbiInputText('');
     setIsEditingITBI(false);
     setValParc2(0);
@@ -231,6 +256,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
+    setComissaoParcelasManual(null);
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
     }
@@ -342,6 +368,17 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const pctAtoPremiadoCond = currentCond?.atoPremiadoPct ?? 0.10;
   const tetoDescontoAtoPremiado = Math.round(50000 * pctAtoPremiadoCond * 100) / 100;
 
+  // Comissão Apartada: % sobre o Preço de Tabela (precoTabelaOriginal) MENOS o
+  // Desconto do Ato Premiado — mesma base usada pela planilha de referência.
+  // Ausente na política → 4% (mesmo padrão já citado no texto de política
+  // padrão do app). Só existe (>0) quando a condição é a variante "Comissão
+  // Apartada" — em qualquer outra condição fica em R$ 0,00, sem nenhum efeito
+  // no restante da conta. O valor final (comissaoApartadaValor, que usa o
+  // Desconto já resolvido) é calculado mais abaixo, depois de descontoAto —
+  // ver o comentário lá para a explicação da referência circular envolvida.
+  const pctComissaoApartadaCond = currentCond?.comissaoApartadaPct ?? 0.04;
+  const comissaoApartadaParcelasQtd = Math.max(1, comissaoParcelasManual ?? (currentCond?.comissaoApartadaParcelas ?? 6));
+
   // ITBI depends on whether it's 1º Imóvel (Com Desconto) or 2º Imóvel (Sem Desconto)
   const itbiVal = (hasUnitSelected && matchingRow) 
     ? (isFirstHomeLocal ? parseCurrency(matchingRow[8]) : parseCurrency(matchingRow[9]))
@@ -395,6 +432,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingAto(false);
     setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
+    setItbiAtoManualFloor(null);
     setItbiInputText('');
     setIsEditingITBI(false);
     setIsAtoPremiadoEnabled(true);
@@ -416,6 +454,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
+    setComissaoParcelasManual(null);
     if (currentProd) {
       onUnitSelectChange(currentProd.id, { torre: '', unidade: '' });
     }
@@ -711,6 +750,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
         })
     : [];
 
+  // ITBI ainda não alocado para "Pagamento ITBI no Ato" DIGITADO pelo corretor
+  // (itbiAtoManualFloor, não o valAtoITBI exibido em tela — que pode já incluir
+  // uma migração automática anterior, ver mais abaixo). É o ponto de partida
+  // para a migração automática: o quanto ainda "precisa de um lugar".
+  const valorTotalITBI = isPagamentoAVistaAtivoManual ? 0 : despCartorias;
+  const itbiFloorManual = Math.min(itbiAtoManualFloor ?? 0, valorTotalITBI);
+  const saldoITBIAntesDaMigracao = Math.max(0, valorTotalITBI - itbiFloorManual);
+
   // --- CÁLCULO ITERATIVO (RESOLUÇÃO DE REFERÊNCIA CIRCULAR COMO NO EXCEL) ---
   const riskCalcInitial = calculatePolicyRiskValues(
     currentProd,
@@ -729,9 +776,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const vpValRiscoRenda = riskCalcInitial.vpVal;
   const riscoImovelPctDec = (currentCond?.riscoImovelPct !== undefined ? currentCond.riscoImovelPct : 25) / 100;
 
-  let atoPremiadoAtual = 0;
-  let iteracoes = 0;
-
   let sinalTotalSemITBI = 0;
   let sinalTotalComITBI = 0;
   let baseRiscoImovel = 0;
@@ -740,67 +784,169 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   let taxaBancaria = 0;
   let proSolutoLiquido = 0;
   let pagamentoAtoSinalEfetivo = 0;
+  let atoPremiadoAtual = 0;
+  // ITBI que este laço conseguiu manter parcelável (nunca mais que o saldo
+  // ainda não alocado, nem mais que o teto de risco/renda apurado abaixo).
+  let saldoITBIEfetivo = saldoITBIAntesDaMigracao;
 
-  if (hasUnitSelected && price > 0) {
+  // Laço interno: resolve a referência circular do Ato Premiado (mesmo de
+  // sempre) para um dado `saldoITBIParam`. Extraído em função porque agora
+  // precisa rodar mais de uma vez — uma para cada tentativa do laço externo
+  // de migração automática de ITBI logo abaixo.
+  const resolverAtoPremiado = (saldoITBIParam: number) => {
+    let sinalSemITBILocal = 0;
+    let sinalComITBILocal = 0;
+    let baseRiscoLocal = 0;
+    let valorRiscoLocal = 0;
+    let riscoMaximoLocal = 0;
+    let taxaBancariaLocal = 0;
+    let proSolutoLiquidoLocal = 0;
+    let pagamentoAtoLocal = 0;
+    let atoPremiadoLocal = 0;
+    let iteracoes = 0;
+
     while (iteracoes < 1000) {
       // a) Recursos Aprovados = (Max Financiamento + Subsídio + FGTS) -> totalNegoc
       // b) GAP Inicial = (Preço de Tabela) - Recursos Aprovados -> gapInicial
       // c) Sinal Total s/ ITBI = GAP Inicial - atoPremiadoAtual
-      sinalTotalSemITBI = Math.max(0, gapInicial - atoPremiadoAtual);
+      sinalSemITBILocal = Math.max(0, gapInicial - atoPremiadoLocal);
 
-      // d) Sinal Total c/ ITBI = (Sinal Total s/ ITBI) + Despesas Cartorárias e ITBI
-      sinalTotalComITBI = sinalTotalSemITBI + despCartorias;
+      // d) Sinal Total c/ ITBI = (Sinal Total s/ ITBI) + ITBI ainda parcelável
+      // (saldoITBIParam, não despCartorias cheio nem o saldo ainda sem migrar) —
+      // a parte já alocada (manualmente ou por migração automática) não precisa
+      // de proteção nenhuma aqui, ela já está paga; usar o ITBI cheio pediria,
+      // no piso do Ato (Imóvel), um ITBI que já está coberto em outro campo,
+      // contando o mesmo ITBI duas vezes. Sem nenhuma alocação, saldoITBIParam
+      // === despCartorias e esta conta fica idêntica à de antes.
+      sinalComITBILocal = sinalSemITBILocal + saldoITBIParam;
 
-      // e) Base Risco Imóvel = (MAX(Preço Tabela, Avaliação Banco) + ITBI) - atoPremiadoAtual
-      baseRiscoImovel = Math.max(0, (maxPriceEval + despCartorias) - atoPremiadoAtual);
+      // e) Base Risco Imóvel = (MAX(Preço Tabela, Avaliação Banco) + ITBI parcelável) - atoPremiadoAtual
+      baseRiscoLocal = Math.max(0, (maxPriceEval + saldoITBIParam) - atoPremiadoLocal);
 
       // e) Valor Risco Imóvel = Base Risco Imóvel * (% Risco Imóvel);
-      valorRiscoImovel = baseRiscoImovel * riscoImovelPctDec;
+      valorRiscoLocal = baseRiscoLocal * riscoImovelPctDec;
 
-      // f) Risco Máximo Apurado (Bruto) = MIN(VP Risco Renda, Valor Risco Imóvel);
-      riscoMaximoApuradoBruto = (vpValRiscoRenda > 0) 
-        ? Math.min(vpValRiscoRenda, valorRiscoImovel) 
-        : valorRiscoImovel;
+      // f) Risco Máximo Apurado (Bruto) = MIN(VP Risco Renda, Valor Risco Imóvel).
+      // Checa `income > 0` (cliente com renda declarada), não `vpValRiscoRenda > 0`:
+      // o teto de renda pode legitimamente ser 0 quando a Qtd. Mensais é 0 (sem
+      // meses, não há capacidade nenhuma) — cair no ramo "sem teto de renda"
+      // nesse caso ignoraria essa trava justamente no cenário que ela precisa cobrir.
+      riscoMaximoLocal = (income > 0)
+        ? Math.min(vpValRiscoRenda, valorRiscoLocal)
+        : valorRiscoLocal;
 
       // g) Taxa Bancária (Taxa de Assinatura de Contrato, da política) = Risco Máximo Apurado * taxa;
-      taxaBancaria = riscoMaximoApuradoBruto * (taxaAssinaturaContratoPct / 100);
+      taxaBancariaLocal = riscoMaximoLocal * (taxaAssinaturaContratoPct / 100);
 
       // h) Pró-Soluto Líquido = Risco Máximo Apurado - Taxa Bancária;
-      proSolutoLiquido = Math.max(0, riscoMaximoApuradoBruto - taxaBancaria);
+      proSolutoLiquidoLocal = Math.max(0, riscoMaximoLocal - taxaBancariaLocal);
 
-      // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Pró-Soluto Líquido — é o
-      // valor JÁ LÍQUIDO da taxa que sugere o Ato, não o bruto (Risco Máximo Apurado).
-      pagamentoAtoSinalEfetivo = Math.max(0, sinalTotalComITBI - proSolutoLiquido);
+      // Comissão Apartada = (Preço de Tabela - Desconto do Ato Premiado) * %comissão — recalculada
+      // A CADA ITERAÇÃO com o atoPremiadoAtual corrente, porque a comissão depende do Desconto,
+      // que depende do Ato, que (nesta condição) depende da própria comissão: é uma referência
+      // circular de verdade, resolvida convergindo junto com o resto do laço (mesmo padrão já
+      // usado para o Ato Premiado). Em qualquer condição que não seja "Comissão Apartada", fica
+      // sempre 0, sem nenhum efeito no restante da conta.
+      const comissaoIteracaoAtual = isComissaoApartada
+        ? Math.max(0, (precoTabelaOriginal - atoPremiadoLocal) * pctComissaoApartadaCond)
+        : 0;
 
-      // Ato Bruto Apurado = (Sinal Total c/ ITBI antes do desconto) - Pró-Soluto Líquido
-      const atoBrutoCalculado = Math.max(0, (gapInicial + despCartorias) - proSolutoLiquido);
+      // i) Pagamento Ato (Sinal Efetivo) = (Sinal Total c/ ITBI) - Pró-Soluto Líquido - Comissão
+      // Apartada — é o valor JÁ LÍQUIDO da taxa (e, na variante Comissão Apartada, também já
+      // líquido da comissão) que sugere o Ato; não o bruto (Risco Máximo Apurado). A comissão
+      // NUNCA entra nos passos acima (Risco Imóvel 25%, Risco Renda 35%, Taxa Bancária) — eles
+      // continuam sobre o valor cheio; só o Ato final é que sai líquido dela.
+      pagamentoAtoLocal = Math.max(0, sinalComITBILocal - proSolutoLiquidoLocal - comissaoIteracaoAtual);
+
+      // Ato Bruto Apurado = (Sinal Total c/ ITBI restante antes do desconto) - Pró-Soluto Líquido - Comissão
+      const atoBrutoCalculado = Math.max(0, (gapInicial + saldoITBIParam) - proSolutoLiquidoLocal - comissaoIteracaoAtual);
 
       // j) novoAtoPremiado = pct do Pagamento Ato (Sinal Efetivo) caso o Ato Bruto seja >= 5000
       // pct vem da política do empreendimento (currentCond.atoPremiadoPct); ausente → 10%
       const novoAtoPremiado = (isAtoPremiadoEnabled && pctAtoPremiadoCond > 0 && atoBrutoCalculado >= 5000)
-        ? Math.min(pagamentoAtoSinalEfetivo * pctAtoPremiadoCond, tetoDescontoAtoPremiado)
+        ? Math.min(pagamentoAtoLocal * pctAtoPremiadoCond, tetoDescontoAtoPremiado)
         : 0;
 
       // 2. CONDIÇÃO DE PARADA: Tolerância zero para bater os centavos do Excel
-      if (Math.abs(novoAtoPremiado - atoPremiadoAtual) < 0.0001) {
-        atoPremiadoAtual = novoAtoPremiado;
+      if (Math.abs(novoAtoPremiado - atoPremiadoLocal) < 0.0001) {
+        atoPremiadoLocal = novoAtoPremiado;
         break;
       }
 
-      atoPremiadoAtual = novoAtoPremiado;
+      atoPremiadoLocal = novoAtoPremiado;
       iteracoes++;
     }
+
+    return {
+      sinalSemITBI: sinalSemITBILocal,
+      sinalComITBI: sinalComITBILocal,
+      baseRisco: baseRiscoLocal,
+      valorRisco: valorRiscoLocal,
+      riscoMaximo: riscoMaximoLocal,
+      taxaBancaria: taxaBancariaLocal,
+      proSolutoLiquido: proSolutoLiquidoLocal,
+      pagamentoAto: pagamentoAtoLocal,
+      atoPremiado: atoPremiadoLocal
+    };
+  };
+
+  if (hasUnitSelected && price > 0) {
+    // Laço externo: migra para "ITBI no Ato" (nunca para o Ato (Imóvel), que é
+    // uma conta à parte) o quanto do ITBI ainda sem alocação não cabe dentro do
+    // teto de risco/renda apurado (riscoMaximo) — mesmo espírito do mecanismo já
+    // usado no Sinal c/ Morar (itbiAtoSugerido): quando a Qtd. Mensais diminui e
+    // sobra menos espaço pra parcelar, o ITBI cede primeiro, e só o que ainda
+    // faltar depois disso é que segue inflando o Ato (Imóvel) via pagamentoAto,
+    // exatamente como já acontecia. Converge em poucas voltas: reduzir
+    // saldoITBIEfetivo também reduz ligeiramente o próprio teto (ele soma no
+    // Risco Imóvel), então cada tentativa refina a anterior.
+    let resultado = resolverAtoPremiado(saldoITBIEfetivo);
+    for (let i = 0; i < 20; i++) {
+      const novoSaldoEfetivo = Math.max(0, Math.min(saldoITBIAntesDaMigracao, resultado.riscoMaximo));
+      if (Math.abs(novoSaldoEfetivo - saldoITBIEfetivo) < 0.01) break;
+      saldoITBIEfetivo = novoSaldoEfetivo;
+      resultado = resolverAtoPremiado(saldoITBIEfetivo);
+    }
+
+    sinalTotalSemITBI = resultado.sinalSemITBI;
+    sinalTotalComITBI = resultado.sinalComITBI;
+    baseRiscoImovel = resultado.baseRisco;
+    valorRiscoImovel = resultado.valorRisco;
+    riscoMaximoApuradoBruto = resultado.riscoMaximo;
+    taxaBancaria = resultado.taxaBancaria;
+    proSolutoLiquido = resultado.proSolutoLiquido;
+    pagamentoAtoSinalEfetivo = resultado.pagamentoAto;
+    atoPremiadoAtual = resultado.atoPremiado;
 
     // 1. TRAVA DO ATO MÍNIMO (PISO DA POLÍTICA DE CRÉDITO) & REDISTRIBUIÇÃO OBRIGATÓRIA
     if (pagamentoAtoSinalEfetivo < sinalMinimoVal) {
       pagamentoAtoSinalEfetivo = sinalMinimoVal;
       atoPremiadoAtual = 0; // Regra dos 10% não se aplica se não atingir 5k
-      const baseDividaTotal = gapInicial + despCartorias;
+      const baseDividaTotal = gapInicial + saldoITBIEfetivo;
       riscoMaximoApuradoBruto = Math.max(0, baseDividaTotal - pagamentoAtoSinalEfetivo);
       taxaBancaria = riscoMaximoApuradoBruto * (taxaAssinaturaContratoPct / 100);
       proSolutoLiquido = riscoMaximoApuradoBruto - taxaBancaria;
     }
   }
+
+  // "ITBI no Ato" total = o que o corretor digitou manualmente + o que a
+  // migração automática precisou elevar pra não estourar o teto de risco/renda
+  // apurado acima (nunca inflando o Ato (Imóvel) — ver resolverAtoPremiado).
+  // Sem nenhuma migração necessária, itbiAtoSugeridoBanco === itbiFloorManual e
+  // tudo fica idêntico ao comportamento anterior.
+  const itbiAtoSugeridoBanco = itbiFloorManual + Math.max(0, saldoITBIAntesDaMigracao - saldoITBIEfetivo);
+  const atoITBIValidado = Math.min(itbiAtoSugeridoBanco, valorTotalITBI);
+  const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
+
+  // Mantém o state valAtoITBI (usado pelo input controlado, PDF, gravação da
+  // simulação etc.) sincronizado com a sugestão fresca acima — sobe OU desce
+  // livremente conforme a Qtd. Mensais muda, nunca abaixo do piso manual
+  // (itbiAtoManualFloor, já embutido em itbiAtoSugeridoBanco).
+  useEffect(() => {
+    if (Math.abs(itbiAtoSugeridoBanco - valAtoITBI) > 0.005) {
+      setValAtoITBI(itbiAtoSugeridoBanco);
+    }
+  }, [itbiAtoSugeridoBanco, valAtoITBI]);
 
   const atoMinimoCalculado = hasUnitSelected ? Math.max(sinalMinimoVal, pagamentoAtoSinalEfetivo) : 0;
   const sinalTotalOriginal = gapInicial;
@@ -823,8 +969,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const baseAVista = hasUnitSelected
     ? Math.max(0, precoTabelaOriginal - (maxFinanc + subsidy + fgts) - somaMensais)
     : 0;
+  // Comissão Apartada é paga por fora do contrato — quem escolhe "Pgtº à
+  // vista" também não deve embutir esse valor no Ato, senão o cliente estaria
+  // cobrindo a comissão sem ela aparecer separada em lugar nenhum. Mesmo ponto
+  // fixo de cima, só que agora também descontando a comissão (ver
+  // resolverTetoAtoComDescontoEComissao) — em condições que não são Comissão
+  // Apartada, cai exatamente no comportamento de antes.
   const atoAposMensaisAVistaTarget = hasUnitSelected
-    ? resolverTetoAtoComDesconto(baseAVista, isAtoPremiadoEnabled, pctAtoPremiadoCond)
+    ? resolverTetoAtoComDescontoEComissao(baseAVista, isAtoPremiadoEnabled, pctAtoPremiadoCond, isComissaoApartada, pctComissaoApartadaCond, precoTabelaOriginal)
     : 0;
   // valAtoManual é o Ato ANTES da absorção das mensais (mesma convenção já usada pelo
   // onAtoChange existente do FluxoEntradaConstrutora), então somamos de volta.
@@ -842,8 +994,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // conseguia lançar no Ato o valor do Ato Premiado A MAIS do que realmente
   // devia — o Pró-Soluto era clampado em R$ 0,00 e a diferença sumia da tela.
   // Mesma abordagem já usada na ficha "Sinal c/ Morar" (FichaMorar.tsx).
+  // Mesmo motivo do atoAposMensaisAVistaTarget acima: numa Comissão Apartada,
+  // esse teto (o maior Ato digitável à mão) também precisa deixar espaço pra
+  // comissão — senão o corretor consegue digitar um Ato que estoura o que
+  // sobra pra pagar o corretor à parte.
   const atoMaximoPossivel = hasUnitSelected
-    ? resolverTetoAtoComDesconto(Math.max(0, price - subsidy), isAtoPremiadoEnabled, pctAtoPremiadoCond)
+    ? resolverTetoAtoComDescontoEComissao(Math.max(0, price - subsidy), isAtoPremiadoEnabled, pctAtoPremiadoCond, isComissaoApartada, pctComissaoApartadaCond, precoTabelaOriginal)
     : 0;
 
   const atoImovelDigitadoBruto = (valAtoManual !== null && valAtoManual >= atoMinimoCalculado)
@@ -881,6 +1037,18 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // CASCATA DE AMORTIZAÇÃO DO FINANCIAMENTO (NOVA REGRA)
   const descontoAto = isAtoPremiadoEnabled ? novoAtoPremiado : 0;
 
+  // Comissão Apartada — valor FINAL, agora que o Desconto do Ato Premiado já está
+  // resolvido (mesma fórmula usada dentro do laço acima, mas com o desconto final
+  // em vez do valor ainda convergindo iteração a iteração). É este valor — não o
+  // intermediário do laço — que alimenta o card "Comissão a Pagar", a gravação da
+  // simulação e o desconto no Pró-Soluto Total mais abaixo.
+  const comissaoApartadaValor = isComissaoApartada
+    ? Math.max(0, Math.round((precoTabelaOriginal - descontoAto) * pctComissaoApartadaCond * 100) / 100)
+    : 0;
+  const comissaoApartadaParcelaValor = comissaoApartadaValor > 0
+    ? Math.round((comissaoApartadaValor / comissaoApartadaParcelasQtd) * 100) / 100
+    : 0;
+
   // 1. Cálculo do Teto dos Recursos Bancários/Negociados:
   // O montante máximo que pode ser negociado via banco/governo não pode ultrapassar o saldo restante do imóvel.
   // Consideramos aqui o aporte direto do Ato.
@@ -917,15 +1085,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     }
   }
 
-  // 3. REGRA ISOLADA PARA DESPESAS CARTORÁRIAS & ITBI:
+  // 3. REGRA ISOLADA PARA DESPESAS CARTORÁRIAS & ITBI (calculada aqui embaixo,
+  // logo antes de ser usada no laço iterativo abaixo — ver mais acima, perto de
+  // "gapInicial", onde despCartorias é definida):
   // O saldo de ITBI e Despesas Cartorárias NUNCA deve ser amortizado pelo excedente do Pagamento do Ato.
   // O ITBI/Despesas só é reduzido/abatido se o usuário preencher expressamente o campo "PAGAMENTO ITBI NO ATO".
   // Exceção: o botão "Pgtº à vista" zera o ITBI (fica por conta do cliente a
   // partir do Habite-se) — o botão "Parcelado/À Vista" mais simples nunca
   // mexe nisso, deixa o ITBI em aberto normalmente.
-  const valorTotalITBI = isPagamentoAVistaAtivoManual ? 0 : despCartorias;
-  const atoITBIValidado = Math.min(valAtoITBI, valorTotalITBI);
-  const saldoITBI = Math.max(0, valorTotalITBI - atoITBIValidado);
   const despCartoriasEfetivas = saldoITBI;
 
   // Base Líquida c/ ITBI da Operação
@@ -950,17 +1117,53 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
 
   // 3. REGRA DE DEDUÇÃO NO PRÓ-SOLUTO (SINAL RESTANTE):
   // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - 1ª Mensal - 2ª Mensal
-  // (Nota: o descontoAto já foi deduzido diretamente na formação do sinalTotal)
-  const proSolutoSinalRestante = hasUnitSelected
-    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d)
+  // - Comissão Apartada (Nota: o descontoAto já foi deduzido diretamente na formação do
+  // sinalTotal). A Comissão Apartada é paga por fora do contrato — reduz o Pró-Soluto
+  // (e, por tabela, a parcela, reconstruída a partir dele mais abaixo em baseCalculoParcela)
+  // pelo valor cheio da comissão. Em qualquer condição que não seja "Comissão Apartada",
+  // comissaoApartadaValor é sempre 0, então esta linha fica idêntica ao comportamento de antes.
+  //
+  // Esse valor NÃO desconta a Taxa Bancária/Assinatura de Contrato — ela só
+  // entra depois, ao reconstruir baseCalculoParcela (a parcela é a única conta
+  // que usa o valor bruto, com a taxa embutida como um custo financiado a
+  // mais, não como uma dedução do que fica pro Pró-Soluto).
+  const proSolutoSinalRestanteSemTravaParcela = hasUnitSelected
+    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d - comissaoApartadaValor)
     : 0;
-  const proSoluto = proSolutoSinalRestante;
 
   // 2. PRÓ-SOLUTO TOTAL C/ ITBI (RISCO MÁX):
   // Isole e utilize o saldo devedor restante das despesas de ITBI/Cartório:
   // ITBI_Restante = Math.max(0, DespesasCartorariasTotal - PagamentoITBINoAto)
   // ProSolutoTotalComITBI = ProSolutoSinalRestante + ITBI_Restante
   const itbiRestante = saldoITBI;
+  const proSolutoTotalParceladoSemTravaParcela = hasUnitSelected
+    ? Math.max(0, proSolutoSinalRestanteSemTravaParcela + itbiRestante)
+    : 0;
+
+  // TRAVA DA PARCELA NO TETO DE RISCO (o mesmo riscoMaximoApuradoBruto usado
+  // acima para sugerir o Ato — min(25% do imóvel, X% da renda presente-valorado)):
+  // sem isso, a 1ª parcela do Pró-Soluto/Banco Direto podia ultrapassar o teto,
+  // porque proSolutoSinalRestante é reconstruído aqui por uma conta separada
+  // (Sinal Total - Ato - Mensais - Comissão) que não fica presa a esse teto. O
+  // que não couber migra pro Ato (Imóvel): o cliente traz mais na entrada em
+  // vez de financiar acima do que a política permite.
+  //
+  // A comparação usa proSolutoTotalParceladoSemTravaParcela (ainda SEM o
+  // acréscimo da Taxa Bancária) contra riscoMaximoApuradoBruto (também sem
+  // taxa) — maçã com maçã. Comparar contra baseCalculoParcela (que JÁ inclui a
+  // taxa como acréscimo, de propósito) contaria esse acréscimo como se fosse
+  // estouro do teto e empurraria dinheiro pro Ato à toa sempre que a trava do
+  // Ato Mínimo estivesse ativa (ali riscoMaximoApuradoBruto vem sem taxa
+  // nenhuma, então bater com um valor que já tem taxa somada sempre acusava
+  // uma sobra do tamanho exato da Taxa Bancária).
+  const excessoRiscoParcela = (hasUnitSelected && riscoMaximoApuradoBruto > 0)
+    ? Math.max(0, proSolutoTotalParceladoSemTravaParcela - riscoMaximoApuradoBruto)
+    : 0;
+  const extraAtoPorTravaParcela = Math.round(excessoRiscoParcela * 100) / 100;
+
+  atoAposMensais += extraAtoPorTravaParcela;
+  const proSolutoSinalRestante = Math.max(0, proSolutoSinalRestanteSemTravaParcela - extraAtoPorTravaParcela);
+  const proSoluto = proSolutoSinalRestante;
   const proSolutoTotalParcelado = hasUnitSelected
     ? Math.max(0, proSolutoSinalRestante + itbiRestante)
     : 0;
@@ -1113,6 +1316,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setIsEditingAto(false);
     setIsPagamentoAVistaAtivoManual(false);
     setValAtoITBI(0);
+    setItbiAtoManualFloor(null);
     setItbiInputText('');
     setIsEditingITBI(false);
     setValParc2(0);
@@ -1132,6 +1336,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     setPmChavesValorManual(null);
     setPmQtdPosObraManual(null);
     setPmPosObraValorManual(null);
+    setComissaoParcelasManual(null);
     if (onShowToast) {
       onShowToast('Fluxo de pagamento redefinido para as condições padrão.');
     }
@@ -1175,7 +1380,20 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const pctRestanteRenda = Math.max(0, 100 - pctRiscoParcelaRenda);
 
   // Gráfico 2: "Risco Pró-Soluto Total" (Fatia 1: Pró-Soluto Total c/ ITBI sobre a Base Líquida c/ ITBI | Fatia 2: Demais Recursos)
-  const valorRiscoProSoluto = proSolutoTotalPainel;
+  // Este indicador mostra o quanto do TETO de risco da política (25% imóvel / 35%
+  // renda, o que for menor) está sendo utilizado — por isso usa riscoMaximoApuradoBruto
+  // (o valor BRUTO, antes da Taxa Bancária e da Comissão Apartada), não
+  // proSolutoTotalPainel (que já é o Pró-Soluto de verdade, líquido dessas deduções,
+  // usado no Bloco 3/parcela). Usar o valor líquido aqui fazia o percentual ficar
+  // artificialmente abaixo do teto configurado (ex.: 24,9% em vez de 25,0%), como se a
+  // política não estivesse sendo usada no limite quando na verdade estava.
+  // No pagamento à vista não existe Pró-Soluto nenhum (o cliente já paga o imóvel
+  // inteiro no Ato) — riscoMaximoApuradoBruto continua sendo só o TETO teórico da
+  // política (25%/35%, calculado em cima do valor do imóvel, independente de haver
+  // ou não financiamento de fato), então sem esta trava o gráfico mostraria um risco
+  // de Pró-Soluto que nunca é usado. Mesma lógica já aplicada ao ITBI (valorTotalITBI
+  // acima) e ao Risco Parcela/Renda (valorRiscoParcela, que já zera via `parcela`).
+  const valorRiscoProSoluto = isPagamentoAVistaAtivoManual ? 0 : riscoMaximoApuradoBruto;
   const pctRiscoProSoluto = baseVendaLiquidaComITBI > 0
     ? Math.min(100, Math.max(0, (valorRiscoProSoluto / baseVendaLiquidaComITBI) * 100))
     : 0;
@@ -1387,6 +1605,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
       dadosCompletos.mensais_qtd = qtdMensais;
       dadosCompletos.parcela_mensal = parcela;
       dadosCompletos.pro_soluto_total = proSolutoTotalPainel;
+      if (isComissaoApartada) {
+        dadosCompletos.comissao_apartada_valor = comissaoApartadaValor;
+        dadosCompletos.comissao_apartada_parcelas = comissaoApartadaParcelasQtd;
+        dadosCompletos.comissao_apartada_parcela_valor = comissaoApartadaParcelaValor;
+      }
     }
     return dadosCompletos;
   };
@@ -1644,9 +1867,12 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           </button>
         </div>
 
-        {/* LINHA 1: TORRE (col-span-2), UNIDADE (col-span-2), FASE (col-span-2), TIPOLOGIA (col-span-6) */}
-        <div className="grid grid-cols-12 gap-2 text-xs w-full">
-          <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+        {/* LINHA 1: TORRE (col-span-2), UNIDADE (col-span-2), FASE (col-span-2), TIPOLOGIA (col-span-6) —
+            abaixo de sm (640px) vira grid de 2 colunas (Torre+Unidade / Fase+Tipologia empilhados em
+            pares), já que os 4 campos lado a lado no grid de 12 colunas do PDF ficam ilegíveis num
+            celular comum. */}
+        <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 text-xs w-full">
+          <div className="col-span-1 sm:col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
             <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
               TORRE *
             </label>
@@ -1662,7 +1888,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             </select>
           </div>
 
-          <div className="col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
             <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
               UNIDADE *
             </label>
@@ -1679,7 +1905,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             </select>
           </div>
 
-          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Fase</span>
             <input
               id="campo-fase"
@@ -1690,7 +1916,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             />
           </div>
 
-          <div className="col-span-6 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-6 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Tipologia</span>
             <input
               type="text"
@@ -1702,9 +1928,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           </div>
         </div>
 
-        {/* LINHA 2: ÁREA PRIVATIVA (col-span-2), QUINTAL (col-span-2), PREÇO DE TABELA (col-span-4), AVALIAÇÃO BANCÁRIA (col-span-4) */}
-        <div className="grid grid-cols-12 gap-2 text-xs w-full">
-          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+        {/* LINHA 2: ÁREA PRIVATIVA (col-span-2), QUINTAL (col-span-2), PREÇO DE TABELA (col-span-4), AVALIAÇÃO BANCÁRIA (col-span-4) —
+            mesma adaptação da linha 1 acima. */}
+        <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 text-xs w-full">
+          <div className="col-span-1 sm:col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Área Privativa</span>
             <input
               type="text"
@@ -1714,7 +1941,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             />
           </div>
 
-          <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Quintal</span>
             <input
               type="text"
@@ -1724,7 +1951,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             />
           </div>
 
-          <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Preço de Tabela</span>
             <input
               type="text"
@@ -1734,7 +1961,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             />
           </div>
 
-          <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
+          <div className="col-span-1 sm:col-span-4 bg-slate-50 p-2 rounded-lg border border-slate-200/60 flex flex-col items-center justify-center text-center min-w-0">
             <span className="block text-[10px] text-slate-400 font-medium text-center mb-0.5 whitespace-nowrap">Avaliação Bancária</span>
             <input
               type="text"
@@ -1972,7 +2199,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             valorTotalITBI={valorTotalITBI}
             isFirstHome={isFirstHomeLocal}
             onToggleFirstHome={() => setIsFirstHomeLocal(prev => !prev)}
-            onITBIChange={(novoVal) => setValAtoITBI(novoVal)}
+            onITBIChange={(novoVal) => {
+              setValAtoITBI(novoVal);
+              // Guarda como piso manual — as próximas recalculagens (ex.: ao
+              // mudar a Qtd. Mensais) partem dele, nunca de uma migração
+              // automática anterior que porventura já esteja maior na tela.
+              setItbiAtoManualFloor(novoVal > 0 ? novoVal : null);
+            }}
             descontoAto={isParcelamentoMorar ? pm.descontoAtoPremiado : descontoAto}
             isAtoPremiadoActive={isAtoPremiadoEnabled}
             onToggleAtoPremiado={(ativo) => {
@@ -2175,7 +2408,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       <span className="text-[9.5px] text-slate-400 font-semibold">A partir de {pmMensalObraDataInicio}</span>
                     )}
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-1.5">
                     <PmCampoEditavel
                       label="Qtd. Meses"
                       tipo="inteiro"
@@ -2326,7 +2559,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       Não utilizado — prazo de obra reduzido do sugerido.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-1.5">
                       <PmCampoEditavel
                         label="Qtd. Meses"
                         tipo="inteiro"
@@ -2393,7 +2626,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 <span>Juros: <strong className="text-sky-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5 text-xs">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2.5 text-xs">
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
                     Qtd. Mensais
@@ -2401,13 +2634,13 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   <div className="relative flex items-center justify-center">
                     <input
                       type="number"
-                      value={qtdMensais > 0 ? qtdMensais : ''}
-                      min="1"
+                      value={(qtdMensais > 0 || (qtdMensais === 0 && parcelasMinimasCond === 0)) ? qtdMensais : ''}
+                      min={parcelasMinimasCond}
                       max={limiteMaximoParcelas}
                       onChange={(e) => {
                         const rawVal = e.target.value;
                         if (rawVal === '') {
-                          setQtdMensais(0);
+                          setQtdMensais(parcelasMinimasCond === 0 ? 0 : parcelasMinimasCond);
                           return;
                         }
                         const val = parseInt(rawVal, 10);
@@ -2418,15 +2651,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                           alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
                           return;
                         }
-                        if (val < 1) {
-                          setQtdMensais(1);
+                        if (val < parcelasMinimasCond) {
+                          setQtdMensais(parcelasMinimasCond);
                           return;
                         }
                         setQtdMensais(val);
                       }}
                       onBlur={() => {
-                        if (!qtdMensais || qtdMensais < 1) {
-                          setQtdMensais(1);
+                        if (qtdMensais < parcelasMinimasCond) {
+                          setQtdMensais(parcelasMinimasCond);
                         } else if (qtdMensais > limiteMaximoParcelas) {
                           setQtdMensais(limiteMaximoParcelas);
                           alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
@@ -2474,6 +2707,75 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               </div>
             </div>
           ))}
+
+          {/* COMISSÃO A PAGAR — só na condição "Sinal c/ Banco Direto (Comissão Apartada)".
+              Parcelamento simples e independente: não passa por taxa bancária nem por
+              nenhum limite de risco, e não altera o Ato nem o Pró-Soluto (já saem líquidos
+              dela, ver comissaoApartadaValor). */}
+          {isComissaoApartada && (
+            <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-fuchsia-50 text-fuchsia-600">
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Comissão a Pagar
+                  </h3>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2.5 text-xs">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Comissão Total</span>
+                  <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
+                    {formatCurrency(comissaoApartadaValor)}
+                  </strong>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Qtd. Parcelas
+                  </label>
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="number"
+                      value={comissaoApartadaParcelasQtd > 0 ? comissaoApartadaParcelasQtd : ''}
+                      min="1"
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        if (rawVal === '') {
+                          setComissaoParcelasManual(1);
+                          return;
+                        }
+                        const val = parseInt(rawVal, 10);
+                        if (isNaN(val)) return;
+                        setComissaoParcelasManual(Math.max(1, val));
+                      }}
+                      onBlur={() => {
+                        if (!comissaoApartadaParcelasQtd || comissaoApartadaParcelasQtd < 1) {
+                          setComissaoParcelasManual(1);
+                        }
+                      }}
+                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-fuchsia-700 text-center focus:outline-none focus:border-fuchsia-600 text-xs"
+                    />
+                    <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Valor da Parcela</span>
+                  <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
+                    {formatCurrency(comissaoApartadaParcelaValor)}
+                  </strong>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-500 leading-relaxed px-1">
+                Parcelamento simples, sem taxa bancária nem limites de risco — só divide a comissão pelo número de parcelas. Não afeta o Ato, o Pró-Soluto nem os indicadores de comprometimento de renda exibidos nesta ficha.
+              </p>
+            </div>
+          )}
 
         </div>
 

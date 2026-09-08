@@ -478,11 +478,15 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
           </div>
         )}
 
-        {/* CORPO DO DOCUMENTO IMPRESSO */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[rgba(241,245,249,0.6)]">
+        {/* CORPO DO DOCUMENTO IMPRESSO — o "papel" simula proporções de A4, então
+            em telas de celular ele não encolhe (min-w abaixo): a área rola na
+            horizontal (como as tabelas largas do Painel do Administrador) em vez
+            de espremer o grid interno e descaracterizar a pré-visualização do
+            que realmente sai no PDF exportado. */}
+        <div className="flex-1 overflow-auto p-4 sm:p-6 bg-[rgba(241,245,249,0.6)]">
           <div
             id="pdf-content-area"
-            className="printable-document bg-white mx-auto border border-slate-200 shadow-md rounded-xl p-5 sm:p-7 space-y-4 max-w-[210mm] text-slate-900 text-xs"
+            className="printable-document bg-white mx-auto border border-slate-200 shadow-md rounded-xl p-5 sm:p-7 space-y-4 min-w-[520px] max-w-[210mm] text-slate-900 text-xs"
           >
             
             {/* 1. CABEÇALHO PRINCIPAL */}

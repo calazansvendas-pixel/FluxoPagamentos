@@ -26,42 +26,42 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs w-full">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-        
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2">
+
         {/* LOGO E BOTÃO TOGGLE SIDEBAR */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-800 transition-all focus:outline-none cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl hover:bg-slate-100 text-slate-800 transition-all focus:outline-none cursor-pointer shrink-0"
             title="Alternar Menu Lateral"
           >
             <Menu className="w-5 h-5 text-sky-600" />
           </button>
 
-          <div 
-            className="flex items-center gap-3 cursor-pointer group"
+          <div
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer group min-w-0"
             onClick={onNavigateHome}
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-100 via-sky-50 to-white border border-sky-200 flex items-center justify-center text-sky-600 shadow-xs group-hover:scale-105 transition-transform">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-100 via-sky-50 to-white border border-sky-200 flex items-center justify-center text-sky-600 shadow-xs group-hover:scale-105 transition-transform shrink-0">
               <Building2 className="w-5 h-5 text-sky-600" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-baseline">
-                <span className="text-xl text-slate-900 font-bold tracking-tight">CALAZANS</span>
+                <span className="text-base sm:text-xl text-slate-900 font-bold tracking-tight truncate">CALAZANS</span>
                 <span className="text-xs text-sky-600 ml-1.5 uppercase font-light tracking-widest">IMOB</span>
               </div>
-              <p className="text-[10px] text-slate-400 font-medium tracking-wider uppercase">Simulador & Políticas Comerciais</p>
+              <p className="text-[10px] text-slate-400 font-medium tracking-wider uppercase hidden sm:block">Simulador & Políticas Comerciais</p>
             </div>
           </div>
         </div>
 
         {/* CONTROLES DO CABEÇALHO */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             type="button"
             onClick={onResetAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
             title="Limpar formulário e iniciar nova simulação"
           >
             <RotateCcw className="w-3.5 h-3.5" />
