@@ -1116,29 +1116,26 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
     : 0;
 
   // 3. REGRA DE DEDUÇÃO NO PRÓ-SOLUTO (SINAL RESTANTE):
-  // Pró-Soluto (Sinal Restante) = proSolutoLiquido (já resolvido lá em cima,
-  // no laço de convergência do Ato — já líquido de Ato, Comissão Apartada e
-  // Taxa Bancária/Assinatura de Contrato) menos o que ainda falta abater das
-  // Mensais 30d/60d que não coube no Ato (saldoParaAbater), menos o ITBI que
-  // continua parcelável (itbiRestante, abaixo).
+  // Pró-Soluto (Sinal Restante) = Sinal Total - Pagamento Ato (Imóvel) - 1ª Mensal - 2ª Mensal
+  // - Comissão Apartada (Nota: o descontoAto já foi deduzido diretamente na formação do
+  // sinalTotal). A Comissão Apartada é paga por fora do contrato — reduz o Pró-Soluto
+  // (e, por tabela, a parcela, reconstruída a partir dele mais abaixo em baseCalculoParcela)
+  // pelo valor cheio da comissão. Em qualquer condição que não seja "Comissão Apartada",
+  // comissaoApartadaValor é sempre 0, então esta linha fica idêntica ao comportamento de antes.
   //
-  // Antes, essa conta era refeita do zero a partir de Sinal Total - Ato -
-  // Mensais - Comissão. Isso bate exatamente com proSolutoLiquido enquanto o
-  // Ato vem do próprio laço — mas diverge sempre que a TRAVA DO ATO MÍNIMO
-  // (piso da política) entra em ação: ali o Ato é fixado no piso em vez de vir
-  // do laço, e a Taxa Bancária (que o laço já tinha descontado de
-  // proSolutoLiquido) não estava sendo descontada de novo nessa reconstrução —
-  // inflando a base da parcela por exatamente o valor da Taxa Bancária, e
-  // empurrando esse tanto pro Ato à toa quando a trava de risco da parcela
-  // (mais abaixo) comparava com o teto. Usar proSolutoLiquido direto elimina
-  // essa divergência nos dois casos (piso ativo ou não).
-  const itbiRestante = saldoITBI;
+  // Esse valor NÃO desconta a Taxa Bancária/Assinatura de Contrato — ela só
+  // entra depois, ao reconstruir baseCalculoParcela (a parcela é a única conta
+  // que usa o valor bruto, com a taxa embutida como um custo financiado a
+  // mais, não como uma dedução do que fica pro Pró-Soluto).
   const proSolutoSinalRestanteSemTravaParcela = hasUnitSelected
-    ? Math.max(0, proSolutoLiquido - saldoParaAbater - itbiRestante)
+    ? Math.max(0, sinalTotal - atoAposMensais - mens30d - mens60d - comissaoApartadaValor)
     : 0;
 
   // 2. PRÓ-SOLUTO TOTAL C/ ITBI (RISCO MÁX):
+  // Isole e utilize o saldo devedor restante das despesas de ITBI/Cartório:
+  // ITBI_Restante = Math.max(0, DespesasCartorariasTotal - PagamentoITBINoAto)
   // ProSolutoTotalComITBI = ProSolutoSinalRestante + ITBI_Restante
+  const itbiRestante = saldoITBI;
   const proSolutoTotalParceladoSemTravaParcela = hasUnitSelected
     ? Math.max(0, proSolutoSinalRestanteSemTravaParcela + itbiRestante)
     : 0;
@@ -1150,14 +1147,19 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   // (Sinal Total - Ato - Mensais - Comissão) que não fica presa a esse teto. O
   // que não couber migra pro Ato (Imóvel): o cliente traz mais na entrada em
   // vez de financiar acima do que a política permite.
-  const baseCalculoParcelaSemTravaParcela = taxaAssinaturaContratoPct < 100
-    ? proSolutoTotalParceladoSemTravaParcela / (1 - taxaAssinaturaContratoPct / 100)
-    : proSolutoTotalParceladoSemTravaParcela;
+  //
+  // A comparação usa proSolutoTotalParceladoSemTravaParcela (ainda SEM o
+  // acréscimo da Taxa Bancária) contra riscoMaximoApuradoBruto (também sem
+  // taxa) — maçã com maçã. Comparar contra baseCalculoParcela (que JÁ inclui a
+  // taxa como acréscimo, de propósito) contaria esse acréscimo como se fosse
+  // estouro do teto e empurraria dinheiro pro Ato à toa sempre que a trava do
+  // Ato Mínimo estivesse ativa (ali riscoMaximoApuradoBruto vem sem taxa
+  // nenhuma, então bater com um valor que já tem taxa somada sempre acusava
+  // uma sobra do tamanho exato da Taxa Bancária).
   const excessoRiscoParcela = (hasUnitSelected && riscoMaximoApuradoBruto > 0)
-    ? Math.max(0, baseCalculoParcelaSemTravaParcela - riscoMaximoApuradoBruto)
+    ? Math.max(0, proSolutoTotalParceladoSemTravaParcela - riscoMaximoApuradoBruto)
     : 0;
-  const fatorLiquidoTaxaAssinatura = taxaAssinaturaContratoPct < 100 ? (1 - taxaAssinaturaContratoPct / 100) : 1;
-  const extraAtoPorTravaParcela = Math.round(excessoRiscoParcela * fatorLiquidoTaxaAssinatura * 100) / 100;
+  const extraAtoPorTravaParcela = Math.round(excessoRiscoParcela * 100) / 100;
 
   atoAposMensais += extraAtoPorTravaParcela;
   const proSolutoSinalRestante = Math.max(0, proSolutoSinalRestanteSemTravaParcela - extraAtoPorTravaParcela);
