@@ -721,11 +721,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const comissaoApartadaParcelaValor = comissaoApartadaValor > 0
     ? Math.round((comissaoApartadaValor / comissaoApartadaParcelasQtd) * 100) / 100
     : 0;
-  // Ato (Imóvel) líquido que efetivamente entra no caixa da construtora —
-  // desconta o Ato Premiado e, na condição Comissão Apartada, também a
-  // comissão (paga à parte, ao corretor — nunca chega à construtora).
+  // Ato (Imóvel) líquido da corretagem — na condição Comissão Apartada, a
+  // comissão é paga pelo cliente por fora e NÃO compõe o Ato destinado à
+  // construtora. `valorAtoEfetivo` (quando sugerido automaticamente) já é o
+  // ponto fixo "(Sinal + ITBI) − Pró-Soluto − Desconto Ato Premiado" resolvido
+  // pelo motor (ver atoResidual em calculateMorarFlowEngine) — o Ato Premiado
+  // continua exibido à parte (card próprio), então aqui só a comissão é
+  // deduzida, nunca o desconto do Ato Premiado de novo.
   const atoLiquidoConstrutora = isComissaoApartada
-    ? Math.max(sinalMinimoVal, Math.round((valorAtoEfetivo - descontoAto - comissaoApartadaValor) * 100) / 100)
+    ? Math.max(sinalMinimoVal, Math.round((valorAtoEfetivo - comissaoApartadaValor) * 100) / 100)
     : valorAtoEfetivo - descontoAto;
 
   // Teto do Ato (Imóvel): ponto fixo ato* = price - subsidy - desconto(ato*).
@@ -2518,21 +2522,39 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           <FluxoEntradaConstrutora
             title="2. FLUXO DE ENTRADA C/ CONSTRUTORA"
             onLimpar={limparFluxoPagamento}
-            valorAto={valorAtoEfetivo}
-            valorAtoMinimo={Math.max(sinalMinimoVal, atoSugeridoResidual)}
+            // Na condição Comissão Apartada, o campo ATO (IMÓVEL) exibe e aceita
+            // o valor JÁ LÍQUIDO da corretagem (comissão paga por fora, não
+            // compõe o caixa da construtora) — por isso o valor exibido, o piso,
+            // o teto e o valor digitado (onAtoChange) são todos convertidos
+            // aqui, na fronteira com o componente. Internamente (valAtoManual,
+            // o motor de cálculo, os pisos de risco) tudo continua operando
+            // sobre o Ato BRUTO, sem nenhuma mudança de comportamento.
+            valorAto={isComissaoApartada ? atoLiquidoConstrutora : valorAtoEfetivo}
+            valorAtoMinimo={isComissaoApartada
+              ? Math.max(0, Math.round((Math.max(sinalMinimoVal, atoSugeridoResidual) - comissaoApartadaValor) * 100) / 100)
+              : Math.max(sinalMinimoVal, atoSugeridoResidual)}
             // Teto do Ato: zera Pró-Soluto + Financiamento + FGTS, mas nunca avança sobre o
             // Subsídio. Resolvido como ponto fixo (ato* = price - subsidy - desconto(ato*))
             // pois o desconto do Ato Premiado é escalonado pelo próprio valor do Ato.
-            valorAtoMaximo={valorAtoMaximoCalculado}
+            valorAtoMaximo={isComissaoApartada
+              ? Math.max(0, Math.round((valorAtoMaximoCalculado - comissaoApartadaValor) * 100) / 100)
+              : valorAtoMaximoCalculado}
             onAtoChange={(novoVal) => {
               if (novoVal === null) {
                 setValAtoManual(null);
                 setAtoInputText(formatCurrency(atoSugeridoResidual));
                 aplicarDistribuicaoOficialMorar();
               } else {
-                setValAtoManual(novoVal);
-                setAtoInputText(formatCurrency(novoVal));
-                recalcularSeriesParaAtoManual(novoVal);
+                // Converte o valor líquido digitado de volta para o Ato bruto
+                // antes de gravar no estado — o motor de cálculo e os pisos de
+                // risco (calcularSeriesParaAtoManual, efeitos de reajuste) nunca
+                // veem/manipulam o valor líquido, só o bruto.
+                const novoValBruto = isComissaoApartada
+                  ? Math.round((novoVal + comissaoApartadaValor) * 100) / 100
+                  : novoVal;
+                setValAtoManual(novoValBruto);
+                setAtoInputText(formatCurrency(novoValBruto));
+                recalcularSeriesParaAtoManual(novoValBruto);
               }
             }}
             onShowToast={onShowToast}
