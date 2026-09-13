@@ -163,6 +163,14 @@ export function ensureProductConditions(prod: Product): Product {
   prod.conditions = prod.conditions.map(c => (
     c.torresFase2 === undefined ? { ...c, torresFase2: [] } : c
   ));
+  // Garante os limites de parcelas da Comissão Apartada em condições
+  // criadas antes desse campo existir — sem sobrescrever um limite já
+  // configurado pelo gestor em Políticas & Empreendimentos.
+  prod.conditions = prod.conditions.map(c => ({
+    ...c,
+    comissaoApartadaParcelasMin: c.comissaoApartadaParcelasMin ?? 1,
+    comissaoApartadaParcelasMax: c.comissaoApartadaParcelasMax ?? 6
+  }));
   return prod;
 }
 

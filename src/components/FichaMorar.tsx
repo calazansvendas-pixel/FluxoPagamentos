@@ -717,7 +717,14 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const comissaoApartadaValor = isComissaoApartada
     ? Math.max(0, Math.round((precoTabelaOriginal - descontoAto) * pctComissaoApartadaCond * 100) / 100)
     : 0;
-  const comissaoApartadaParcelasQtd = Math.max(1, comissaoParcelasManual ?? (currentCond?.comissaoApartadaParcelas ?? 6));
+  // Limites de parcelas da Comissão Apartada, configuráveis por condição
+  // comercial em Políticas & Empreendimentos (padrão 1x a 6x).
+  const minComissaoParcelas = Math.max(1, currentCond?.comissaoApartadaParcelasMin ?? 1);
+  const maxComissaoParcelas = Math.max(minComissaoParcelas, currentCond?.comissaoApartadaParcelasMax ?? (currentCond?.comissaoApartadaParcelas ?? 6));
+  const comissaoApartadaParcelasQtd = Math.min(
+    maxComissaoParcelas,
+    Math.max(minComissaoParcelas, comissaoParcelasManual ?? (currentCond?.comissaoApartadaParcelas ?? 6))
+  );
   const comissaoApartadaParcelaValor = comissaoApartadaValor > 0
     ? Math.round((comissaoApartadaValor / comissaoApartadaParcelasQtd) * 100) / 100
     : 0;
@@ -3017,26 +3024,30 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     <input
                       type="number"
                       value={comissaoApartadaParcelasQtd > 0 ? comissaoApartadaParcelasQtd : ''}
-                      min="1"
+                      min={minComissaoParcelas}
+                      max={maxComissaoParcelas}
                       onChange={(e) => {
                         const rawVal = e.target.value;
                         if (rawVal === '') {
-                          setComissaoParcelasManual(1);
+                          setComissaoParcelasManual(minComissaoParcelas);
                           return;
                         }
                         const val = parseInt(rawVal, 10);
                         if (isNaN(val)) return;
-                        setComissaoParcelasManual(Math.max(1, val));
+                        setComissaoParcelasManual(Math.min(maxComissaoParcelas, Math.max(minComissaoParcelas, val)));
                       }}
                       onBlur={() => {
-                        if (!comissaoApartadaParcelasQtd || comissaoApartadaParcelasQtd < 1) {
-                          setComissaoParcelasManual(1);
+                        if (!comissaoApartadaParcelasQtd || comissaoApartadaParcelasQtd < minComissaoParcelas || comissaoApartadaParcelasQtd > maxComissaoParcelas) {
+                          setComissaoParcelasManual(Math.min(maxComissaoParcelas, Math.max(minComissaoParcelas, comissaoApartadaParcelasQtd || minComissaoParcelas)));
                         }
                       }}
                       className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-fuchsia-700 text-center focus:outline-none focus:border-fuchsia-600 text-xs"
                     />
                     <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
                   </div>
+                  <p className="text-[9px] text-slate-400 font-medium mt-1">
+                    Permitido de {minComissaoParcelas} a {maxComissaoParcelas} parcelas
+                  </p>
                 </div>
 
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
