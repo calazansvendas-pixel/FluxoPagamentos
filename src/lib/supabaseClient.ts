@@ -20,8 +20,8 @@ const supabaseAnonKey: string =
 
 // Sessão de login guardada em sessionStorage (não em localStorage): a pessoa
 // continua logada enquanto a aba/navegador estiver aberto, mas fechar o
-// navegador exige um novo login — comportamento pedido explicitamente para o
-// Calazans Imob.
+// navegador exige um novo login — comportamento pedido explicitamente para
+// este app.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,

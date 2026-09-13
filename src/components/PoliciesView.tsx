@@ -951,7 +951,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     <div className="w-full space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <span className="text-[10px] uppercase tracking-wider text-sky-600 font-bold block">
+          <span className="text-[10px] uppercase tracking-wider text-morar-600 font-bold block">
             Gestão Comercial & Regras de Cálculo
           </span>
           <h1 className="text-xl font-bold font-heading text-slate-900">
@@ -964,7 +964,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
         <button
           onClick={onOpenNewProductModal}
           type="button"
-          className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+          className="px-4 py-2.5 bg-morar-600 hover:bg-morar-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Novo Empreendimento</span>
@@ -974,15 +974,15 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
         
         {/* 1. SELETOR DE EMPREENDIMENTO */}
-        <div className="bg-sky-50/60 p-4 rounded-xl border border-sky-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="bg-morar-50/60 p-4 rounded-xl border border-morar-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex-1">
-            <label className="block text-xs font-bold text-sky-600 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-bold text-morar-600 uppercase tracking-wider mb-1.5">
               1. Selecione o Empreendimento para Visualizar / Editar
             </label>
             <select
               value={activeProductId}
               onChange={(e) => onSelectProduct(e.target.value)}
-              className="w-full bg-white font-bold text-slate-900 border border-slate-300 rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-sky-600 text-xs shadow-xs cursor-pointer"
+              className="w-full bg-white font-bold text-slate-900 border border-slate-300 rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-morar-600 text-xs shadow-xs cursor-pointer"
             >
               {products.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
@@ -1016,7 +1016,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 type="text"
                 value={productName}
                 onChange={(e) => setProductName(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-morar-600"
               />
             </div>
 
@@ -1028,7 +1028,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 type="date"
                 value={deliveryDatePhase1}
                 onChange={(e) => setDeliveryDatePhase1(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 cursor-pointer"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-morar-600 cursor-pointer"
               />
             </div>
 
@@ -1040,7 +1040,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 type="date"
                 value={deliveryDatePhase2}
                 onChange={(e) => setDeliveryDatePhase2(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 cursor-pointer"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-morar-600 cursor-pointer"
               />
             </div>
           </div>
@@ -1056,7 +1056,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 <select
                   value={activeConditionId}
                   onChange={(e) => handleSelectCondition(e.target.value)}
-                  className="w-full bg-white font-bold text-slate-900 border border-amber-300 rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-sky-600 text-xs shadow-xs cursor-pointer"
+                  className="w-full bg-white font-bold text-slate-900 border border-amber-300 rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-morar-600 text-xs shadow-xs cursor-pointer"
                 >
                   {prodWithConds?.conditions.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -1089,7 +1089,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-sky-100 text-sky-700 rounded-lg">
+                <div className="p-1.5 bg-morar-100 text-morar-700 rounded-lg">
                   <Building className="w-4 h-4" />
                 </div>
                 <div>
@@ -1100,7 +1100,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         torresHabilitadas.length === allTorres.length
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           : torresHabilitadas.length > 0
-                          ? 'bg-sky-50 text-sky-700 border-sky-200'
+                          ? 'bg-morar-50 text-morar-700 border-morar-200'
                           : 'bg-rose-50 text-rose-700 border-rose-200'
                       }`}>
                         {torresHabilitadas.length === allTorres.length
@@ -1112,7 +1112,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     )}
                   </h4>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Defina quais torres deste empreendimento estarão visíveis no Simulador para a condição <strong className="text-sky-700">{activeCondObj?.name || '--'}</strong>.
+                    Defina quais torres deste empreendimento estarão visíveis no Simulador para a condição <strong className="text-morar-700">{activeCondObj?.name || '--'}</strong>.
                   </p>
                 </div>
               </div>
@@ -1159,9 +1159,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           handleToggleTorre(torreName);
                         }
                       }}
-                      className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-sky-400 ${
+                      className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-morar-400 ${
                         isChecked
-                          ? 'bg-sky-50/80 hover:bg-sky-50 border-sky-300 text-slate-900 shadow-2xs'
+                          ? 'bg-morar-50/80 hover:bg-morar-50 border-morar-300 text-slate-900 shadow-2xs'
                           : 'bg-slate-50/60 hover:bg-slate-100/70 border-slate-200 text-slate-400 hover:border-slate-300'
                       }`}
                     >
@@ -1170,7 +1170,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           type="checkbox"
                           checked={isChecked}
                           readOnly
-                          className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500 cursor-pointer pointer-events-none"
+                          className="w-4 h-4 text-morar-600 rounded border-slate-300 focus:ring-morar-500 cursor-pointer pointer-events-none"
                         />
                         <div className="truncate">
                           <span className={`text-xs font-bold block truncate ${isChecked ? 'text-slate-900' : 'text-slate-500'}`}>
@@ -1263,12 +1263,12 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
           </div>
 
           {/* PARÂMETROS DA POLÍTICA DE CRÉDITO PARA A CONDIÇÃO SELECIONADA */}
-          <div className="bg-gradient-to-r from-sky-50/80 via-slate-50 to-white p-4 rounded-xl border border-sky-100 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sky-100 pb-2">
+          <div className="bg-gradient-to-r from-morar-50/80 via-slate-50 to-white p-4 rounded-xl border border-morar-100 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-morar-100 pb-2">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-sky-600" />
+                <ShieldCheck className="w-4 h-4 text-morar-600" />
                 <span className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
-                  Parâmetros da Política de Crédito (<span className="text-sky-600 font-extrabold">{activeCondObj?.name || '--'}</span>)
+                  Parâmetros da Política de Crédito (<span className="text-morar-600 font-extrabold">{activeCondObj?.name || '--'}</span>)
                 </span>
               </div>
 
@@ -1279,7 +1279,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     onClick={() => handleSwitchFase('1')}
                     className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                       editingFase === '1'
-                        ? 'bg-white text-sky-700 shadow-2xs'
+                        ? 'bg-white text-morar-700 shadow-2xs'
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
@@ -1298,7 +1298,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </button>
                 </div>
                 {isMorarCondition && (
-                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-morar-100 text-morar-800 border border-morar-200">
                     Condição Sinal c/ Morar ({totalMesesMorar}x)
                   </span>
                 )}
@@ -1401,7 +1401,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         setSinalMinimo(formatCurrency(resolveSinalMinimo(sinalMinimo)));
                       }}
                       placeholder="Ex: R$ 2.000,00"
-                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-emerald-600 focus:outline-none focus:border-sky-600 text-xs"
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-emerald-600 focus:outline-none focus:border-morar-600 text-xs"
                     />
                   </div>
 
@@ -1420,7 +1420,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           const val = Math.max(0, parseIntFlexible(mesesObraStr, 33));
                           setMesesObraStr(String(val));
                         }}
-                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600 text-xs"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">M</span>
                     </div>
@@ -1441,7 +1441,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           const val = Math.max(0, parseIntFlexible(mesesPosStr, 27));
                           setMesesPosStr(String(val));
                         }}
-                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600 text-xs"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">M</span>
                     </div>
@@ -1452,7 +1452,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                     <label className="block font-semibold text-slate-700 mb-1 text-xs truncate" title="Total de Meses da Condição">
                       Total Meses
                     </label>
-                    <div className="px-3 py-2 bg-sky-50 border border-sky-200 rounded-xl font-black text-sky-700 text-center text-xs">
+                    <div className="px-3 py-2 bg-morar-50 border border-morar-200 rounded-xl font-black text-morar-700 text-center text-xs">
                       {totalMesesMorar} Meses (Obra + Pós)
                     </div>
                   </div>
@@ -1562,7 +1562,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                                 serie.set(formatDecimalBR(parsed, 1, 2));
                               }}
                               title="Percentual do balde"
-                              className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
+                              className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600 text-xs"
                             />
                             <span className="absolute right-2.5 font-extrabold text-slate-500 text-xs pointer-events-none">%</span>
                           </div>
@@ -1577,7 +1577,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                                 serie.mesesSet(String(parsed));
                               }}
                               title="Quantidade de meses do balde"
-                              className="w-full pl-3 pr-9 py-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
+                              className="w-full pl-3 pr-9 py-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600 text-xs"
                             />
                             <span className="absolute right-2.5 font-extrabold text-slate-500 text-[10px] pointer-events-none">mês</span>
                           </div>
@@ -1688,7 +1688,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         value={pmSinalMinimoStr}
                         onChange={(e) => setPmSinalMinimoStr(e.target.value)}
                         onBlur={() => setPmSinalMinimoStr(formatDecimalBR(parseDecimal(pmSinalMinimoStr, 10.0), 1, 2))}
-                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-emerald-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-emerald-700 text-center focus:outline-none focus:border-morar-600 text-xs"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
                     </div>
@@ -1709,7 +1709,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         value={riscoRendaStr}
                         onChange={(e) => setRiscoRendaStr(e.target.value)}
                         onBlur={() => setRiscoRendaStr(formatDecimalBR(parseDecimal(riscoRendaStr, 40.0), 1, 2))}
-                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-sky-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-morar-700 text-center focus:outline-none focus:border-morar-600 text-xs"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
                     </div>
@@ -1730,7 +1730,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         value={pmQtdParcelasPosObraStr}
                         onChange={(e) => setPmQtdParcelasPosObraStr(e.target.value)}
                         onBlur={() => setPmQtdParcelasPosObraStr(String(Math.max(0, parseIntFlexible(pmQtdParcelasPosObraStr, 12))))}
-                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600 text-xs"
+                        className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600 text-xs"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">X</span>
                     </div>
@@ -1839,7 +1839,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         const v = Math.max(0, parseCurrency(pmParcelaMinMensalObra));
                         setPmParcelaMinMensalObra(formatCurrency(v));
                       }}
-                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-morar-600 text-xs"
                     />
                   </div>
 
@@ -1859,7 +1859,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         const v = Math.max(0, parseCurrency(pmParcelaMinSemestral));
                         setPmParcelaMinSemestral(formatCurrency(v));
                       }}
-                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-morar-600 text-xs"
                     />
                   </div>
 
@@ -1879,7 +1879,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         const v = Math.max(0, parseCurrency(pmParcelaMinPosObra));
                         setPmParcelaMinPosObra(formatCurrency(v));
                       }}
-                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-center focus:outline-none focus:border-morar-600 text-xs"
                     />
                   </div>
                 </div>
@@ -1919,7 +1919,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             onShowToast(`Parcelas Mín. ajustado para ${val}x para não passar do novo Nº Parcelas.`);
                           }
                         }}
-                        className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
+                        className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-500 text-xs pointer-events-none">X</span>
                     </div>
@@ -1947,7 +1947,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             setParcelasMinimasStr(String(val));
                           }
                         }}
-                        className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
+                        className="w-full pl-3 pr-7 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600"
                       />
                       <span className="absolute right-3 font-extrabold text-slate-500 text-xs pointer-events-none">X</span>
                     </div>
@@ -1967,7 +1967,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         setSinalMinimo(formatCurrency(resolveSinalMinimo(sinalMinimo)));
                       }}
                       placeholder="Ex: 5000, 5000,00 ou R$ 5.000,00"
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold text-emerald-600 focus:outline-none focus:border-sky-600"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold text-emerald-600 focus:outline-none focus:border-morar-600"
                     />
                   </div>
 
@@ -1987,7 +1987,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             const parsed = parseDecimal(riscoRendaStr, 30);
                             setRiscoRendaStr(formatDecimalBR(parsed, 1, 2));
                           }}
-                          className="w-full pl-2 pr-6 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
+                          className="w-full pl-2 pr-6 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600"
                         />
                         <span className="absolute right-2.5 font-extrabold text-slate-500 text-xs pointer-events-none">%</span>
                       </div>
@@ -2021,7 +2021,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             const parsed = parseDecimal(riscoImovelStr, 25);
                             setRiscoImovelStr(formatDecimalBR(parsed, 1, 2));
                           }}
-                          className="w-full pl-2 pr-6 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-sky-600"
+                          className="w-full pl-2 pr-6 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-center focus:outline-none focus:border-morar-600"
                         />
                         <span className="absolute right-2.5 font-extrabold text-slate-500 text-xs pointer-events-none">%</span>
                       </div>
@@ -2042,7 +2042,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 </div>
 
                 {/* SEGUNDA LINHA: FAIXAS DE TAXA DE JUROS POR PRAZO DE PARCELAS */}
-                <div className="pt-3 border-t border-sky-100/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+                <div className="pt-3 border-t border-morar-100/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
                   {/* FAIXA 1 */}
                   <div className="lg:col-span-6 grid grid-cols-2 gap-2 bg-white p-2.5 rounded-xl border border-slate-200/80">
                     <div>
@@ -2059,7 +2059,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             const val = Math.max(0, parseIntFlexible(mesesTabela1Str, 36));
                             setMesesTabela1Str(String(val));
                           }}
-                          className="w-full pl-2 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
+                          className="w-full pl-2 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:outline-none focus:border-morar-600 text-xs"
                         />
                         <span className="absolute right-2 font-bold text-slate-400 text-[10px] pointer-events-none">M</span>
                       </div>
@@ -2078,7 +2078,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             const parsed = parseDecimal(taxaJuros1Str, 0);
                             setTaxaJuros1Str(formatDecimalBR(parsed, 2, 2));
                           }}
-                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-emerald-600 text-center focus:outline-none focus:border-sky-600 text-xs"
+                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-emerald-600 text-center focus:outline-none focus:border-morar-600 text-xs"
                         />
                         <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">% a.m.</span>
                       </div>
@@ -2101,7 +2101,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             const val = Math.max(0, parseIntFlexible(mesesTabela2Str, 72));
                             setMesesTabela2Str(String(val));
                           }}
-                          className="w-full pl-2 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs"
+                          className="w-full pl-2 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:outline-none focus:border-morar-600 text-xs"
                         />
                         <span className="absolute right-2 font-bold text-slate-400 text-[10px] pointer-events-none">M</span>
                       </div>
@@ -2120,7 +2120,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             const parsed = parseDecimal(taxaJuros2Str, 1);
                             setTaxaJuros2Str(formatDecimalBR(parsed, 2, 2));
                           }}
-                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-emerald-600 text-center focus:outline-none focus:border-sky-600 text-xs"
+                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-emerald-600 text-center focus:outline-none focus:border-morar-600 text-xs"
                         />
                         <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">% a.m.</span>
                       </div>
@@ -2129,7 +2129,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 </div>
 
                 {/* TAXA BANCÁRIA: REDUZ O ATO/PRÓ-SOLUTO EXIBIDO; A PARCELA USA O VALOR BRUTO */}
-                <div className="pt-3 border-t border-sky-100/80">
+                <div className="pt-3 border-t border-morar-100/80">
                   <div className="bg-white p-3 rounded-xl border border-slate-200/80 max-w-sm">
                     <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual descontado do Risco Máximo Apurado para sugerir o Ato (Imóvel) e o Pró-Soluto Total c/ ITBI exibido — a parcela (Tabela Price) usa o valor antes desse desconto">
                       Taxa Bancária (%)
@@ -2147,7 +2147,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                           const parsed = parseDecimal(taxaAssinaturaContratoStr, 0);
                           setTaxaAssinaturaContratoStr(formatDecimalBR(parsed, 4, 4));
                         }}
-                        className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-amber-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                        className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-amber-700 text-center focus:outline-none focus:border-morar-600 text-xs"
                       />
                       <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">%</span>
                     </div>
@@ -2156,7 +2156,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
                 {/* COMISSÃO APARTADA — só na condição "Sinal c/ Banco Direto (Comissão Apartada)" */}
                 {isComissaoApartadaCondition && (
-                  <div className="pt-3 border-t border-sky-100/80 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                  <div className="pt-3 border-t border-morar-100/80 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
                     <div className="bg-white p-3 rounded-xl border border-slate-200/80">
                       <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual sobre o Preço de Tabela que define o valor total da comissão. Ela sai do fluxo de Ato/Pró-Soluto e vira um parcelamento próprio, sem taxa bancária nem limite de risco.">
                         Comissão Apartada (%)
@@ -2174,7 +2174,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             const parsed = Math.max(0, parseDecimal(comissaoApartadaPctStr, 4));
                             setComissaoApartadaPctStr(formatDecimalBR(parsed, 2, 2));
                           }}
-                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-fuchsia-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-fuchsia-700 text-center focus:outline-none focus:border-morar-600 text-xs"
                         />
                         <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">%</span>
                       </div>
@@ -2197,7 +2197,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                             const parsed = Math.max(1, parseIntFlexible(comissaoApartadaParcelasStr, 6));
                             setComissaoApartadaParcelasStr(String(parsed));
                           }}
-                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-fuchsia-700 text-center focus:outline-none focus:border-sky-600 text-xs"
+                          className="w-full pl-2 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-fuchsia-700 text-center focus:outline-none focus:border-morar-600 text-xs"
                         />
                         <span className="absolute right-1.5 font-bold text-slate-400 text-[10px] pointer-events-none">X</span>
                       </div>
@@ -2206,7 +2206,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                 )}
 
                 {/* TERCEIRA LINHA: VALOR PRESENTE (VP EXCEL) E LIMITES DE RISCO (3 CARDS DIVIDIDOS EM 1/3 CADA) */}
-                <div className="pt-3 border-t border-sky-100/80 grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">
+                <div className="pt-3 border-t border-morar-100/80 grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">
                   
                   {/* 1/3: VP RISCO RENDA */}
                   <div className="bg-emerald-50/90 p-3.5 rounded-xl border border-emerald-200/90 flex flex-col justify-between space-y-2 shadow-2xs">
@@ -2234,9 +2234,9 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </div>
 
                   {/* 2/3: VALOR RISCO DO IMÓVEL */}
-                  <div className="bg-sky-50/90 p-3.5 rounded-xl border border-sky-200/90 flex flex-col justify-between space-y-2 shadow-2xs">
+                  <div className="bg-morar-50/90 p-3.5 rounded-xl border border-morar-200/90 flex flex-col justify-between space-y-2 shadow-2xs">
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-sky-100 text-sky-600 shrink-0">
+                      <div className="p-1.5 rounded-lg bg-morar-100 text-morar-600 shrink-0">
                         <Building className="w-4 h-4" />
                       </div>
                       <div className="min-w-0">
@@ -2253,7 +2253,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                         type="text"
                         readOnly
                         value={formatCurrency(riscoImovelVal)}
-                        className="w-full px-3 py-2 bg-white border border-sky-300 rounded-xl font-extrabold text-sky-600 text-center text-sm shadow-2xs cursor-not-allowed"
+                        className="w-full px-3 py-2 bg-white border border-morar-300 rounded-xl font-extrabold text-morar-600 text-center text-sm shadow-2xs cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -2297,7 +2297,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
               <button
                 type="button"
                 onClick={() => setPolicyText('')}
-                className="text-[11px] font-semibold text-slate-500 hover:text-sky-600 flex items-center gap-1 cursor-pointer"
+                className="text-[11px] font-semibold text-slate-500 hover:text-morar-600 flex items-center gap-1 cursor-pointer"
               >
                 <Eraser className="w-3 h-3" />
                 <span>Limpar Quadro</span>
@@ -2308,7 +2308,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
               value={policyText}
               onChange={(e) => setPolicyText(e.target.value)}
               placeholder="Digite as novas regras comerciais e de cálculo para esta condição..."
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-sky-600"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-morar-600"
             />
           </div>
 
@@ -2318,7 +2318,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
               id="editProductFeatured"
               checked={isFeatured}
               onChange={(e) => setIsFeatured(e.target.checked)}
-              className="rounded text-sky-600 focus:ring-sky-600 cursor-pointer"
+              className="rounded text-morar-600 focus:ring-morar-600 cursor-pointer"
             />
             <label htmlFor="editProductFeatured" className="font-semibold text-slate-700 cursor-pointer">
               Definir como Empreendimento em Destaque
@@ -2329,7 +2329,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
             <button
               onClick={handleSavePolicy}
               type="button"
-              className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-xl text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+              className="px-5 py-2.5 bg-morar-600 hover:bg-morar-700 text-white font-semibold rounded-xl text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>Salvar Alterações</span>

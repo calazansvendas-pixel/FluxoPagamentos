@@ -561,7 +561,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
     <div className="w-full space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <span className="text-[10px] uppercase tracking-wider text-sky-600 font-bold block">
+          <span className="text-[10px] uppercase tracking-wider text-morar-600 font-bold block">
             Gestão de Tabelas de Venda
           </span>
           <h1 className="text-xl font-bold font-heading text-slate-900">
@@ -582,15 +582,15 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
       <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
         
         {/* SELETOR DE EMPREENDIMENTO */}
-        <div className="bg-sky-50/60 p-4 rounded-xl border border-sky-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="bg-morar-50/60 p-4 rounded-xl border border-morar-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex-1">
-            <label className="block text-xs font-bold text-sky-600 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-bold text-morar-600 uppercase tracking-wider mb-1.5">
               Selecione o Empreendimento para Importar / Consultar Tabela
             </label>
             <select
               value={activeImportProductId}
               onChange={(e) => onSelectImportProduct(e.target.value)}
-              className="w-full bg-white font-bold text-slate-900 border border-slate-300 rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-sky-600 text-xs shadow-xs cursor-pointer"
+              className="w-full bg-white font-bold text-slate-900 border border-slate-300 rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-morar-600 text-xs shadow-xs cursor-pointer"
             >
               {products.map(p => {
                 const isActive = Boolean(p.tableInfo && p.tableInfo.active);
@@ -677,7 +677,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           {/* PERÍODO DE VALIDADE DA TABELA */}
           <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
             <div className="flex items-center gap-2">
-              <CalendarClock className="w-4 h-4 text-sky-600" />
+              <CalendarClock className="w-4 h-4 text-morar-600" />
               <span className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
                 Vigência e Validade da Tabela
               </span>
@@ -693,7 +693,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   required
                   value={validFrom}
                   onChange={(e) => setValidFrom(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 font-semibold focus:outline-none focus:border-sky-600 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 font-semibold focus:outline-none focus:border-morar-600 cursor-pointer"
                 />
               </div>
               <div>
@@ -705,7 +705,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   required
                   value={validTo}
                   onChange={(e) => setValidTo(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 font-semibold focus:outline-none focus:border-sky-600 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 font-semibold focus:outline-none focus:border-morar-600 cursor-pointer"
                 />
               </div>
             </div>
@@ -718,7 +718,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
             </label>
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-sky-200 bg-sky-50/20 hover:bg-sky-50/50 rounded-2xl p-6 text-center transition-all cursor-pointer relative"
+              className="border-2 border-dashed border-morar-200 bg-morar-50/20 hover:bg-morar-50/50 rounded-2xl p-6 text-center transition-all cursor-pointer relative"
             >
               <input
                 ref={fileInputRef}
@@ -727,7 +727,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                 onChange={handleFileUpload}
                 className="hidden"
               />
-              <div className="w-12 h-12 mx-auto rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center mb-3">
+              <div className="w-12 h-12 mx-auto rounded-xl bg-morar-100 text-morar-600 flex items-center justify-center mb-3">
                 <UploadCloud className="w-6 h-6" />
               </div>
               <p className="text-xs font-bold text-slate-900">
@@ -740,10 +740,10 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
           </div>
 
           {/* CAMPO DE CONSULTA POR TORRE E UNIDADE */}
-          <div className="bg-gradient-to-r from-sky-50/80 via-slate-50 to-white p-4 rounded-2xl border border-sky-100 space-y-3">
-            <div className="flex items-center justify-between border-b border-sky-100/80 pb-2">
+          <div className="bg-gradient-to-r from-morar-50/80 via-slate-50 to-white p-4 rounded-2xl border border-morar-100 space-y-3">
+            <div className="flex items-center justify-between border-b border-morar-100/80 pb-2">
               <div className="flex items-center gap-2">
-                <Search className="w-4 h-4 text-sky-600" />
+                <Search className="w-4 h-4 text-morar-600" />
                 <span className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
                   Consultar Unidade na Tabela
                 </span>
@@ -751,7 +751,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
               <button
                 type="button"
                 onClick={() => { setLookupTorre(''); setLookupUnidade(''); }}
-                className="text-[10px] font-semibold text-slate-500 hover:text-sky-600 flex items-center gap-1 cursor-pointer"
+                className="text-[10px] font-semibold text-slate-500 hover:text-morar-600 flex items-center gap-1 cursor-pointer"
               >
                 <XCircle className="w-3.5 h-3.5" /> Limpar Filtros
               </button>
@@ -767,7 +767,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   value={lookupTorre}
                   onChange={(e) => setLookupTorre(e.target.value)}
                   placeholder="Ex: Torre A, Bloco 1..."
-                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-sky-600 text-xs"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-morar-600 text-xs"
                 />
               </div>
               <div>
@@ -779,19 +779,19 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   value={lookupUnidade}
                   onChange={(e) => setLookupUnidade(e.target.value)}
                   placeholder="Ex: 101, 202, 304..."
-                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-bold text-sky-600 focus:outline-none focus:border-sky-600 text-xs"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-bold text-morar-600 focus:outline-none focus:border-morar-600 text-xs"
                 />
               </div>
             </div>
 
             {/* PAINEL RESULTADO DA CONSULTA DE UNIDADE */}
             {(lookupTorre || lookupUnidade) && (
-              <div className="bg-white p-3.5 rounded-xl border border-sky-200 space-y-2 mt-2 shadow-2xs">
+              <div className="bg-white p-3.5 rounded-xl border border-morar-200 space-y-2 mt-2 shadow-2xs">
                 {displayRows.length === 1 ? (
                   <div>
-                    <div className="flex items-center justify-between border-b border-sky-100 pb-2">
+                    <div className="flex items-center justify-between border-b border-morar-100 pb-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-extrabold text-sky-600 bg-sky-100 px-2.5 py-0.5 rounded-md uppercase">
+                        <span className="text-xs font-extrabold text-morar-600 bg-morar-100 px-2.5 py-0.5 rounded-md uppercase">
                           {displayRows[0][1] || 'Torre'}
                         </span>
                         <span className="text-xs font-bold text-slate-900">
@@ -817,7 +817,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                       </div>
                       <div>
                         <span className="block text-[10px] text-slate-400 font-medium">ITBI + Reg. 1º Imóvel:</span>
-                        <strong className="text-sky-600 font-bold">{formatCurrency(typeof displayRows[0][8] === 'number' ? displayRows[0][8] : 0)}</strong>
+                        <strong className="text-morar-600 font-bold">{formatCurrency(typeof displayRows[0][8] === 'number' ? displayRows[0][8] : 0)}</strong>
                       </div>
                       <div>
                         <span className="block text-[10px] text-slate-400 font-medium">ITBI + Reg. 2º Imóvel:</span>
@@ -827,7 +827,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   </div>
                 ) : displayRows.length > 1 ? (
                   <div className="flex items-center justify-between text-xs text-slate-600">
-                    <span>Busca encontrou <strong className="text-sky-600 font-bold">{displayRows.length} unidades</strong> correspondentes.</span>
+                    <span>Busca encontrou <strong className="text-morar-600 font-bold">{displayRows.length} unidades</strong> correspondentes.</span>
                     <span className="text-[10px] text-slate-400">Refine a Unidade para ver a ficha detalhada</span>
                   </div>
                 ) : (
@@ -868,7 +868,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="px-5 py-2 bg-morar-600 hover:bg-morar-700 text-white rounded-xl font-semibold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
                   >
                     {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                     <span>{isSaving ? 'Salvando...' : 'Salvar e Ativar Tabela'}</span>
@@ -889,7 +889,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {displayRows.map((row, rIdx) => (
-                      <tr key={rIdx} className="hover:bg-sky-50/50 transition-colors">
+                      <tr key={rIdx} className="hover:bg-morar-50/50 transition-colors">
                         {currentHeaders.map((headerName, cIdx) => {
                           let val = row[cIdx] !== undefined && row[cIdx] !== null ? row[cIdx] : '';
                           const hUpper = headerName.toUpperCase();
@@ -910,7 +910,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                           }
 
                           let cellClass = "p-2.5 font-medium border-b border-slate-100 whitespace-nowrap";
-                          if (hUpper.includes('UNIDADE')) cellClass += " font-bold text-sky-600";
+                          if (hUpper.includes('UNIDADE')) cellClass += " font-bold text-morar-600";
                           if (hUpper.includes('TORRE')) cellClass += " font-semibold text-slate-800";
                           if (isCurrencyCol) cellClass += " font-semibold text-slate-900";
 
@@ -941,7 +941,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                className="px-5 py-2.5 bg-morar-600 hover:bg-morar-700 text-white rounded-xl font-semibold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
               >
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 <span>{isSaving ? 'Salvando...' : 'Salvar e Ativar Tabela'}</span>
@@ -995,7 +995,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                       key={a.id}
                       onClick={() => { setVisualizandoArquivada(a); setLookupArquivadaTorre(''); setLookupArquivadaUnidade(''); }}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setVisualizandoArquivada(a); setLookupArquivadaTorre(''); setLookupArquivadaUnidade(''); } }}
-                      className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 hover:bg-sky-50/60 border border-slate-200 hover:border-sky-200 rounded-xl p-3 transition-all cursor-pointer text-left"
+                      className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 hover:bg-morar-50/60 border border-slate-200 hover:border-morar-200 rounded-xl p-3 transition-all cursor-pointer text-left"
                     >
                       <div className="min-w-0">
                         <span className="text-xs font-bold text-slate-900 font-mono block truncate">{a.file_name || 'Arquivo sem nome'}</span>
@@ -1004,7 +1004,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                        <span className="text-xs text-sky-700 font-semibold flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-sky-200 shadow-2xs">
+                        <span className="text-xs text-morar-700 font-semibold flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-morar-200 shadow-2xs">
                           <Search className="w-3.5 h-3.5" />
                           <span>Visualizar</span>
                         </span>
@@ -1067,14 +1067,14 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                   value={lookupArquivadaTorre}
                   onChange={(e) => setLookupArquivadaTorre(e.target.value)}
                   placeholder="Filtrar por Torre/Bloco..."
-                  className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-sky-600 text-xs"
+                  className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-morar-600 text-xs"
                 />
                 <input
                   type="text"
                   value={lookupArquivadaUnidade}
                   onChange={(e) => setLookupArquivadaUnidade(e.target.value)}
                   placeholder="Filtrar por Unidade..."
-                  className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-sky-600 focus:outline-none focus:border-sky-600 text-xs"
+                  className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-morar-600 focus:outline-none focus:border-morar-600 text-xs"
                 />
               </div>
 
@@ -1094,7 +1094,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {linhasFiltradas.map((row, rIdx) => (
-                        <tr key={rIdx} className="hover:bg-sky-50/50 transition-colors">
+                        <tr key={rIdx} className="hover:bg-morar-50/50 transition-colors">
                           {headersArquivada.map((headerName, cIdx) => {
                             let val = row[cIdx] !== undefined && row[cIdx] !== null ? row[cIdx] : '';
                             const hUpper = headerName.toUpperCase();
@@ -1115,7 +1115,7 @@ export const ImportTableView: React.FC<ImportTableViewProps> = ({
                             }
 
                             let cellClass = "p-2.5 font-medium border-b border-slate-100 whitespace-nowrap";
-                            if (hUpper.includes('UNIDADE')) cellClass += " font-bold text-sky-600";
+                            if (hUpper.includes('UNIDADE')) cellClass += " font-bold text-morar-600";
                             if (hUpper.includes('TORRE')) cellClass += " font-semibold text-slate-800";
                             if (isCurrencyCol) cellClass += " font-semibold text-slate-900";
 

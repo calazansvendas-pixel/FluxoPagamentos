@@ -1731,7 +1731,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 <select
                   value={currentProd.id}
                   onChange={(e) => handleProductDropdownChange(e.target.value)}
-                  className="appearance-none bg-sky-50 hover:bg-sky-100 text-sky-700 font-extrabold text-xs sm:text-sm pl-3 pr-7 py-1.5 rounded-lg border border-sky-200 uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                  className="appearance-none bg-morar-50 hover:bg-morar-100 text-morar-700 font-extrabold text-xs sm:text-sm pl-3 pr-7 py-1.5 rounded-lg border border-morar-200 uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-morar-500/20"
                 >
                   {products.map(p => (
                     <option key={p.id} value={p.id} className="text-slate-800 font-semibold bg-white">
@@ -1739,10 +1739,10 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="w-3.5 h-3.5 text-sky-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <ChevronDown className="w-3.5 h-3.5 text-morar-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             ) : (
-              <span className="text-xs sm:text-sm font-extrabold text-sky-600 bg-sky-50 px-3 py-1 rounded-lg border border-sky-100 uppercase tracking-wide">
+              <span className="text-xs sm:text-sm font-extrabold text-morar-600 bg-morar-50 px-3 py-1 rounded-lg border border-morar-100 uppercase tracking-wide">
                 {currentProd.name}
               </span>
             )}
@@ -1753,7 +1753,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 <select
                   value={currentCond.id}
                   onChange={(e) => handleConditionDropdownChange(e.target.value)}
-                  className="appearance-none bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs pl-2.5 pr-6 py-1.5 rounded-lg border border-slate-200/80 cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                  className="appearance-none bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs pl-2.5 pr-6 py-1.5 rounded-lg border border-slate-200/80 cursor-pointer focus:outline-none focus:ring-2 focus:ring-morar-500/20"
                 >
                   {currentProd.conditions.map(c => (
                     <option key={c.id} value={c.id} className="text-slate-800 font-medium bg-white">
@@ -1806,7 +1806,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           <button
             type="button"
             onClick={() => setIsPdfModalOpen(true)}
-            className="px-3.5 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
+            className="px-3.5 py-2 bg-morar-500/10 hover:bg-morar-500/20 text-morar-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
             title="Exportar Ficha de Análise em PDF / Imprimir"
           >
             <Printer className="w-3.5 h-3.5" />
@@ -1862,7 +1862,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
             title="Limpar Ficha de Análise"
           >
-            <RotateCcw className="w-3 h-3 text-sky-600" />
+            <RotateCcw className="w-3 h-3 text-morar-600" />
             <span>Limpar</span>
           </button>
         </div>
@@ -1872,14 +1872,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             pares), já que os 4 campos lado a lado no grid de 12 colunas do PDF ficam ilegíveis num
             celular comum. */}
         <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 text-xs w-full">
-          <div className="col-span-1 sm:col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
-            <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
+          <div className="col-span-1 sm:col-span-2 bg-morar-50/60 p-2 rounded-lg border border-morar-100 flex flex-col items-center justify-center text-center min-w-0">
+            <label className="block text-[10px] text-morar-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
               TORRE *
             </label>
             <select
               value={selectedTorre}
               onChange={(e) => handleTorreChange(e.target.value)}
-              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center"
+              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-morar-600 text-xs cursor-pointer text-center"
             >
               <option value="">--</option>
               {availableTorres.map(t => (
@@ -1888,15 +1888,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             </select>
           </div>
 
-          <div className="col-span-1 sm:col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
-            <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
+          <div className="col-span-1 sm:col-span-2 bg-morar-50/60 p-2 rounded-lg border border-morar-100 flex flex-col items-center justify-center text-center min-w-0">
+            <label className="block text-[10px] text-morar-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
               UNIDADE *
             </label>
             <select
               value={selectedUnidade}
               onChange={(e) => handleUnidadeChange(e.target.value)}
               disabled={!selectedTorre}
-              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center disabled:opacity-50"
+              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-morar-600 text-xs cursor-pointer text-center disabled:opacity-50"
             >
               <option value="">--</option>
               {filteredUnits.map(u => (
@@ -1984,7 +1984,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                   <FileCheck2 className="w-4 h-4" />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -2010,7 +2010,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">FGTS:</span>
-                    <strong className="text-sky-600 font-semibold">{formatCurrency(displayFgts)}</strong>
+                    <strong className="text-morar-600 font-semibold">{formatCurrency(displayFgts)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Desconto à Vista:</span>
@@ -2030,7 +2030,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   </span>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Max Financ:</span>
-                    <strong className="text-sky-600 font-bold">{formatCurrency(displayMaxFinanc)}</strong>
+                    <strong className="text-morar-600 font-bold">{formatCurrency(displayMaxFinanc)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Total Negoc:</span>
@@ -2061,7 +2061,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             {/* Cabeçalho de Bases Compartilhadas */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                   <PieChart className="w-4 h-4" />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -2086,7 +2086,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/80 flex flex-col justify-between space-y-1">
                 <div className="border-b border-slate-200/60 pb-1 text-center">
                   <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-tight flex items-center justify-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-sky-600 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-morar-600 shrink-0" />
                     Risco Parcela / Renda
                   </h4>
                   <p className="text-[9.5px] text-slate-500 mt-0.5">
@@ -2101,7 +2101,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 <div className="w-full pt-1.5 border-t border-slate-200/70 text-center space-y-0.5">
                   <div className="flex items-center justify-between px-1 text-[10px]">
                     <span className="text-slate-500 font-medium">Comprometimento:</span>
-                    <strong className="text-sky-700 font-bold">
+                    <strong className="text-morar-700 font-bold">
                       {displayPctRiscoParcelaRenda < 10 ? displayPctRiscoParcelaRenda.toFixed(2) : displayPctRiscoParcelaRenda.toFixed(1)}%
                     </strong>
                   </div>
@@ -2316,7 +2316,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
                     isExceededParc2
                       ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
-                      : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
+                      : 'bg-white border border-slate-200 text-slate-800 focus:border-morar-600'
                   }`}
                 />
                 {isExceededParc2 && (
@@ -2367,7 +2367,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   className={`w-full px-2 py-1 rounded-md font-bold text-center text-xs transition-all focus:outline-none whitespace-nowrap ${
                     isExceededParc3
                       ? 'bg-red-100 border-2 border-red-500 text-red-900 focus:border-red-600'
-                      : 'bg-white border border-slate-200 text-slate-800 focus:border-sky-600'
+                      : 'bg-white border border-slate-200 text-slate-800 focus:border-morar-600'
                   }`}
                 />
                 {isExceededParc3 && (
@@ -2387,7 +2387,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                     <Coins className="w-4 h-4" />
                   </div>
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -2446,8 +2446,8 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     </div>
                   )}
                   {pmObraReduzida && (
-                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-sky-700 bg-sky-50 p-1 rounded border border-sky-200">
-                      <AlertTriangle className="w-3 h-3 text-sky-600 shrink-0" />
+                    <div className="mt-1.5 flex items-center gap-1 text-[9.5px] font-bold text-morar-700 bg-morar-50 p-1 rounded border border-morar-200">
+                      <AlertTriangle className="w-3 h-3 text-morar-600 shrink-0" />
                       <span>Prazo reduzido do sugerido ({pmMesesObraAuto} meses) — Pós-Obra zerado automaticamente.</span>
                     </div>
                   )}
@@ -2474,7 +2474,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                           type="checkbox"
                           checked={semestralAtiva}
                           onChange={(e) => setPmSemestralIndividualEnabled(prev => ({ ...prev, [idx]: e.target.checked }))}
-                          className="rounded text-sky-600 focus:ring-sky-600 cursor-pointer"
+                          className="rounded text-morar-600 focus:ring-morar-600 cursor-pointer"
                         />
                         <div>
                           <span className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Semestral {idx + 1}</span>
@@ -2486,7 +2486,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                               const val = e.target.value;
                               setPmSemestralDatasManual(prev => ({ ...prev, [idx]: val }));
                             }}
-                            className="bg-white px-2 py-1 rounded-md border border-slate-200 font-semibold text-slate-700 text-xs focus:outline-none focus:border-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="bg-white px-2 py-1 rounded-md border border-slate-200 font-semibold text-slate-700 text-xs focus:outline-none focus:border-morar-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                       </label>
@@ -2523,7 +2523,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       type="checkbox"
                       checked={pmChavesEnabled}
                       onChange={(e) => setPmChavesEnabled(e.target.checked)}
-                      className="rounded text-sky-600 focus:ring-sky-600 cursor-pointer"
+                      className="rounded text-morar-600 focus:ring-morar-600 cursor-pointer"
                     />
                     <div>
                       <span className={`block text-[10px] font-bold uppercase ${pmChavesEnabled ? 'text-amber-700' : 'text-slate-500'}`}>Parcela Chaves</span>
@@ -2599,11 +2599,11 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 </div>
 
                 {/* TARJA SUBTOTAL ATÉ AS CHAVES */}
-                <div className="flex justify-between items-center bg-sky-50 px-3 py-2 rounded-lg border border-sky-200 mt-1">
+                <div className="flex justify-between items-center bg-morar-50 px-3 py-2 rounded-lg border border-morar-200 mt-1">
                   <span className="text-xs font-semibold text-slate-700">
                     Subtotal até as Chaves: <span className="text-[10.5px] font-normal text-slate-500">({pm.pctSubtotalAteChaves.toFixed(1)}% do imóvel)</span>
                   </span>
-                  <strong className="text-sm sm:text-base font-bold text-sky-700">{formatCurrency(pm.subtotalAteChaves)}</strong>
+                  <strong className="text-sm sm:text-base font-bold text-morar-700">{formatCurrency(pm.subtotalAteChaves)}</strong>
                 </div>
               </div>
             </div>
@@ -2611,7 +2611,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
             <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                     <Coins className="w-4 h-4" />
                   </div>
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -2623,7 +2623,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
               {/* FAIXA DE AMORTIZAÇÃO E JUROS */}
               <div className="flex justify-between items-center text-[10px] text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/80">
                 <span>Amortização: <strong className="text-slate-700 font-semibold">Tabela Price</strong></span>
-                <span>Juros: <strong className="text-sky-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
+                <span>Juros: <strong className="text-morar-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
               </div>
 
               <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2.5 text-xs">
@@ -2665,7 +2665,7 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                           alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
                         }
                       }}
-                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-600 text-center focus:outline-none focus:border-sky-600 text-xs"
+                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-morar-600 text-center focus:outline-none focus:border-morar-600 text-xs"
                     />
                     <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
                   </div>
@@ -2700,9 +2700,9 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                 </div>
 
                 {/* TARJA PRÓ-SOLUTO TOTAL C/ ITBI */}
-                <div className="flex justify-between items-center bg-sky-50 px-3 py-2 rounded-lg border border-sky-200 mt-1">
+                <div className="flex justify-between items-center bg-morar-50 px-3 py-2 rounded-lg border border-morar-200 mt-1">
                   <span className="text-xs font-semibold text-slate-700">Pró-Soluto Total c/ ITBI:</span>
-                  <strong className="text-sm sm:text-base font-bold text-sky-700">{formatCurrency(proSolutoTotalPainel)}</strong>
+                  <strong className="text-sm sm:text-base font-bold text-morar-700">{formatCurrency(proSolutoTotalPainel)}</strong>
                 </div>
               </div>
             </div>

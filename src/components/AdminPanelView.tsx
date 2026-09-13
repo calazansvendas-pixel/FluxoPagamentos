@@ -423,7 +423,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     <div className="w-full space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <span className="text-[10px] uppercase tracking-wider text-sky-600 font-bold flex items-center gap-1.5">
+          <span className="text-[10px] uppercase tracking-wider text-morar-600 font-bold flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5" /> Acesso &amp; Permissões
           </span>
           <h1 className="text-xl font-bold font-heading text-slate-900">Painel do Administrador</h1>
@@ -483,7 +483,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
             </div>
 
             <label className="flex items-center gap-2 text-xs text-slate-600">
-              <input type="checkbox" checked={pmVerEquipe} onChange={e => setPmVerEquipe(e.target.checked)} className="w-4 h-4 accent-sky-600" />
+              <input type="checkbox" checked={pmVerEquipe} onChange={e => setPmVerEquipe(e.target.checked)} className="w-4 h-4 accent-morar-600" />
               Também pode ver as propostas de quem está abaixo dele na hierarquia
             </label>
 
@@ -502,7 +502,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                           return novo;
                         });
                       }}
-                      className="w-4 h-4 accent-sky-600"
+                      className="w-4 h-4 accent-morar-600"
                     />
                     {t.label}
                   </label>
@@ -525,7 +525,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                           return novo;
                         });
                       }}
-                      className="w-4 h-4 accent-sky-600"
+                      className="w-4 h-4 accent-morar-600"
                     />
                     {c.label}
                   </label>
@@ -538,7 +538,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                 type="button"
                 disabled={usuariosDoCargoEmMassa.length === 0}
                 onClick={() => setConfirmandoAplicacaoMassa(true)}
-                className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-xs font-bold text-white bg-morar-600 hover:bg-morar-700 rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Aplicar a todos os {pmCargo} ({usuariosDoCargoEmMassa.length})
               </button>
@@ -589,11 +589,11 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
               <>
                 <div className="flex flex-col gap-1.5">
                   <label className="flex items-center gap-2 text-xs text-slate-700">
-                    <input type="radio" name="emp-padrao-modo" checked={empPadraoModo === 'auto'} onChange={() => setEmpPadraoModo('auto')} className="w-3.5 h-3.5 accent-sky-600" />
+                    <input type="radio" name="emp-padrao-modo" checked={empPadraoModo === 'auto'} onChange={() => setEmpPadraoModo('auto')} className="w-3.5 h-3.5 accent-morar-600" />
                     Sem restrição (mostra todos os empreendimentos)
                   </label>
                   <label className="flex items-center gap-2 text-xs text-slate-700">
-                    <input type="radio" name="emp-padrao-modo" checked={empPadraoModo === 'manual'} onChange={() => setEmpPadraoModo('manual')} className="w-3.5 h-3.5 accent-sky-600" />
+                    <input type="radio" name="emp-padrao-modo" checked={empPadraoModo === 'manual'} onChange={() => setEmpPadraoModo('manual')} className="w-3.5 h-3.5 accent-morar-600" />
                     Definir lista específica
                   </label>
                 </div>
@@ -611,7 +611,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                               return novo;
                             });
                           }}
-                          className="w-4 h-4 accent-sky-600"
+                          className="w-4 h-4 accent-morar-600"
                         />
                         {p.name}
                       </label>
@@ -623,7 +623,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                     type="button"
                     disabled={salvandoEmpPadrao}
                     onClick={salvarEmpPadrao}
-                    className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 text-xs font-bold text-white bg-morar-600 hover:bg-morar-700 rounded-xl cursor-pointer disabled:opacity-50"
                   >
                     {salvandoEmpPadrao ? 'Salvando...' : `Salvar padrão do cargo ${empPadraoCargo}`}
                   </button>
@@ -646,7 +646,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
           <button
             type="button"
             onClick={() => setFiltrosPendAbertos(v => !v)}
-            className={`px-3 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer border ${filtrosPendAbertos || contarFiltrosAtivos(filtrosPendAplicados) > 0 ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'}`}
+            className={`px-3 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer border ${filtrosPendAbertos || contarFiltrosAtivos(filtrosPendAplicados) > 0 ? 'bg-morar-50 border-morar-200 text-morar-700' : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'}`}
           >
             <Filter className="w-3.5 h-3.5" />
             <span>Filtros{contarFiltrosAtivos(filtrosPendAplicados) > 0 ? ` (${contarFiltrosAtivos(filtrosPendAplicados)})` : ''}</span>
@@ -672,7 +672,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
         ) : pendentesFiltrados.length === 0 ? (
           <div className="p-8 text-center space-y-2">
             <p className="text-sm text-slate-500">Nenhum cadastro pendente bate com os filtros escolhidos.</p>
-            <button type="button" onClick={limparFiltrosPend} className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
+            <button type="button" onClick={limparFiltrosPend} className="text-xs font-semibold text-morar-600 hover:underline cursor-pointer">
               Limpar filtros
             </button>
           </div>
@@ -758,7 +758,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
           <button
             type="button"
             onClick={() => setFiltrosAtivAbertos(v => !v)}
-            className={`px-3 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer border ${filtrosAtivAbertos || contarFiltrosAtivos(filtrosAtivAplicados) > 0 ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'}`}
+            className={`px-3 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer border ${filtrosAtivAbertos || contarFiltrosAtivos(filtrosAtivAplicados) > 0 ? 'bg-morar-50 border-morar-200 text-morar-700' : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'}`}
           >
             <Filter className="w-3.5 h-3.5" />
             <span>Filtros{contarFiltrosAtivos(filtrosAtivAplicados) > 0 ? ` (${contarFiltrosAtivos(filtrosAtivAplicados)})` : ''}</span>
@@ -784,7 +784,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
         ) : ativosFiltrados.length === 0 ? (
           <div className="p-8 text-center space-y-2">
             <p className="text-sm text-slate-500">Nenhum usuário bate com os filtros escolhidos.</p>
-            <button type="button" onClick={limparFiltrosAtiv} className="text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
+            <button type="button" onClick={limparFiltrosAtiv} className="text-xs font-semibold text-morar-600 hover:underline cursor-pointer">
               Limpar filtros
             </button>
           </div>
@@ -853,7 +853,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                                     disabled={donoAlheio}
                                     onClick={() => abrirEdicao(u)}
                                     title={donoAlheio ? 'Só o próprio proprietário pode editar este cadastro' : undefined}
-                                    className="px-2.5 py-1.5 border border-sky-200 text-sky-700 hover:bg-sky-50 font-bold rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                    className="px-2.5 py-1.5 border border-morar-200 text-morar-700 hover:bg-morar-50 font-bold rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                   >
                                     <Pencil className="w-3.5 h-3.5" /> Editar
                                   </button>
@@ -957,7 +957,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
             </div>
 
             <label className="flex items-center gap-2 text-xs text-slate-600">
-              <input type="checkbox" checked={edVerEquipe} onChange={e => setEdVerEquipe(e.target.checked)} className="w-4 h-4 accent-sky-600" />
+              <input type="checkbox" checked={edVerEquipe} onChange={e => setEdVerEquipe(e.target.checked)} className="w-4 h-4 accent-morar-600" />
               Também pode ver as propostas de quem está abaixo dele na hierarquia
             </label>
 
@@ -976,7 +976,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                           return novo;
                         });
                       }}
-                      className="w-4 h-4 accent-sky-600"
+                      className="w-4 h-4 accent-morar-600"
                     />
                     {t.label}
                   </label>
@@ -1004,7 +1004,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                           return novo;
                         });
                       }}
-                      className="w-4 h-4 accent-sky-600"
+                      className="w-4 h-4 accent-morar-600"
                     />
                     {c.label}
                   </label>
@@ -1022,11 +1022,11 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
               </p>
               <div className="flex flex-col gap-1.5 mb-2">
                 <label className="flex items-center gap-2 text-xs text-slate-700">
-                  <input type="radio" name="ed-emp-modo" checked={edEmpreendimentosModo === 'auto'} onChange={() => setEdEmpreendimentosModo('auto')} className="w-3.5 h-3.5 accent-sky-600" />
+                  <input type="radio" name="ed-emp-modo" checked={edEmpreendimentosModo === 'auto'} onChange={() => setEdEmpreendimentosModo('auto')} className="w-3.5 h-3.5 accent-morar-600" />
                   Seguir automaticamente (hierarquia/cargo)
                 </label>
                 <label className="flex items-center gap-2 text-xs text-slate-700">
-                  <input type="radio" name="ed-emp-modo" checked={edEmpreendimentosModo === 'manual'} onChange={() => setEdEmpreendimentosModo('manual')} className="w-3.5 h-3.5 accent-sky-600" />
+                  <input type="radio" name="ed-emp-modo" checked={edEmpreendimentosModo === 'manual'} onChange={() => setEdEmpreendimentosModo('manual')} className="w-3.5 h-3.5 accent-morar-600" />
                   Definir manualmente
                 </label>
               </div>
@@ -1044,7 +1044,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                             return novo;
                           });
                         }}
-                        className="w-4 h-4 accent-sky-600"
+                        className="w-4 h-4 accent-morar-600"
                       />
                       {p.name}
                     </label>
@@ -1061,7 +1061,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                 type="button"
                 disabled={processandoId === editando.id}
                 onClick={salvarEdicao}
-                className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl cursor-pointer disabled:opacity-60"
+                className="px-4 py-2 text-xs font-bold text-white bg-morar-600 hover:bg-morar-700 rounded-xl cursor-pointer disabled:opacity-60"
               >
                 Salvar alterações
               </button>
@@ -1183,7 +1183,7 @@ interface PainelFiltroUsuariosProps {
 
 const PainelFiltroUsuarios: React.FC<PainelFiltroUsuariosProps> = ({ aberto, rascunho, setCampo, opcoesCargo, opcoesImobiliaria, opcoesEquipeDe, onFiltrar, onLimpar }) => {
   if (!aberto) return null;
-  const estiloInput = 'w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400';
+  const estiloInput = 'w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-morar-100 focus:border-morar-400';
   const rotulo = 'block text-[11px] font-bold text-slate-500 mb-1';
   return (
     <div className="px-5 py-4 bg-slate-50/60 border-b border-slate-100 space-y-3">
@@ -1226,7 +1226,7 @@ const PainelFiltroUsuarios: React.FC<PainelFiltroUsuariosProps> = ({ aberto, ras
         <button type="button" onClick={onLimpar} className="px-3.5 py-2 text-xs font-semibold text-slate-500 hover:text-rose-600 rounded-lg transition-all cursor-pointer">
           Limpar filtros
         </button>
-        <button type="button" onClick={onFiltrar} className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer">
+        <button type="button" onClick={onFiltrar} className="px-4 py-2 text-xs font-bold text-white bg-morar-600 hover:bg-morar-700 rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer">
           <Search className="w-3.5 h-3.5" />
           <span>Filtrar</span>
         </button>
@@ -1236,7 +1236,7 @@ const PainelFiltroUsuarios: React.FC<PainelFiltroUsuariosProps> = ({ aberto, ras
 };
 
 const StatTile: React.FC<{ n: number; label: string; tone: 'amber' | 'sky' | 'slate' }> = ({ n, label, tone }) => {
-  const cores = { amber: 'text-amber-600', sky: 'text-sky-600', slate: 'text-slate-700' }[tone];
+  const cores = { amber: 'text-amber-600', sky: 'text-morar-600', slate: 'text-slate-700' }[tone];
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4">
       <div className={`text-2xl font-extrabold tabular-nums ${cores}`}>{n}</div>

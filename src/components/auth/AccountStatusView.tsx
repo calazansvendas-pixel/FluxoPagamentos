@@ -18,7 +18,7 @@ const CONTEUDO: Record<AccountStatusViewProps['status'], { icon: React.ReactNode
   pausado: {
     icon: <Ban className="w-6 h-6" />,
     titulo: 'Acesso pausado',
-    texto: 'Seu acesso ao Calazans Imob foi pausado pelo administrador. Fale com ele se achar que isso é um engano.',
+    texto: 'Seu acesso foi pausado pelo administrador. Fale com ele se achar que isso é um engano.',
     corFundo: 'bg-slate-100',
     corTexto: 'text-slate-500'
   },
@@ -41,7 +41,7 @@ export const AccountStatusView: React.FC<AccountStatusViewProps> = ({ status, on
         </div>
         <h1 className="text-lg font-bold text-slate-900 mb-2">{c.titulo}</h1>
         <p className="text-xs text-slate-500 leading-relaxed">{c.texto}</p>
-        <button type="button" onClick={onSair} className="mt-6 text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
+        <button type="button" onClick={onSair} className="mt-6 text-xs font-semibold text-morar-600 hover:underline cursor-pointer">
           Sair
         </button>
       </div>

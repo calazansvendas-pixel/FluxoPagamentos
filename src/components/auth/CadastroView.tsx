@@ -65,7 +65,7 @@ export const CadastroView: React.FC<CadastroViewProps> = ({ onSwitchToLogin }) =
     return (
       <AuthLayout>
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-8 text-center">
-          <div className="w-12 h-12 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center mx-auto mb-4">
+          <div className="w-12 h-12 rounded-full bg-morar-50 text-morar-600 flex items-center justify-center mx-auto mb-4">
             <Mail className="w-6 h-6" />
           </div>
           <h1 className="text-lg font-bold text-slate-900 mb-2">Cadastro enviado</h1>
@@ -75,7 +75,7 @@ export const CadastroView: React.FC<CadastroViewProps> = ({ onSwitchToLogin }) =
           <p className="text-xs text-slate-500 leading-relaxed">
             Um administrador vai revisar seu cadastro e liberar seu cargo e permissões em breve. Você já pode fazer login normalmente — vamos avisar que seu cadastro está em análise até lá.
           </p>
-          <button type="button" onClick={onSwitchToLogin} className="mt-5 text-xs font-semibold text-sky-600 hover:underline cursor-pointer">
+          <button type="button" onClick={onSwitchToLogin} className="mt-5 text-xs font-semibold text-morar-600 hover:underline cursor-pointer">
             Voltar para o login
           </button>
         </div>
@@ -117,7 +117,7 @@ export const CadastroView: React.FC<CadastroViewProps> = ({ onSwitchToLogin }) =
             <select
               value={cargo}
               onChange={e => setCargo(e.target.value as Cargo)}
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400"
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-morar-100 focus:border-morar-400"
             >
               <option value="">Selecione seu cargo</option>
               {CARGOS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -133,7 +133,7 @@ export const CadastroView: React.FC<CadastroViewProps> = ({ onSwitchToLogin }) =
           <button
             type="submit"
             disabled={enviando}
-            className="w-full py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition-all cursor-pointer disabled:opacity-60"
+            className="w-full py-2.5 rounded-lg bg-morar-600 hover:bg-morar-700 text-white text-sm font-bold transition-all cursor-pointer disabled:opacity-60"
           >
             {enviando ? 'Criando conta…' : 'Criar conta'}
           </button>
@@ -141,7 +141,7 @@ export const CadastroView: React.FC<CadastroViewProps> = ({ onSwitchToLogin }) =
 
         <p className="text-center text-xs text-slate-500 mt-5">
           Já tem conta?{' '}
-          <button type="button" onClick={onSwitchToLogin} className="font-semibold text-sky-600 hover:underline cursor-pointer">
+          <button type="button" onClick={onSwitchToLogin} className="font-semibold text-morar-600 hover:underline cursor-pointer">
             Entrar
           </button>
         </p>
@@ -172,7 +172,7 @@ const Campo: React.FC<CampoProps> = ({ label, value, onChange, placeholder, type
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-100 focus:border-sky-400"
+      className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-morar-100 focus:border-morar-400"
     />
   </div>
 );

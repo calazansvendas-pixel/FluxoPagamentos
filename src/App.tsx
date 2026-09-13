@@ -821,7 +821,7 @@ export default function App({ perfil, onSair }: AppProps) {
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-sky-50 text-sky-600 shrink-0">
+              <div className="p-2.5 rounded-xl bg-morar-50 text-morar-600 shrink-0">
                 <ListChecks className="w-5 h-5" />
               </div>
               <div>
@@ -840,7 +840,7 @@ export default function App({ perfil, onSair }: AppProps) {
                   key={c.id}
                   type="button"
                   onClick={() => handleConfirmConditionPicker(c)}
-                  className="w-full text-left px-4 py-3 bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 rounded-xl text-xs font-semibold text-slate-700 hover:text-sky-700 transition-all cursor-pointer"
+                  className="w-full text-left px-4 py-3 bg-slate-50 hover:bg-morar-50 border border-slate-200 hover:border-morar-300 rounded-xl text-xs font-semibold text-slate-700 hover:text-morar-700 transition-all cursor-pointer"
                 >
                   {c.name}
                 </button>

@@ -22,7 +22,7 @@ const Toggle: React.FC<{ checked: boolean; onChange: () => void; disabled?: bool
     disabled={disabled}
     onClick={onChange}
     className={`relative w-[38px] h-[22px] rounded-full transition-colors shrink-0 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${
-      checked ? 'bg-sky-600' : 'bg-slate-300'
+      checked ? 'bg-morar-600' : 'bg-slate-300'
     }`}
   >
     <span
@@ -106,7 +106,7 @@ export const TelaVisibilitySettingsView: React.FC<TelaVisibilitySettingsViewProp
     <div className="max-w-4xl mx-auto space-y-5 pb-10">
       {/* CABEÇALHO */}
       <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-sky-100 text-sky-700">
+        <div className="p-2.5 rounded-xl bg-morar-100 text-morar-700">
           <LayoutGrid className="w-5 h-5" />
         </div>
         <div>
@@ -148,7 +148,7 @@ export const TelaVisibilitySettingsView: React.FC<TelaVisibilitySettingsViewProp
               onClick={() => trocarCondicao(meta.kind)}
               className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-sky-50 text-sky-700 border border-sky-200 shadow-2xs'
+                  ? 'bg-morar-50 text-morar-700 border border-morar-200 shadow-2xs'
                   : 'text-slate-500 hover:bg-slate-50 border border-transparent'
               }`}
             >
@@ -209,7 +209,7 @@ export const TelaVisibilitySettingsView: React.FC<TelaVisibilitySettingsViewProp
                 type="button"
                 onClick={handleSalvar}
                 disabled={salvando || !alteracoesPendentes}
-                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                className="px-5 py-2.5 bg-morar-600 hover:bg-morar-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer shrink-0"
               >
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 <span>{salvando ? 'Salvando...' : 'Salvar Alterações'}</span>

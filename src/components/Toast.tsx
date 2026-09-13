@@ -17,7 +17,7 @@ export const Toast: React.FC<ToastProps> = ({ message }) => {
         : 'bg-slate-900 border-slate-700 text-white'
     }`}>
       <div className={`p-1.5 rounded-lg shrink-0 ${
-        isSuccess ? 'bg-emerald-500/20 text-emerald-400' : 'bg-sky-500/20 text-sky-300'
+        isSuccess ? 'bg-emerald-500/20 text-emerald-400' : 'bg-morar-500/20 text-morar-300'
       }`}>
         {isSuccess ? <CheckCircle2 className="w-4 h-4" /> : <Info className="w-4 h-4" />}
       </div>

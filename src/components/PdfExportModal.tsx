@@ -6,6 +6,7 @@ import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets } from '
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, Cell, LabelList } from 'recharts';
+import logoMorar from '../assets/logo-morar-icon.png';
 
 export interface PdfSemestralItem {
   label: string;
@@ -429,7 +430,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
         {/* BARRA SUPERIOR DO MODAL (NÃO IMPRESSA) */}
         <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between no-print shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-sky-100 text-sky-700">
+            <div className="p-2 rounded-xl bg-morar-100 text-morar-700">
               <FileText className="w-4 h-4" />
             </div>
             <div>
@@ -448,7 +449,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             >
               {isExporting ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-morar-600" />
                   <span>Gerando PDF...</span>
                 </>
               ) : (
@@ -491,27 +492,32 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             
             {/* 1. CABEÇALHO PRINCIPAL */}
             <div className="flex items-start justify-between border-b border-slate-200 pb-3 gap-4">
-              <div className="space-y-1">
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-                  Simulação Comercial
-                </h1>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
-                  <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
-                  <span>•</span>
-                  <span>Condição: <strong className="text-slate-900 font-bold">{condition.name}</strong></span>
-                  {deliveryText && (
-                    <>
-                      <span>•</span>
-                      <span className="text-amber-700 font-bold">Chaves: {deliveryText}</span>
-                    </>
-                  )}
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-morar-50 border border-morar-200 flex items-center justify-center shrink-0">
+                  <img src={logoMorar} alt="Morar" className="w-5 h-5 object-contain" />
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                    Simulação Comercial
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
+                    <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
+                    <span>•</span>
+                    <span>Condição: <strong className="text-slate-900 font-bold">{condition.name}</strong></span>
+                    {deliveryText && (
+                      <>
+                        <span>•</span>
+                        <span className="text-amber-700 font-bold">Chaves: {deliveryText}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* DATA DA SIMULAÇÃO À DIREITA */}
               {pdfSettings.mostrarDataSimulacao && (
-                <div className="bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap shadow-2xs shrink-0 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <div className="bg-morar-50 text-morar-700 border border-morar-200 px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap shadow-2xs shrink-0 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-morar-600 shrink-0" />
                   <span>Data da Simulação: {formatDateBr()}</span>
                 </div>
               )}
@@ -541,8 +547,8 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
               {/* LINHA 1 (col-span-2 / col-span-2 / col-span-2 / col-span-6) */}
               <div className="grid grid-cols-12 gap-2 text-xs w-full">
                 {/* TORRE (col-span-2) */}
-                <div className="col-span-2 bg-[rgba(240,249,255,0.6)] p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
-                  <span className="block text-[9px] text-sky-700 font-bold uppercase mb-0.5 whitespace-nowrap">
+                <div className="col-span-2 bg-[rgba(240,249,255,0.6)] p-2 rounded-lg border border-morar-100 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-morar-700 font-bold uppercase mb-0.5 whitespace-nowrap">
                     Torre
                   </span>
                   <strong className="text-slate-900 font-bold text-xs whitespace-nowrap truncate w-full">
@@ -551,8 +557,8 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                 </div>
 
                 {/* UNIDADE (col-span-2) */}
-                <div className="col-span-2 bg-[rgba(240,249,255,0.6)] p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
-                  <span className="block text-[9px] text-sky-700 font-bold uppercase mb-0.5 whitespace-nowrap">
+                <div className="col-span-2 bg-[rgba(240,249,255,0.6)] p-2 rounded-lg border border-morar-100 flex flex-col items-center justify-center text-center min-w-0">
+                  <span className="block text-[9px] text-morar-700 font-bold uppercase mb-0.5 whitespace-nowrap">
                     Unidade
                   </span>
                   <strong className="text-slate-900 font-bold text-xs whitespace-nowrap truncate w-full">
@@ -635,7 +641,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                 {pdfSettings.mostrarBloco1 && (
                 <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-morar-600" />
                     1. Dados da Aprovação de Crédito
                   </h3>
 
@@ -654,7 +660,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                       </div>
                       <div className="flex justify-between items-center py-0.5 border-b border-[rgba(226,232,240,0.4)]">
                         <span className="text-slate-600">FGTS:</span>
-                        <strong className="text-sky-600 font-semibold">{fmt(fgtsEfetivo)}</strong>
+                        <strong className="text-morar-600 font-semibold">{fmt(fgtsEfetivo)}</strong>
                       </div>
                       <div className="flex justify-between items-center py-0.5">
                         <span className="text-slate-600">Desc. Ato:</span>
@@ -668,7 +674,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                       </span>
                       <div className="flex justify-between items-center py-0.5 border-b border-[rgba(226,232,240,0.4)]">
                         <span className="text-slate-600">Max Financ:</span>
-                        <strong className="text-sky-600 font-bold">{fmt(maxFinanc)}</strong>
+                        <strong className="text-morar-600 font-bold">{fmt(maxFinanc)}</strong>
                       </div>
                       <div className="flex justify-between items-center py-0.5 border-b border-[rgba(226,232,240,0.4)]">
                         <span className="text-slate-600">Total Negoc:</span>
@@ -739,7 +745,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                       <div className="mt-2 pt-1.5 border-t border-[rgba(226,232,240,0.7)] w-full text-center space-y-0.5">
                         <div className="flex justify-between items-center text-[9.5px] px-1">
                           <span className="text-slate-500 font-medium">Comprometimento:</span>
-                          <strong className="text-sky-700 font-bold">{pctRiscoParcelaRenda < 10 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%</strong>
+                          <strong className="text-morar-700 font-bold">{pctRiscoParcelaRenda < 10 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%</strong>
                         </div>
                         <div className="flex justify-between items-center text-[9.5px] px-1">
                           <span className="text-slate-500 font-medium">1ª Parcela:</span>
@@ -783,7 +789,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                 {pdfSettings.mostrarBloco2 && (
                 <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-morar-600" />
                     2. FLUXO DE ENTRADA C/ CONSTRUTORA
                   </h3>
 
@@ -799,10 +805,10 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                     </div>
 
                     <div className="bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.8)] text-center flex flex-col justify-between">
-                      <span className="block text-[9px] font-bold text-sky-800 uppercase mb-1 whitespace-nowrap">
+                      <span className="block text-[9px] font-bold text-morar-800 uppercase mb-1 whitespace-nowrap">
                         ITBI no Ato
                       </span>
-                      <strong className="text-sky-900 font-bold text-xs whitespace-nowrap">
+                      <strong className="text-morar-900 font-bold text-xs whitespace-nowrap">
                         {fmt(atoITBIValidado)}
                       </strong>
                     </div>
@@ -845,7 +851,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                   <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 flex-1 flex flex-col justify-between">
                     <div className="space-y-2">
                       <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-morar-600" />
                         3. Parcelamento Morar
                       </h3>
 
@@ -902,30 +908,30 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                     </div>
 
                     {/* TARJA "SUBTOTAL ATÉ AS CHAVES" */}
-                    <div className="flex justify-between items-center bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200 mt-2">
+                    <div className="flex justify-between items-center bg-morar-50 px-3 py-1.5 rounded-xl border border-morar-200 mt-2">
                       <span className="text-xs font-semibold text-slate-700">
                         Subtotal até as Chaves: <span className="text-[9.5px] font-normal text-slate-500">({pmPctSubtotalAteChaves.toFixed(1)}% do imóvel)</span>
                       </span>
-                      <strong className="text-sm font-bold text-sky-700">{fmt(pmSubtotalAteChaves)}</strong>
+                      <strong className="text-sm font-bold text-morar-700">{fmt(pmSubtotalAteChaves)}</strong>
                     </div>
                   </div>
                 ) : (
                 <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 flex-1 flex flex-col justify-between">
                   <div>
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-morar-600" />
                       3. Parcelamento Pró-Soluto / Banco Direto
                     </h3>
 
                     <div className="flex justify-between items-center text-[10px] text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 mt-2">
                       <span>Amortização: <strong className="text-slate-700 font-semibold">Tabela Price</strong></span>
-                      <span>Juros: <strong className="text-sky-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
+                      <span>Juros: <strong className="text-morar-700 font-bold">{appliedRatePct.toFixed(2)}% a.m.</strong></span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-xs mt-2">
                       <div className="bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.8)] text-center">
                         <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Qtd. Mensais</span>
-                        <strong className="text-sky-600 font-extrabold text-xs">{qtdMensais}x</strong>
+                        <strong className="text-morar-600 font-extrabold text-xs">{qtdMensais}x</strong>
                       </div>
 
                       <div className="bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.8)] text-center">
@@ -953,9 +959,9 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                   </div>
 
                   {/* TARJA "PRÓ-SOLUTO TOTAL C/ ITBI" */}
-                  <div className="flex justify-between items-center bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200 mt-2">
+                  <div className="flex justify-between items-center bg-morar-50 px-3 py-1.5 rounded-xl border border-morar-200 mt-2">
                     <span className="text-xs font-semibold text-slate-700">Pró-Soluto Total c/ ITBI:</span>
-                    <strong className="text-sm font-bold text-sky-700">{fmt(proSolutoTotalPainel)}</strong>
+                    <strong className="text-sm font-bold text-morar-700">{fmt(proSolutoTotalPainel)}</strong>
                   </div>
                 </div>
                 ))}

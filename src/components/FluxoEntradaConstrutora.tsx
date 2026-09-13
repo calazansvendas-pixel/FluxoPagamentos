@@ -173,7 +173,7 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
       {/* CABEÇALHO PADRONIZADO */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+          <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
             <Building className="w-4 h-4" />
           </div>
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -203,10 +203,10 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
             <button
               type="button"
               onClick={policyAction.onClick}
-              className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer border border-sky-200/80"
+              className="px-2.5 py-1 bg-morar-50 hover:bg-morar-100 text-morar-700 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer border border-morar-200/80"
               title={policyAction.label}
             >
-              {policyAction.icon || <Sliders className="w-3 h-3 text-sky-600" />}
+              {policyAction.icon || <Sliders className="w-3 h-3 text-morar-600" />}
               <span>{policyAction.label}</span>
             </button>
           )}
@@ -265,7 +265,7 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
                 }
               }}
               placeholder={valorAtoMinimo > 0 ? formatCurrency(valorAtoMinimo) : 'R$ 0,00'}
-              className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
+              className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-slate-800 text-center focus:outline-none focus:border-morar-600 text-xs transition-all whitespace-nowrap"
             />
           </div>
 
@@ -273,7 +273,7 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
           {!hideITBI && (
             <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 flex flex-col justify-between">
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-[10px] font-bold text-sky-800 uppercase whitespace-nowrap">
+                <label className="block text-[10px] font-bold text-morar-800 uppercase whitespace-nowrap">
                   ITBI no Ato
                 </label>
                 <button
@@ -281,7 +281,7 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
                   onClick={onToggleFirstHome}
                   className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
                     isFirstHome
-                      ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
+                      ? 'bg-morar-50 text-morar-700 border-morar-100 hover:bg-morar-100'
                       : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                   }`}
                   title="Alternar entre Com Desconto e Sem Desconto no ITBI"
@@ -307,7 +307,7 @@ export const FluxoEntradaConstrutora: React.FC<FluxoEntradaConstrutoraProps> = (
                   }
                 }}
                 placeholder="R$ 0,00"
-                className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-sky-900 text-center focus:outline-none focus:border-sky-600 text-xs transition-all whitespace-nowrap"
+                className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-morar-900 text-center focus:outline-none focus:border-morar-600 text-xs transition-all whitespace-nowrap"
               />
             </div>
           )}

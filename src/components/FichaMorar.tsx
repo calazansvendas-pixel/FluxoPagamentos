@@ -1926,7 +1926,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                 <select
                   value={currentProd.id}
                   onChange={(e) => handleProductDropdownChange(e.target.value)}
-                  className="appearance-none bg-sky-50 hover:bg-sky-100 text-sky-700 font-extrabold text-xs sm:text-sm pl-3 pr-7 py-1.5 rounded-lg border border-sky-200 uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                  className="appearance-none bg-morar-50 hover:bg-morar-100 text-morar-700 font-extrabold text-xs sm:text-sm pl-3 pr-7 py-1.5 rounded-lg border border-morar-200 uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-morar-500/20"
                 >
                   {products.map(p => (
                     <option key={p.id} value={p.id} className="text-slate-800 font-semibold bg-white">
@@ -1934,10 +1934,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="w-3.5 h-3.5 text-sky-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <ChevronDown className="w-3.5 h-3.5 text-morar-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             ) : (
-              <span className="text-xs sm:text-sm font-extrabold text-sky-600 bg-sky-50 px-3 py-1 rounded-lg border border-sky-100 uppercase tracking-wide">
+              <span className="text-xs sm:text-sm font-extrabold text-morar-600 bg-morar-50 px-3 py-1 rounded-lg border border-morar-100 uppercase tracking-wide">
                 {currentProd.name}
               </span>
             )}
@@ -1948,7 +1948,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                 <select
                   value={currentCond.id}
                   onChange={(e) => handleConditionDropdownChange(e.target.value)}
-                  className="appearance-none bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs pl-2.5 pr-6 py-1.5 rounded-lg border border-slate-200/80 cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                  className="appearance-none bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs pl-2.5 pr-6 py-1.5 rounded-lg border border-slate-200/80 cursor-pointer focus:outline-none focus:ring-2 focus:ring-morar-500/20"
                 >
                   {currentProd.conditions.map(c => (
                     <option key={c.id} value={c.id} className="text-slate-800 font-medium bg-white">
@@ -2001,7 +2001,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           <button
             type="button"
             onClick={() => setIsPdfModalOpen(true)}
-            className="px-3.5 py-2 bg-sky-500/10 hover:bg-sky-500/20 text-sky-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
+            className="px-3.5 py-2 bg-morar-500/10 hover:bg-morar-500/20 text-morar-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
             title="Exportar Ficha Morar em PDF / Imprimir"
           >
             <Printer className="w-3.5 h-3.5" />
@@ -2057,7 +2057,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
             title="Limpar Ficha Morar"
           >
-            <RotateCcw className="w-3 h-3 text-sky-600" />
+            <RotateCcw className="w-3 h-3 text-morar-600" />
             <span>Limpar</span>
           </button>
         </div>
@@ -2065,14 +2065,14 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         {/* LINHA 1: TORRE, UNIDADE, FASE, TIPOLOGIA — abaixo de sm (640px) vira grid de
             2 colunas (pares empilhados), igual ao mesmo ajuste feito em DetailsView.tsx. */}
         <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 text-xs w-full">
-          <div className="col-span-1 sm:col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
-            <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
+          <div className="col-span-1 sm:col-span-2 bg-morar-50/60 p-2 rounded-lg border border-morar-100 flex flex-col items-center justify-center text-center min-w-0">
+            <label className="block text-[10px] text-morar-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
               TORRE *
             </label>
             <select
               value={selectedTorre}
               onChange={(e) => handleTorreChange(e.target.value)}
-              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center"
+              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-morar-600 text-xs cursor-pointer text-center"
             >
               <option value="">--</option>
               {availableTorres.map(t => (
@@ -2081,15 +2081,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             </select>
           </div>
 
-          <div className="col-span-1 sm:col-span-2 bg-sky-50/60 p-2 rounded-lg border border-sky-100 flex flex-col items-center justify-center text-center min-w-0">
-            <label className="block text-[10px] text-sky-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
+          <div className="col-span-1 sm:col-span-2 bg-morar-50/60 p-2 rounded-lg border border-morar-100 flex flex-col items-center justify-center text-center min-w-0">
+            <label className="block text-[10px] text-morar-600 font-bold uppercase mb-0.5 text-center whitespace-nowrap">
               UNIDADE *
             </label>
             <select
               value={selectedUnidade}
               onChange={(e) => handleUnidadeChange(e.target.value)}
               disabled={!selectedTorre}
-              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-sky-600 text-xs cursor-pointer text-center disabled:opacity-50"
+              className="w-full bg-white font-bold text-slate-900 border border-slate-200 rounded-md py-1 px-1 focus:outline-none focus:border-morar-600 text-xs cursor-pointer text-center disabled:opacity-50"
             >
               <option value="">--</option>
               {filteredUnits.map(u => (
@@ -2174,7 +2174,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                   <FileCheck2 className="w-4 h-4" />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -2205,7 +2205,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">FGTS:</span>
-                    <strong className="text-sky-600 font-semibold">{formatCurrency(fgtsEfetivo)}</strong>
+                    <strong className="text-morar-600 font-semibold">{formatCurrency(fgtsEfetivo)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Desconto à Vista:</span>
@@ -2225,7 +2225,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   </span>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Max Financ:</span>
-                    <strong className="text-sky-600 font-bold">{formatCurrency(maxFinancEfetivo)}</strong>
+                    <strong className="text-morar-600 font-bold">{formatCurrency(maxFinancEfetivo)}</strong>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                     <span className="text-slate-600">Total Negoc:</span>
@@ -2256,7 +2256,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             </div>
 
             {/* VALIDAÇÃO AUTOMÁTICA EM TEMPO REAL: TOTAL DISTRIBUÍDO */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 bg-sky-50 px-3.5 rounded-lg border border-sky-100 mt-3 gap-2 transition-colors">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 bg-morar-50 px-3.5 rounded-lg border border-morar-100 mt-3 gap-2 transition-colors">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-slate-800">Distribuído:</span>
                 {hasUnitSelected && (
@@ -2266,7 +2266,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   </span>
                 )}
               </div>
-              <strong className="text-xs sm:text-sm font-black text-sky-700">
+              <strong className="text-xs sm:text-sm font-black text-morar-700">
                 {formatCurrency(totalDistribuido)}
               </strong>
             </div>
@@ -2279,7 +2279,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             {/* Cabeçalho de Bases Compartilhadas */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                   <PieChart className="w-4 h-4" />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -2295,7 +2295,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   <span className="text-slate-400 font-medium">Base Renda:</span>
                   <strong className="font-bold text-slate-800">{formatCurrency(baseRendaInformada)}</strong>
                 </div>
-                <div className="flex items-center gap-1 bg-sky-50 px-2 py-0.5 rounded border border-sky-100 text-sky-700">
+                <div className="flex items-center gap-1 bg-morar-50 px-2 py-0.5 rounded border border-morar-100 text-morar-700">
                   <span className="font-semibold tracking-tight truncate max-w-[120px]" title={nomeFaixaRenda}>{nomeFaixaRenda}</span>
                 </div>
               </div>
@@ -2417,7 +2417,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                 <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <span className={`w-1.5 h-1.5 rounded-full ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'bg-red-500' : 'bg-sky-600'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'bg-red-500' : 'bg-morar-600'}`} />
                       1ª Parcela:
                     </span>
                     <strong className="text-slate-900 font-bold">
@@ -2426,7 +2426,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   </div>
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-500 font-medium">Comprometimento da Renda:</span>
-                    <strong className={`font-bold ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'text-red-600' : 'text-sky-700'}`}>
+                    <strong className={`font-bold ${pctRiscoParcelaRenda > limiteMaximoRiscoRenda ? 'text-red-600' : 'text-morar-700'}`}>
                       {pctRiscoParcelaRenda < 10 && pctRiscoParcelaRenda > 0 ? pctRiscoParcelaRenda.toFixed(2) : pctRiscoParcelaRenda.toFixed(1)}%
                     </strong>
                   </div>
@@ -2551,14 +2551,14 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                   <Layers className="w-4 h-4" />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                     Correção INCC - Obra
                   </h3>
-                  <div className="flex items-center bg-sky-50 px-1.5 py-0.5 rounded-md border border-sky-100">
+                  <div className="flex items-center bg-morar-50 px-1.5 py-0.5 rounded-md border border-morar-100">
                     <input
                       type="number"
                       min="0"
@@ -2591,10 +2591,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                           (e.target as HTMLInputElement).blur();
                         }
                       }}
-                      className="morar-input w-8 bg-transparent text-center font-black text-sky-700 text-[11px] focus:outline-none"
+                      className="morar-input w-8 bg-transparent text-center font-black text-morar-700 text-[11px] focus:outline-none"
                       title="Total de Parcelas da Fase de Obra"
                     />
-                    <span className="text-[11px] font-black text-sky-700">X</span>
+                    <span className="text-[11px] font-black text-morar-700">X</span>
                   </div>
                 </div>
               </div>
@@ -2606,7 +2606,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     type="text"
                     value={dataObra}
                     onChange={(e) => setDataObra(e.target.value)}
-                    className="morar-input bg-slate-50 hover:bg-slate-100 focus:bg-white border border-dashed border-slate-200 hover:border-slate-300 focus:border-sky-500 rounded-md px-2 py-0.5 text-xs font-bold text-slate-800 w-32 text-center transition-all focus:outline-none"
+                    className="morar-input bg-slate-50 hover:bg-slate-100 focus:bg-white border border-dashed border-slate-200 hover:border-slate-300 focus:border-morar-500 rounded-md px-2 py-0.5 text-xs font-bold text-slate-800 w-32 text-center transition-all focus:outline-none"
                     placeholder="Ex: setembro, 2026"
                   />
                 </div>
@@ -2732,7 +2732,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                     type="text"
                     value={dataPos}
                     onChange={(e) => setDataPos(e.target.value)}
-                    className="morar-input bg-slate-50 hover:bg-slate-100 focus:bg-white border border-dashed border-slate-200 hover:border-slate-300 focus:border-sky-500 rounded-md px-2 py-0.5 text-xs font-bold text-slate-800 w-32 text-center transition-all focus:outline-none"
+                    className="morar-input bg-slate-50 hover:bg-slate-100 focus:bg-white border border-dashed border-slate-200 hover:border-slate-300 focus:border-morar-500 rounded-md px-2 py-0.5 text-xs font-bold text-slate-800 w-32 text-center transition-all focus:outline-none"
                     placeholder="Ex: junho, 2029"
                   />
                 </div>
@@ -2827,7 +2827,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   onClick={handleToggleFirstHome}
                   className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors cursor-pointer ${
                     isFirstHomeLocal
-                      ? 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100'
+                      ? 'bg-morar-50 text-morar-700 border-morar-100 hover:bg-morar-100'
                       : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                   }`}
                   title="Alternar entre Com Desconto e Sem Desconto no ITBI"

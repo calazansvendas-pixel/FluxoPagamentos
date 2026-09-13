@@ -1,4 +1,4 @@
-# Calazans Imob
+# Simulador de Crédito Imobiliário
 
 Simulador de Crédito Imobiliário, Ficha de Análise Financeira, Políticas Comerciais e Importação de Tabelas de Venda (Excel).
 

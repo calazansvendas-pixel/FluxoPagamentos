@@ -95,7 +95,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Vista do Horizonte"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-sky-600"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-morar-600"
             />
           </div>
 
@@ -108,7 +108,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 type="date"
                 value={deliveryDatePhase1}
                 onChange={(e) => setDeliveryDatePhase1(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-sky-600 cursor-pointer"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-morar-600 cursor-pointer"
               />
             </div>
             <div>
@@ -119,7 +119,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 type="date"
                 value={deliveryDatePhase2}
                 onChange={(e) => setDeliveryDatePhase2(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-sky-600 cursor-pointer"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-morar-600 cursor-pointer"
               />
             </div>
           </div>
@@ -133,7 +133,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               value={optionsText}
               onChange={(e) => setOptionsText(e.target.value)}
               placeholder="Sinal em 48X c/ Morar, Sinal em 72X c/ Banco Direto"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-sky-600"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:outline-none focus:border-morar-600"
             />
           </div>
 
@@ -147,7 +147,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold text-xs cursor-pointer"
+              className="px-4 py-2 bg-morar-600 hover:bg-morar-700 text-white rounded-xl font-semibold text-xs cursor-pointer"
             >
               Criar Empreendimento
             </button>
