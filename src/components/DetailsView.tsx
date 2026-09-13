@@ -2730,6 +2730,21 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     Comissão a Pagar
                   </h3>
                 </div>
+                {comissaoParcelasManual !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComissaoParcelasManual(null);
+                      const padrao = currentCond?.comissaoApartadaParcelas ?? 6;
+                      onShowToast(`Parcelas da comissão restauradas para o padrão da política (${padrao}x).`);
+                    }}
+                    className="px-2 py-1 bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 rounded-lg text-[10px] font-semibold transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                    title="Restaurar Qtd. Parcelas para o padrão da política"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Padrão</span>
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2.5 text-xs">
