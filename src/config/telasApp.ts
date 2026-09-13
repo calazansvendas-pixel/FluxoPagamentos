@@ -19,9 +19,10 @@ export interface TelaApp {
 export const TELAS_APP: TelaApp[] = [
   { key: 'simulator', label: 'Simulador de Crédito', icon: Calculator, tab: 'simulator' },
   { key: 'banco-direto', label: 'Sinal c/ Banco Direto', icon: FileCheck2, tab: 'details', variant: 'banco-direto' },
-  { key: 'sinal-morar', label: 'Sinal c/ Morar', icon: FileCheck2, tab: 'ficha-morar' },
+  { key: 'sinal-morar', label: 'Sinal c/ Morar', icon: FileCheck2, tab: 'ficha-morar', variant: 'sinal-morar' },
   { key: 'parcelamento-morar', label: 'Parcelamento Morar', icon: Coins, tab: 'details', variant: 'parcelamento-morar' },
   { key: 'banco-direto-comissao-apartada', label: 'Sinal c/ Banco Direto (Comissão Apartada)', icon: FileCheck2, tab: 'details', variant: 'banco-direto-comissao-apartada' },
+  { key: 'sinal-morar-comissao-apartada', label: 'Sinal c/ Morar (Comissão Apartada)', icon: FileCheck2, tab: 'ficha-morar', variant: 'sinal-morar-comissao-apartada' },
   { key: 'policies', label: 'Políticas & Empreendimentos', icon: Building2, tab: 'policies' },
   { key: 'pdf-settings', label: 'Configurar Exportação PDF', icon: FileOutput, tab: 'pdf-settings' },
   { key: 'tela-settings', label: 'Configurar Visibilidade dos Quadros', icon: LayoutGrid, tab: 'tela-settings' },
@@ -71,7 +72,7 @@ export const CARGOS: Cargo[] = [
 // Exportação PDF, Importar Tabela, Painel do Administrador) ficam de fora do
 // padrão — o Administrador libera na mão, pessoa por pessoa, quando fizer
 // sentido, seja na aprovação do cadastro ou depois em "Editar".
-const TELAS_PADRAO_BASE = ['simulator', 'banco-direto', 'sinal-morar', 'parcelamento-morar', 'banco-direto-comissao-apartada', 'saved-simulations'];
+const TELAS_PADRAO_BASE = ['simulator', 'banco-direto', 'sinal-morar', 'parcelamento-morar', 'banco-direto-comissao-apartada', 'sinal-morar-comissao-apartada', 'saved-simulations'];
 
 export const TELAS_PADRAO_POR_CARGO: Record<Cargo, string[]> = {
   'Administrador': TELAS_PADRAO_BASE,
