@@ -6,6 +6,7 @@ import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets } from '
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, Cell, LabelList } from 'recharts';
+import logoMorar from '../assets/logo-morar-icon.png';
 
 export interface PdfSemestralItem {
   label: string;
@@ -491,20 +492,25 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             
             {/* 1. CABEÇALHO PRINCIPAL */}
             <div className="flex items-start justify-between border-b border-slate-200 pb-3 gap-4">
-              <div className="space-y-1">
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-                  Simulação Comercial
-                </h1>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
-                  <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
-                  <span>•</span>
-                  <span>Condição: <strong className="text-slate-900 font-bold">{condition.name}</strong></span>
-                  {deliveryText && (
-                    <>
-                      <span>•</span>
-                      <span className="text-amber-700 font-bold">Chaves: {deliveryText}</span>
-                    </>
-                  )}
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-morar-50 border border-morar-200 flex items-center justify-center shrink-0">
+                  <img src={logoMorar} alt="Morar" className="w-5 h-5 object-contain" />
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                    Simulação Comercial
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
+                    <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
+                    <span>•</span>
+                    <span>Condição: <strong className="text-slate-900 font-bold">{condition.name}</strong></span>
+                    {deliveryText && (
+                      <>
+                        <span>•</span>
+                        <span className="text-amber-700 font-bold">Chaves: {deliveryText}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 

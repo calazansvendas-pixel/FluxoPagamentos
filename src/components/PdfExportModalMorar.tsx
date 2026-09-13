@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Calendar, Download, Loader2, AlertCircle, Building2 } from 'lucide-react';
+import { X, Calendar, Download, Loader2, AlertCircle } from 'lucide-react';
+import logoMorar from '../assets/logo-morar-icon.png';
 import { CommercialCondition, PdfExportSettings, Product, SimulationData } from '../types';
 import { formatCurrency, formatDateBr } from '../utils/formatters';
 import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets } from '../utils/pdfExport';
@@ -258,8 +259,8 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
         {/* CABEÇALHO DO MODAL */}
         <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-morar-50 text-morar-600 rounded-xl border border-morar-100 shadow-2xs">
-              <Building2 className="w-5 h-5" />
+            <div className="p-2 bg-morar-50 rounded-xl border border-morar-100 shadow-2xs">
+              <img src={logoMorar} alt="Morar" className="w-5 h-5 object-contain" />
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
@@ -323,20 +324,25 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
           >
             {/* 1. TOPO: LOGO / CABEÇALHO DA CONSTRUTORA & EMPREENDIMENTO */}
             <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-3">
-              <div>
-                <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
-                  Simulação Comercial
-                </h1>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
-                  <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
-                  <span>•</span>
-                  <span>Condição: <strong className="text-slate-900 font-bold">{condition.name}</strong></span>
-                  {deliveryText && (
-                    <>
-                      <span>•</span>
-                      <span className="text-amber-700 font-bold">Chaves: {deliveryText}</span>
-                    </>
-                  )}
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-morar-50 border border-morar-200 flex items-center justify-center shrink-0">
+                  <img src={logoMorar} alt="Morar" className="w-5 h-5 object-contain" />
+                </div>
+                <div>
+                  <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
+                    Simulação Comercial
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
+                    <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
+                    <span>•</span>
+                    <span>Condição: <strong className="text-slate-900 font-bold">{condition.name}</strong></span>
+                    {deliveryText && (
+                      <>
+                        <span>•</span>
+                        <span className="text-amber-700 font-bold">Chaves: {deliveryText}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
