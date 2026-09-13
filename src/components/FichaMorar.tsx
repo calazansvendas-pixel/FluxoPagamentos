@@ -243,6 +243,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiTotalManual(null);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
+    // Nova torre/unidade herda a quantidade de parcelas padrão da política —
+    // não carrega um ajuste manual feito para a unidade anterior.
+    setComissaoParcelasManual(null);
     if (!selectedTorre || !selectedUnidade) {
       setFaixasObra([
         { qtd: 12, valor: 0 },
@@ -286,6 +289,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiTotalManual(null);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
+    // Nova condição comercial herda a quantidade de parcelas padrão dela
+    // (comissaoApartadaParcelas) — não carrega um ajuste manual da anterior.
+    setComissaoParcelasManual(null);
     setFaixasObra([
       { qtd: 12, valor: 0 },
       { qtd: 12, valor: 0 },
@@ -508,6 +514,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiTotalManual(null);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
+    // Nova condição comercial herda a quantidade de parcelas padrão dela
+    // (comissaoApartadaParcelas) — não carrega um ajuste manual da anterior.
+    setComissaoParcelasManual(null);
     setFaixasObra([
       { qtd: 12, valor: 0 },
       { qtd: 12, valor: 0 },
@@ -553,6 +562,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     setItbiTotalManual(null);
     setItbiObraValorManual(null);
     setItbiPosValorManual(null);
+    // Volta a Qtd. Parcelas da Comissão Apartada para a sugestão padrão da
+    // política (comissaoApartadaParcelas) em vez de manter um ajuste manual.
+    setComissaoParcelasManual(null);
 
     if (onShowToast) {
       onShowToast('Fluxo de pagamento redefinido: Ato (Imóvel), ITBI no Ato e Ato Premiado restaurados.');
