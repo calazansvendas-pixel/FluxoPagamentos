@@ -47,4 +47,22 @@ export const KIND_META: KindMeta[] = [
     bloco3: { title: 'Bloco 3 — Parcelamento Morar', description: 'Mensal de obra, intermediárias semestrais, parcela chaves e pós-obra.' },
     bloco4: { title: 'Bloco 4 — Percentuais de Comprometimento', description: 'Gráfico com o percentual de cada componente sobre o imóvel/renda.' },
   },
+  {
+    kind: 'banco-direto-comissao-apartada',
+    label: 'Sinal c/ Banco Direto (Comissão Apartada)',
+    icon: FileCheck2,
+    bloco1: { title: 'Bloco 1 — Dados da Aprovação de Crédito', description: 'Renda, subsídio, FGTS, financiamento e sinal.' },
+    bloco2: { title: 'Bloco 2 — Fluxo de Entrada c/ Construtora', description: 'Ato do imóvel, ITBI no ato, ato premiado e mensais.' },
+    bloco3: { title: 'Bloco 3 — Parcelamento Pró-Soluto & Comissão', description: 'Parcelas da construtora, taxa contratual e card de comissão a pagar.' },
+    bloco4: { title: 'Bloco 4 — Indicadores de Risco / Comprometimento', description: 'Gráficos de risco parcela/renda e risco pró-soluto total.' },
+  },
+  {
+    kind: 'sinal-morar-comissao-apartada',
+    label: 'Sinal c/ Morar (Comissão Apartada)',
+    icon: FileCheck2,
+    bloco1: { title: 'Bloco 1 — Dados da Aprovação de Crédito', description: 'Renda, subsídio, FGTS, ato premiado, financiamento e sinal distribuído.' },
+    bloco2: { title: 'Bloco 2 — Comprometimento por Série & Comissão', description: 'Gráfico de comprometimento por série e card de comissão a pagar.' },
+    bloco3: { title: 'Bloco 3 — Período de Pagamentos', description: 'Ato, correção INCC (obra), correção IPCA (pós) e ITBI/registro.' },
+    bloco4: { title: 'Bloco 4 — Indicadores de Risco / Comprometimento', description: 'Gráficos de risco por fase e volume financeiro por fase.' },
+  },
 ];

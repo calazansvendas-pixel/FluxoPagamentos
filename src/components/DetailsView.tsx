@@ -153,20 +153,26 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
   const [pdfSettings, setPdfSettings] = useState<PdfExportSettings>(DEFAULT_PDF_EXPORT_SETTINGS);
   useEffect(() => {
     let cancelado = false;
-    pdfPermissoesService.carregarConfiguracaoParaExportar(cargoUsuario, isParcelamentoMorar ? 'parcelamento-morar' : 'banco-direto')
+    pdfPermissoesService.carregarConfiguracaoParaExportar(
+      cargoUsuario,
+      isParcelamentoMorar ? 'parcelamento-morar' : isComissaoApartada ? 'banco-direto-comissao-apartada' : 'banco-direto'
+    )
       .then(settings => { if (!cancelado) setPdfSettings(settings); });
     return () => { cancelado = true; };
-  }, [cargoUsuario, isParcelamentoMorar]);
+  }, [cargoUsuario, isParcelamentoMorar, isComissaoApartada]);
 
   // O que este cargo pode ver NA TELA (independente do PDF) — definido pelo
   // Administrador em "Configurar Visibilidade dos Quadros".
   const [telaSettings, setTelaSettings] = useState<TelaVisibilitySettings>(DEFAULT_TELA_VISIBILITY_SETTINGS);
   useEffect(() => {
     let cancelado = false;
-    telaVisibilidadeService.carregarConfiguracaoParaTela(cargoUsuario, isParcelamentoMorar ? 'parcelamento-morar' : 'banco-direto')
+    telaVisibilidadeService.carregarConfiguracaoParaTela(
+      cargoUsuario,
+      isParcelamentoMorar ? 'parcelamento-morar' : isComissaoApartada ? 'banco-direto-comissao-apartada' : 'banco-direto'
+    )
       .then(settings => { if (!cancelado) setTelaSettings(settings); });
     return () => { cancelado = true; };
-  }, [cargoUsuario, isParcelamentoMorar]);
+  }, [cargoUsuario, isParcelamentoMorar, isComissaoApartada]);
 
   // Todos os campos da condição "Parcelamento Morar" (quantidade e valor de
   // cada bloco) partem de uma sugestão calculada pela política de crédito, mas

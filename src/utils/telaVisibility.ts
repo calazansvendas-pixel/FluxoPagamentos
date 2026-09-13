@@ -15,6 +15,8 @@ export const DEFAULT_TELA_VISIBILITY_SETTINGS_BY_KIND: TelaVisibilitySettingsByK
   'banco-direto': { ...DEFAULT_TELA_VISIBILITY_SETTINGS },
   'sinal-morar': { ...DEFAULT_TELA_VISIBILITY_SETTINGS },
   'parcelamento-morar': { ...DEFAULT_TELA_VISIBILITY_SETTINGS },
+  'banco-direto-comissao-apartada': { ...DEFAULT_TELA_VISIBILITY_SETTINGS },
+  'sinal-morar-comissao-apartada': { ...DEFAULT_TELA_VISIBILITY_SETTINGS },
 };
 
 // A configuração em si (quem pode editar o quê, por cargo) mora no banco —

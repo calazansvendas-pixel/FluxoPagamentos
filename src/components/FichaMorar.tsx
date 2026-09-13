@@ -98,6 +98,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     resolveConditionForTorre(baseCond, selectedTorre)
   ), [baseCond, selectedTorre]);
 
+  // Precisa estar disponível cedo (usado no carregamento de configurações de
+  // visibilidade/PDF por cargo, antes do restante da lógica de comissão abaixo).
+  const isComissaoApartada = getConditionKind(currentCond?.name) === 'sinal-morar-comissao-apartada';
+
   // Quantidade de meses de cada balde (1 a 6), configurável na política de crédito.
   // Padrão 12 meses cada quando não definido (compatibilidade retroativa).
   const serieMesesCapacidades = useMemo<[number, number, number, number, number, number]>(() => [
@@ -116,20 +120,26 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const [pdfSettings, setPdfSettings] = useState<PdfExportSettings>(DEFAULT_PDF_EXPORT_SETTINGS);
   useEffect(() => {
     let cancelado = false;
-    pdfPermissoesService.carregarConfiguracaoParaExportar(cargoUsuario, 'sinal-morar')
+    pdfPermissoesService.carregarConfiguracaoParaExportar(
+      cargoUsuario,
+      isComissaoApartada ? 'sinal-morar-comissao-apartada' : 'sinal-morar'
+    )
       .then(settings => { if (!cancelado) setPdfSettings(settings); });
     return () => { cancelado = true; };
-  }, [cargoUsuario]);
+  }, [cargoUsuario, isComissaoApartada]);
 
   // O que este cargo pode ver NA TELA (independente do PDF) — definido pelo
   // Administrador em "Configurar Visibilidade dos Quadros".
   const [telaSettings, setTelaSettings] = useState<TelaVisibilitySettings>(DEFAULT_TELA_VISIBILITY_SETTINGS);
   useEffect(() => {
     let cancelado = false;
-    telaVisibilidadeService.carregarConfiguracaoParaTela(cargoUsuario, 'sinal-morar')
+    telaVisibilidadeService.carregarConfiguracaoParaTela(
+      cargoUsuario,
+      isComissaoApartada ? 'sinal-morar-comissao-apartada' : 'sinal-morar'
+    )
       .then(settings => { if (!cancelado) setTelaSettings(settings); });
     return () => { cancelado = true; };
-  }, [cargoUsuario]);
+  }, [cargoUsuario, isComissaoApartada]);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
 
@@ -724,7 +734,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // (Pró-Soluto Global, Teto Pós-Obra) continuam calculados sobre o valor
   // CHEIO, sem desconto de comissão — só o Ato (Imóvel) sugerido/efetivo da
   // construtora sai líquido dela (ver atoLiquidoConstrutora mais abaixo).
-  const isComissaoApartada = getConditionKind(currentCond?.name) === 'sinal-morar-comissao-apartada';
   const pctComissaoApartadaCond = currentCond?.comissaoApartadaPct ?? 0.04;
   const comissaoApartadaValor = isComissaoApartada
     ? Math.max(0, Math.round((precoTabelaOriginal - descontoAto) * pctComissaoApartadaCond * 100) / 100)
