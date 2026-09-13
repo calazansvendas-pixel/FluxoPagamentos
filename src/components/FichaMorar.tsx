@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre, getConditionKind } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
 import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
 import { pdfPermissoesService } from '../services/pdfPermissoesService';
@@ -154,6 +154,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   // digitou de propósito.
   const [itbiAtoManualFloor, setItbiAtoManualFloor] = useState<number | null>(null);
   const [isAtoPremiadoEnabled, setIsAtoPremiadoEnabled] = useState<boolean>(true);
+  // Comissão Apartada — só tem efeito na condição "Sinal c/ Morar (Comissão
+  // Apartada)" (ver getConditionKind). Controle manual da quantidade de
+  // parcelas da comissão, editável na própria ficha (sugestão inicial vem da
+  // política em currentCond.comissaoApartadaParcelas).
+  const [comissaoParcelasManual, setComissaoParcelasManual] = useState<number | null>(null);
   // Pagamento à vista: aplica o % de Desconto à Vista da política sobre o
   // Preço de Tabela (antes de qualquer outro cálculo), zera o ITBI (que passa
   // a ser responsabilidade do cliente após o Habite-se) e traz o Sinal
@@ -701,6 +706,27 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const descontoAto = isAtoPremiadoEnabled
     ? (valAtoManual !== null ? descontoAtoPremiadoCalculado : (morarEngineBase?.atoPremiado ?? 0))
     : 0;
+
+  // Comissão Apartada — exclusiva da condição "Sinal c/ Morar (Comissão
+  // Apartada)". A comissão sai do fluxo de Ato: os limites de risco
+  // (Pró-Soluto Global, Teto Pós-Obra) continuam calculados sobre o valor
+  // CHEIO, sem desconto de comissão — só o Ato (Imóvel) sugerido/efetivo da
+  // construtora sai líquido dela (ver atoLiquidoConstrutora mais abaixo).
+  const isComissaoApartada = getConditionKind(currentCond?.name) === 'sinal-morar-comissao-apartada';
+  const pctComissaoApartadaCond = currentCond?.comissaoApartadaPct ?? 0.04;
+  const comissaoApartadaValor = isComissaoApartada
+    ? Math.max(0, Math.round((precoTabelaOriginal - descontoAto) * pctComissaoApartadaCond * 100) / 100)
+    : 0;
+  const comissaoApartadaParcelasQtd = Math.max(1, comissaoParcelasManual ?? (currentCond?.comissaoApartadaParcelas ?? 6));
+  const comissaoApartadaParcelaValor = comissaoApartadaValor > 0
+    ? Math.round((comissaoApartadaValor / comissaoApartadaParcelasQtd) * 100) / 100
+    : 0;
+  // Ato (Imóvel) líquido que efetivamente entra no caixa da construtora —
+  // desconta o Ato Premiado e, na condição Comissão Apartada, também a
+  // comissão (paga à parte, ao corretor — nunca chega à construtora).
+  const atoLiquidoConstrutora = isComissaoApartada
+    ? Math.max(sinalMinimoVal, Math.round((valorAtoEfetivo - descontoAto - comissaoApartadaValor) * 100) / 100)
+    : valorAtoEfetivo - descontoAto;
 
   // Teto do Ato (Imóvel): ponto fixo ato* = price - subsidy - desconto(ato*).
   // Não pode usar "descontoAto" acima diretamente pois ele reflete o desconto do
@@ -1799,13 +1825,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     recurso_proprio: simulationData.ownResource || 0,
     ato_bruto: valorAtoEfetivo,
     desconto_ato_premiado: descontoAto,
-    ato_liquido: valorAtoEfetivo - descontoAto,
+    ato_liquido: atoLiquidoConstrutora,
     itbi_no_ato: atoITBIValidado,
     total_obra: totalFaseObraComITBI,
     total_pos_obra: totalFasePosComITBI,
     pro_soluto_total: totalFaseObraComITBI + totalFasePosComITBI,
     faixas_obra: faixasObra,
     faixas_pos: faixasPos,
+    comissao_apartada_valor: comissaoApartadaValor,
+    comissao_apartada_parcelas: comissaoApartadaParcelasQtd,
+    comissao_apartada_parcela_valor: comissaoApartadaParcelaValor,
     salvo_em: new Date().toISOString()
   });
 
@@ -1888,7 +1917,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   }, [
     currentProd?.id, currentCond?.id, selectedTorre, selectedUnidade, hasUnitSelected, isSimulationComplete,
     simulationData, income, price, evaluation, itbiValTabela, maxFinancEfetivo, subsidyEfetivo, fgtsEfetivo,
-    valorAtoEfetivo, descontoAto, atoITBIValidado, totalFaseObraComITBI, totalFasePosComITBI
+    valorAtoEfetivo, descontoAto, atoITBIValidado, totalFaseObraComITBI, totalFasePosComITBI,
+    comissaoApartadaValor, comissaoApartadaParcelasQtd
   ]);
 
   if (!isSimulationComplete) {
@@ -2932,6 +2962,75 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           </>
           )}
 
+          {/* COMISSÃO A PAGAR — só na condição "Sinal c/ Morar (Comissão
+              Apartada)". Parcelamento simples e independente: não passa por
+              nenhum limite de risco, e não altera o Pró-Soluto (só o Ato da
+              construtora sai líquido dela, ver atoLiquidoConstrutora). */}
+          {isComissaoApartada && (
+            <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-fuchsia-50 text-fuchsia-600">
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Comissão a Pagar
+                  </h3>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2.5 text-xs">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Comissão Total</span>
+                  <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
+                    {formatCurrency(comissaoApartadaValor)}
+                  </strong>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Qtd. Parcelas
+                  </label>
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="number"
+                      value={comissaoApartadaParcelasQtd > 0 ? comissaoApartadaParcelasQtd : ''}
+                      min="1"
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        if (rawVal === '') {
+                          setComissaoParcelasManual(1);
+                          return;
+                        }
+                        const val = parseInt(rawVal, 10);
+                        if (isNaN(val)) return;
+                        setComissaoParcelasManual(Math.max(1, val));
+                      }}
+                      onBlur={() => {
+                        if (!comissaoApartadaParcelasQtd || comissaoApartadaParcelasQtd < 1) {
+                          setComissaoParcelasManual(1);
+                        }
+                      }}
+                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-fuchsia-700 text-center focus:outline-none focus:border-fuchsia-600 text-xs"
+                    />
+                    <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80 text-center">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Valor da Parcela</span>
+                  <strong className="text-slate-900 font-bold text-xs sm:text-sm block mt-1">
+                    {formatCurrency(comissaoApartadaParcelaValor)}
+                  </strong>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-500 leading-relaxed px-1">
+                Parcelamento simples, sem taxa bancária nem limites de risco — só divide a comissão pelo número de parcelas. É pago em separado, por fora do contrato com a construtora, e não incide sobre as parcelas contratuais (séries de Obra/Pós-Obra) exibidas nesta ficha.
+              </p>
+            </div>
+          )}
+
         </div>
 
       </div>
@@ -2966,6 +3065,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           distribuido={totalDistribuido}
           dataAto={dataAto}
           valorAto={valorAtoEfetivo}
+          comissaoApartadaValor={comissaoApartadaValor}
+          comissaoApartadaParcelasQtd={comissaoApartadaParcelasQtd}
+          comissaoApartadaParcelaValor={comissaoApartadaParcelaValor}
           dataObra={dataObra}
           totalParcObra={totalParcObra}
           faixasObra={faixasObra}

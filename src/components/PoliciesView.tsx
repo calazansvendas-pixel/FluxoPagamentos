@@ -899,13 +899,16 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
   }
 
   const isMorarCondition = activeCondObj
-    ? getConditionKind(activeCondObj.name) === 'sinal-morar'
+    ? (getConditionKind(activeCondObj.name) === 'sinal-morar' || getConditionKind(activeCondObj.name) === 'sinal-morar-comissao-apartada')
     : false;
   const isParcelamentoMorarCondition = activeCondObj
     ? getConditionKind(activeCondObj.name) === 'parcelamento-morar'
     : false;
+  // Comissão Apartada é compartilhada pelas duas variantes ("Sinal c/ Banco
+  // Direto" e "Sinal c/ Morar") — os campos de % e parcelas padrão aparecem
+  // em ambas, cada uma dentro do seu próprio layout de tela.
   const isComissaoApartadaCondition = activeCondObj
-    ? getConditionKind(activeCondObj.name) === 'banco-direto-comissao-apartada'
+    ? (getConditionKind(activeCondObj.name) === 'banco-direto-comissao-apartada' || getConditionKind(activeCondObj.name) === 'sinal-morar-comissao-apartada')
     : false;
 
   const baseMaiorVendaAvaliacao = Math.max(propertyPrice, propertyEvaluation);
@@ -1666,6 +1669,57 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
                   </div>
 
                 </div>
+
+                {/* COMISSÃO APARTADA — só na condição "Sinal c/ Morar (Comissão Apartada)" */}
+                {isComissaoApartadaCondition && (
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Percentual sobre o Preço de Tabela que define o valor total da comissão. Ela sai do fluxo do Ato e vira um parcelamento próprio, sem taxa bancária nem limite de risco.">
+                        Comissão Apartada (%)
+                      </label>
+                      <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
+                        % sobre o Preço de Tabela. Os limites de risco continuam sobre o valor cheio — só o Ato final sai líquido desta comissão.
+                      </p>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={comissaoApartadaPctStr}
+                          onChange={(e) => setComissaoApartadaPctStr(e.target.value)}
+                          onBlur={() => {
+                            const parsed = Math.max(0, parseDecimal(comissaoApartadaPctStr, 4));
+                            setComissaoApartadaPctStr(formatDecimalBR(parsed, 2, 2));
+                          }}
+                          className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-fuchsia-700 text-center focus:outline-none focus:border-morar-600 text-xs"
+                        />
+                        <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">%</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]" title="Quantidade padrão de parcelas da comissão — sugestão inicial, editável por simulação na própria ficha.">
+                        Parcelas Padrão da Comissão
+                      </label>
+                      <p className="text-[10px] text-slate-500 mb-1.5 leading-tight">
+                        Sugestão inicial ao abrir a ficha; o corretor pode ajustar em cada simulação.
+                      </p>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={comissaoApartadaParcelasStr}
+                          onChange={(e) => setComissaoApartadaParcelasStr(e.target.value)}
+                          onBlur={() => {
+                            const parsed = Math.max(1, parseIntFlexible(comissaoApartadaParcelasStr, 6));
+                            setComissaoApartadaParcelasStr(String(parsed));
+                          }}
+                          className="w-full pl-3 pr-7 py-2 bg-white border border-slate-300 rounded-xl font-bold text-fuchsia-700 text-center focus:outline-none focus:border-morar-600 text-xs"
+                        />
+                        <span className="absolute right-3 font-extrabold text-slate-400 text-xs pointer-events-none">X</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : isParcelamentoMorarCondition ? (
               /* ========================================================================= */

@@ -82,12 +82,17 @@ export function calculatePricePMT(principal: number, ratePerMonthPct: number, nu
  * seu nome contém "morar", mas usa a tela/motor de "Sinal c/ Banco Direto"
  * com o Bloco 3 substituído, não a tela da Ficha Morar.
  */
-export type ConditionKind = 'sinal-morar' | 'parcelamento-morar' | 'banco-direto' | 'banco-direto-comissao-apartada';
+export type ConditionKind = 'sinal-morar' | 'sinal-morar-comissao-apartada' | 'parcelamento-morar' | 'banco-direto' | 'banco-direto-comissao-apartada';
 
 export function getConditionKind(condName: string | undefined | null): ConditionKind {
   const lower = (condName || '').toLowerCase();
   if (lower.includes('parcelamento') && lower.includes('morar')) return 'parcelamento-morar';
-  if (lower.includes('morar') || lower.includes('incc') || lower.includes('obra') || lower.includes('ipca')) return 'sinal-morar';
+  const isMorarLike = lower.includes('morar') || lower.includes('incc') || lower.includes('obra') || lower.includes('ipca');
+  // Variante do Sinal c/ Morar com a comissão separada do fluxo de Ato —
+  // reconhecida pelo nome conter também "comiss" (ex.: "Sinal c/ Morar
+  // (Comissão Apartada)"). Verificada ANTES de "sinal-morar" simples.
+  if (isMorarLike && lower.includes('comiss')) return 'sinal-morar-comissao-apartada';
+  if (isMorarLike) return 'sinal-morar';
   // Variante do Sinal c/ Banco Direto com a comissão separada do fluxo de
   // Ato/Pró-Soluto (ver comissaoApartadaPct em types.ts) — reconhecida pelo
   // nome conter "comiss" (ex.: "Sinal c/ Banco Direto (Comissão Apartada)").
@@ -101,6 +106,10 @@ export function isParcelamentoMorarCondition(condName: string | undefined | null
 
 export function isComissaoApartadaCondition(condName: string | undefined | null): boolean {
   return getConditionKind(condName) === 'banco-direto-comissao-apartada';
+}
+
+export function isMorarComissaoApartadaCondition(condName: string | undefined | null): boolean {
+  return getConditionKind(condName) === 'sinal-morar-comissao-apartada';
 }
 
 /**

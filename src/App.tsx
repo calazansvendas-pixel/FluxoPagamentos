@@ -347,8 +347,11 @@ export default function App({ perfil, onSair }: AppProps) {
   // Helper function to check if condition routes to the Ficha Morar screen.
   // "Parcelamento Morar" também tem "morar" no nome, mas usa a tela de
   // "Sinal c/ Banco Direto" (getConditionKind já trata esse caso à parte).
+  // "Sinal c/ Morar (Comissão Apartada)" usa a MESMA Ficha Morar, só com a
+  // comissão separada do fluxo de Ato — por isso também conta aqui.
   const isMorarCondition = (condName: string): boolean => {
-    return getConditionKind(condName) === 'sinal-morar';
+    const kind = getConditionKind(condName);
+    return kind === 'sinal-morar' || kind === 'sinal-morar-comissao-apartada';
   };
 
   const handleSelectCondition = (productId: string, conditionId: string) => {
@@ -454,7 +457,11 @@ export default function App({ perfil, onSair }: AppProps) {
   // automaticamente: abre o seletor (conditionPicker) para o usuário
   // escolher qual delas quer abrir.
   const handleSidebarTabSelect = (tab: ActiveTab, variant?: ConditionKind) => {
-    const targetKind: ConditionKind = tab === 'details' ? (variant || 'banco-direto') : 'sinal-morar';
+    // "Sinal c/ Morar" e "Sinal c/ Morar (Comissão Apartada)" compartilham a
+    // aba 'ficha-morar' do mesmo jeito que "Sinal c/ Banco Direto" e suas
+    // variantes compartilham 'details' — por isso o variant também precisa
+    // ser respeitado aqui, não só quando tab === 'details'.
+    const targetKind: ConditionKind = variant || (tab === 'details' ? 'banco-direto' : 'sinal-morar');
 
     let prodWithConds: Product | null = null;
     if (!activeAnalysisProduct && produtosLiberados.length > 0) {
@@ -465,31 +472,20 @@ export default function App({ perfil, onSair }: AppProps) {
     }
 
     if (prodWithConds) {
-      const candidates = tab === 'details'
-        ? prodWithConds.conditions.filter(c => getConditionKind(c.name) === targetKind)
-        : prodWithConds.conditions.filter(c => isMorarCondition(c.name));
+      const candidates = prodWithConds.conditions.filter(c => getConditionKind(c.name) === targetKind);
 
       if (candidates.length > 1) {
         setConditionPicker({ tab, product: prodWithConds, candidates });
         return;
       }
 
-      if (tab === 'details') {
-        const currentKind = activeAnalysisCondition ? getConditionKind(activeAnalysisCondition.name) : undefined;
-        if (!activeAnalysisCondition || currentKind !== targetKind) {
-          const targetCond = candidates[0]
-            || prodWithConds.conditions.find(c => !isMorarCondition(c.name))
-            || prodWithConds.conditions[0];
-          if (targetCond) {
-            setActiveAnalysisCondition(targetCond);
-          }
-        }
-      } else {
-        if (!activeAnalysisCondition || !isMorarCondition(activeAnalysisCondition.name)) {
-          const morarCond = candidates[0] || prodWithConds.conditions[0];
-          if (morarCond) {
-            setActiveAnalysisCondition(morarCond);
-          }
+      const currentKind = activeAnalysisCondition ? getConditionKind(activeAnalysisCondition.name) : undefined;
+      if (!activeAnalysisCondition || currentKind !== targetKind) {
+        const targetCond = candidates[0]
+          || prodWithConds.conditions.find(c => (tab === 'details' ? !isMorarCondition(c.name) : isMorarCondition(c.name)))
+          || prodWithConds.conditions[0];
+        if (targetCond) {
+          setActiveAnalysisCondition(targetCond);
         }
       }
     }

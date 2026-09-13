@@ -57,6 +57,10 @@ interface PdfExportModalMorarProps {
   distribuido: number;
   dataAto: string;
   valorAto: number;
+  // Comissão Apartada — só > 0 na condição "Sinal c/ Morar (Comissão Apartada)".
+  comissaoApartadaValor?: number;
+  comissaoApartadaParcelasQtd?: number;
+  comissaoApartadaParcelaValor?: number;
   dataObra: string;
   totalParcObra: number;
   faixasObra: MorarFaixa[];
@@ -111,6 +115,9 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
   distribuido,
   dataAto,
   valorAto,
+  comissaoApartadaValor = 0,
+  comissaoApartadaParcelasQtd = 0,
+  comissaoApartadaParcelaValor = 0,
   dataObra,
   totalParcObra,
   faixasObra,
@@ -564,6 +571,16 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                     <span className="font-bold text-slate-700">Ato:</span>
                     <strong className="text-slate-900 font-black text-xs sm:text-sm">{fmt(valorAto)}</strong>
                   </div>
+
+                  {/* COMISSÃO APARTADA — só na condição "Sinal c/ Morar (Comissão Apartada)" */}
+                  {comissaoApartadaValor > 0 && (
+                    <div className="flex items-center justify-between bg-fuchsia-50 px-3 py-2 rounded-lg border border-fuchsia-100 text-xs">
+                      <span className="font-bold text-fuchsia-700">Comissão Apartada ({comissaoApartadaParcelasQtd}x):</span>
+                      <strong className="text-fuchsia-800 font-black text-xs sm:text-sm">
+                        {fmt(comissaoApartadaValor)} <span className="font-semibold">({fmt(comissaoApartadaParcelaValor)}/mês)</span>
+                      </strong>
+                    </div>
+                  )}
                 </div>
 
                 {/* CARD 2: CORREÇÃO INCC - OBRA */}
