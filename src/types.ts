@@ -46,6 +46,12 @@ export interface CommercialCondition {
   // Quantidade padrão de parcelas da comissão — editável na ficha por
   // simulação, mas com este valor como sugestão inicial. Ausente → 6x.
   comissaoApartadaParcelas?: number;
+  // Limites (mín./máx.) de parcelas que o corretor pode digitar na ficha para
+  // a Comissão Apartada — travam o input em ambas as pontas, com
+  // comissaoApartadaParcelas (acima) como sugestão inicial dentro desse
+  // intervalo. Ausentes → 1x (mínimo) e 6x (máximo).
+  comissaoApartadaParcelasMin?: number;
+  comissaoApartadaParcelasMax?: number;
 
   // Campos específicos para a condição "Sinal c/ Morar"
   mesesObra?: number;
