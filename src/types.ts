@@ -224,7 +224,7 @@ export interface PerfilUsuario {
 // Configuração do que cada ficha em PDF exportada deve conter e apresentar,
 // uma por tipo de condição comercial (Sinal c/ Banco Direto, Sinal c/ Morar,
 // Parcelamento Morar — cada uma guarda suas próprias opções).
-export type PdfConditionKind = 'banco-direto' | 'sinal-morar' | 'parcelamento-morar';
+export type PdfConditionKind = 'banco-direto' | 'sinal-morar' | 'parcelamento-morar' | 'banco-direto-comissao-apartada' | 'sinal-morar-comissao-apartada';
 
 export interface PdfExportSettings {
   mostrarValores: boolean; // Mostra os valores em R$, ou os oculta (ficha "sem valores")
