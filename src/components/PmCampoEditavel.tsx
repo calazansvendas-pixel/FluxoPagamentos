@@ -101,7 +101,7 @@ export const PmCampoEditavel: React.FC<PmCampoEditavelProps> = ({
             }
           }}
           placeholder={tipo === 'moeda' ? 'R$ 0,00' : '0'}
-          className={`w-full bg-white px-2 py-1.5 rounded-md border border-slate-200 font-bold ${colorClass} text-center focus:outline-none focus:border-sky-600 text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed ${suffix ? 'pr-8' : ''}`}
+          className={`w-full bg-white px-2 py-1.5 rounded-md border border-slate-200 font-bold ${colorClass} text-center focus:outline-none focus:border-morar-600 text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed ${suffix ? 'pr-8' : ''}`}
         />
         {suffix && (
           <span className="absolute right-2 text-[10px] font-extrabold text-slate-400 pointer-events-none">{suffix}</span>

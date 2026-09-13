@@ -88,7 +88,7 @@ export const EmptySimulationNotice: React.FC<EmptySimulationNoticeProps> = ({
           <button
             type="button"
             onClick={onNavigateToSimulator}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow transition-all cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-morar-600 hover:bg-morar-700 active:bg-morar-800 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow transition-all cursor-pointer"
           >
             <span>Ir para o Simulador de Crédito</span>
             <ArrowRight className="w-4 h-4" />

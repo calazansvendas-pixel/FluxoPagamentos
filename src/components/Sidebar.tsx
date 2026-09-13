@@ -43,7 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     : TELAS_APP;
 
   const inactiveClass = "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all text-left cursor-pointer";
-  const activeClass = "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-sky-50 text-sky-600 border border-sky-100 transition-all text-left cursor-pointer shadow-2xs";
+  const activeClass = "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-morar-50 text-morar-600 border border-morar-100 transition-all text-left cursor-pointer shadow-2xs";
 
   // isCollapsed (modo ícone) só existe como conceito em telas médias/grandes —
   // no celular a gaveta é sempre exibida por extenso, então qualquer classe
@@ -104,7 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className={isActive ? activeClass : inactiveClass}
                     title={item.label}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-sky-600' : 'text-sky-600/80'}`} />
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-morar-600' : 'text-morar-600/80'}`} />
                     <span className={`truncate ${hideOnCollapse}`}>{item.label}</span>
                   </button>
                 );

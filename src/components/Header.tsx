@@ -1,5 +1,6 @@
 import React from 'react';
-import { Building2, Calendar, Menu, RotateCcw, LogOut } from 'lucide-react';
+import { Calendar, Menu, RotateCcw, LogOut } from 'lucide-react';
+import logoMorar from '../assets/logo-morar-icon.png';
 
 interface HeaderProps {
   currentDate: string;
@@ -36,22 +37,18 @@ export const Header: React.FC<HeaderProps> = ({
             className="p-2 sm:p-2.5 rounded-xl hover:bg-slate-100 text-slate-800 transition-all focus:outline-none cursor-pointer shrink-0"
             title="Alternar Menu Lateral"
           >
-            <Menu className="w-5 h-5 text-sky-600" />
+            <Menu className="w-5 h-5 text-morar-600" />
           </button>
 
           <div
             className="flex items-center gap-2 sm:gap-3 cursor-pointer group min-w-0"
             onClick={onNavigateHome}
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-100 via-sky-50 to-white border border-sky-200 flex items-center justify-center text-sky-600 shadow-xs group-hover:scale-105 transition-transform shrink-0">
-              <Building2 className="w-5 h-5 text-sky-600" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-morar-50 border border-morar-200 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform shrink-0">
+              <img src={logoMorar} alt="Morar" className="w-5 h-5 sm:w-6 sm:h-6 object-contain" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-baseline">
-                <span className="text-base sm:text-xl text-slate-900 font-bold tracking-tight truncate">CALAZANS</span>
-                <span className="text-xs text-sky-600 ml-1.5 uppercase font-light tracking-widest">IMOB</span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium tracking-wider uppercase hidden sm:block">Simulador & Políticas Comerciais</p>
+              <span className="text-base sm:text-xl text-slate-900 font-bold tracking-tight truncate block">Simulador & Políticas Comerciais</span>
             </div>
           </div>
         </div>
@@ -69,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           <div className="hidden md:flex items-center gap-2 bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600">
-            <Calendar className="w-3.5 h-3.5 text-sky-600" />
+            <Calendar className="w-3.5 h-3.5 text-morar-600" />
             <span className="font-medium">Hoje é:</span>
             <input
               type="date"

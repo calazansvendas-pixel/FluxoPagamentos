@@ -126,7 +126,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                     <UserCheck className="w-4 h-4" />
                   </div>
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
@@ -156,7 +156,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                     value={safeSimulationData.agency || ''}
                     onChange={(e) => onSimulationDataChange({ ...safeSimulationData, agency: e.target.value })}
                     placeholder="Nome da imobiliária (opcional)"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-morar-600 transition-all"
                   />
                 </div>
                 <div>
@@ -169,7 +169,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                     onChange={(e) => onSimulationDataChange({ ...safeSimulationData, clientName: e.target.value })}
                     placeholder="Digite o nome do cliente"
                     required
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-morar-600 transition-all"
                   />
                 </div>
               </div>
@@ -179,7 +179,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                     <Wallet className="w-4 h-4" />
                   </div>
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
@@ -191,7 +191,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">
                       Total Aprovado Estimado
                     </span>
-                    <strong className="text-xs font-extrabold text-sky-700">
+                    <strong className="text-xs font-extrabold text-morar-700">
                       {formatCurrency(totalRecursosAprovados || 0)}
                     </strong>
                   </div>
@@ -215,7 +215,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                       }
                     }}
                     placeholder="R$ 0,00"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-morar-600 transition-all"
                   />
                 </div>
                 <div>
@@ -234,7 +234,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                       }
                     }}
                     placeholder="R$ 0,00"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-emerald-600 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-emerald-600 focus:bg-white focus:outline-none focus:border-morar-600 transition-all"
                   />
                 </div>
                 <div>
@@ -253,7 +253,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                       }
                     }}
                     placeholder="R$ 0,00"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-sky-600 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-morar-600 focus:bg-white focus:outline-none focus:border-morar-600 transition-all"
                   />
                 </div>
                 <div>
@@ -272,7 +272,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                       }
                     }}
                     placeholder="R$ 0,00"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-600 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-morar-600 transition-all"
                   />
                 </div>
               </div>
@@ -291,7 +291,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         value="90"
                         checked={safeSimulationData.finPercent === 0.9}
                         onChange={() => onSimulationDataChange({ ...safeSimulationData, finPercent: 0.9 })}
-                        className="text-sky-600 focus:ring-sky-600 cursor-pointer"
+                        className="text-morar-600 focus:ring-morar-600 cursor-pointer"
                       />
                       <span>90% (Máximo)</span>
                     </label>
@@ -302,7 +302,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         value="80"
                         checked={safeSimulationData.finPercent === 0.8}
                         onChange={() => onSimulationDataChange({ ...safeSimulationData, finPercent: 0.8 })}
-                        className="text-sky-600 focus:ring-sky-600 cursor-pointer"
+                        className="text-morar-600 focus:ring-morar-600 cursor-pointer"
                       />
                       <span>80% (Padrão)</span>
                     </label>
@@ -321,7 +321,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         value="SIM"
                         checked={safeSimulationData.isFirstHome !== false}
                         onChange={() => onSimulationDataChange({ ...safeSimulationData, isFirstHome: true })}
-                        className="text-sky-600 focus:ring-sky-600 cursor-pointer"
+                        className="text-morar-600 focus:ring-morar-600 cursor-pointer"
                       />
                       <span>SIM</span>
                     </label>
@@ -332,7 +332,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         value="NAO"
                         checked={safeSimulationData.isFirstHome === false}
                         onChange={() => onSimulationDataChange({ ...safeSimulationData, isFirstHome: false })}
-                        className="text-sky-600 focus:ring-sky-600 cursor-pointer"
+                        className="text-morar-600 focus:ring-morar-600 cursor-pointer"
                       />
                       <span>NÃO</span>
                     </label>
@@ -349,7 +349,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs w-full space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+                  <div className="p-1.5 rounded-lg bg-morar-50 text-morar-600">
                     <Building className="w-4 h-4" />
                   </div>
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
@@ -359,7 +359,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                 <button
                   type="button"
                   onClick={onNavigateToPolicies}
-                  className="text-[11px] font-semibold text-sky-600 hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] font-semibold text-morar-600 hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <Edit3 className="w-3 h-3" /> Editar Políticas
                 </button>
@@ -373,7 +373,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                 <select
                   value={selectedProdId}
                   onChange={(e) => setSelectedProdId(e.target.value)}
-                  className="w-full py-2.5 px-3 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-sky-600 cursor-pointer font-semibold shadow-2xs"
+                  className="w-full py-2.5 px-3 text-sm bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-morar-600 cursor-pointer font-semibold shadow-2xs"
                 >
                   <option value="">-- Selecionar Empreendimento --</option>
                   {(products || []).filter(Boolean).map((p) => (
@@ -398,7 +398,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                 const selectedCondId = (selectedConditions || {})[p.id] || '';
 
                 const borderBg = p.isFeatured ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200 bg-white';
-                const badgeDot = p.isFeatured ? 'bg-amber-500' : 'bg-sky-600';
+                const badgeDot = p.isFeatured ? 'bg-amber-500' : 'bg-morar-600';
                 const titleClass = p.isFeatured ? 'text-amber-900' : 'text-slate-900';
 
                 const deliveryText = formatDeliveryText(p.deliveryDatePhase1, p.deliveryDatePhase2, p.deliveryDate);
@@ -414,7 +414,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                       </span>
                       {deliveryText && (
                         <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
-                          <KeyRound className="w-3.5 h-3.5 text-sky-600 shrink-0" /> Chaves: {deliveryText}
+                          <KeyRound className="w-3.5 h-3.5 text-morar-600 shrink-0" /> Chaves: {deliveryText}
                         </span>
                       )}
                     </div>
@@ -423,7 +423,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                       <select
                         value={selectedCondId}
                         onChange={(e) => onSelectCondition(p.id, e.target.value)}
-                        className="flex-1 min-w-0 py-2 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-sky-600 cursor-pointer font-medium shadow-2xs"
+                        className="flex-1 min-w-0 py-2 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-morar-600 cursor-pointer font-medium shadow-2xs"
                       >
                         <option value="">-- Selecionar Condição --</option>
                         {prodWithConds.conditions.map((c) => (
@@ -439,7 +439,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                         onClick={() => onAdvanceToDetails(prodWithConds, selectedCondId)}
                         className={`shrink-0 px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 border ${
                           selectedCondId
-                            ? 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600 cursor-pointer shadow-md'
+                            ? 'bg-morar-600 hover:bg-morar-700 text-white border-morar-600 cursor-pointer shadow-md'
                             : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
                         }`}
                       >

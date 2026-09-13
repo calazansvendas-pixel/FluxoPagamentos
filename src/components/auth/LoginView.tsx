@@ -61,7 +61,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToCadastro }) => {
             <img src={logoMorar} alt="Morar" className="w-6 h-6 object-contain" />
           </div>
           <h1 className="text-lg font-bold text-slate-900">Bem-vindo(a) de volta</h1>
-          <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e senha para acessar o Calazans Imob.</p>
+          <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e senha para acessar sua conta.</p>
         </div>
 
         {erro && (
