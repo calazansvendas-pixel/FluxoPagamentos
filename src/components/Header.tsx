@@ -1,6 +1,6 @@
 import React from 'react';
 import { Calendar, Menu, RotateCcw, LogOut } from 'lucide-react';
-import logoMorar from '../assets/logo-morar-icon.png';
+import logoMorar from '../assets/brand';
 
 interface HeaderProps {
   currentDate: string;

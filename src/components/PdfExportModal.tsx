@@ -6,7 +6,7 @@ import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets } from '
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, Cell, LabelList } from 'recharts';
-import logoMorar from '../assets/logo-morar-icon.png';
+import logoMorar from '../assets/brand';
 
 export interface PdfSemestralItem {
   label: string;

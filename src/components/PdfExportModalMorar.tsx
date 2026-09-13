@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Calendar, Download, Loader2, AlertCircle } from 'lucide-react';
-import logoMorar from '../assets/logo-morar-icon.png';
+import logoMorar from '../assets/brand';
 import { CommercialCondition, PdfExportSettings, Product, SimulationData } from '../types';
 import { formatCurrency, formatDateBr } from '../utils/formatters';
 import { waitForStyledPaint, captureStyledCanvas, inlineLiveStylesheets } from '../utils/pdfExport';

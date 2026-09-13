@@ -3,7 +3,7 @@ import { Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService } from '../../services/authService';
 import { AuthLayout } from './AuthLayout';
-import logoMorar from '../../assets/logo-morar-icon.png';
+import logoMorar from '../../assets/brand';
 
 interface LoginViewProps {
   onSwitchToCadastro: () => void;
