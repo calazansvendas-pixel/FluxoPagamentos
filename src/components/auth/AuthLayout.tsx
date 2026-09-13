@@ -1,5 +1,5 @@
 import React from 'react';
-import logoMorar from '../../assets/logo-morar-icon.png';
+import logoMorar from '../../assets/brand';
 
 interface AuthLayoutProps {
   children: React.ReactNode;
