@@ -723,21 +723,40 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const atoSugeridoResidual = hasUnitSelected ? (morarEngineBase?.atoResidual ?? 0) : 0;
   const valorAtoEfetivo = valAtoManual !== null ? valAtoManual : atoSugeridoResidual;
 
-  // Desconto do Ato Premiado baseado no Ato Efetivo
-  const descontoAtoPremiadoCalculado = calcularDescontoAtoPremiado(valorAtoEfetivo, pctAtoPremiadoCond);
-  const descontoAto = isAtoPremiadoEnabled
-    ? (valAtoManual !== null ? descontoAtoPremiadoCalculado : (morarEngineBase?.atoPremiado ?? 0))
-    : 0;
-
   // Comissão Apartada — exclusiva da condição "Sinal c/ Morar (Comissão
   // Apartada)". A comissão sai do fluxo de Ato: os limites de risco
   // (Pró-Soluto Global, Teto Pós-Obra) continuam calculados sobre o valor
   // CHEIO, sem desconto de comissão — só o Ato (Imóvel) sugerido/efetivo da
   // construtora sai líquido dela (ver atoLiquidoConstrutora mais abaixo).
   const pctComissaoApartadaCond = currentCond?.comissaoApartadaPct ?? 0.04;
-  const comissaoApartadaValor = isComissaoApartada
-    ? Math.max(0, Math.round((precoTabelaOriginal - descontoAto) * pctComissaoApartadaCond * 100) / 100)
-    : 0;
+
+  // Desconto do Ato Premiado: a base do percentual (10%) é EXCLUSIVAMENTE o
+  // Ato (Imóvel) já líquido da comissão — o valor efetivamente destinado à
+  // construtora (valAtoImovel/atoLiquidoConstrutora) — NUNCA o valor bruto
+  // que ainda embute a comissão apartada, senão o desconto sai inflado (a
+  // base cresce, o desconto de 10% cresce junto). Como a própria comissão é
+  // calculada sobre (preço - desconto do Ato Premiado), os dois se resolvem
+  // em conjunto por ponto fixo — mesmo padrão de convergência já usado em
+  // resolverTetoAtoComDescontoEComissao (calculations.ts) — que some para a
+  // condição comum (comissaoApartadaValor = 0 na 1ª volta).
+  let descontoAto = 0;
+  let comissaoApartadaValor = 0;
+  if (isComissaoApartada) {
+    for (let i = 0; i < 50; i++) {
+      const atoLiquidoIter = Math.max(0, Math.round((valorAtoEfetivo - comissaoApartadaValor) * 100) / 100);
+      const novoDesconto = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoLiquidoIter, pctAtoPremiadoCond) : 0;
+      const novaComissao = Math.max(0, Math.round((precoTabelaOriginal - novoDesconto) * pctComissaoApartadaCond * 100) / 100);
+      const convergiu = Math.abs(novoDesconto - descontoAto) < 0.005 && Math.abs(novaComissao - comissaoApartadaValor) < 0.005;
+      descontoAto = novoDesconto;
+      comissaoApartadaValor = novaComissao;
+      if (convergiu) break;
+    }
+  } else {
+    const descontoAtoPremiadoCalculado = calcularDescontoAtoPremiado(valorAtoEfetivo, pctAtoPremiadoCond);
+    descontoAto = isAtoPremiadoEnabled
+      ? (valAtoManual !== null ? descontoAtoPremiadoCalculado : (morarEngineBase?.atoPremiado ?? 0))
+      : 0;
+  }
   // Limites de parcelas da Comissão Apartada, configuráveis por condição
   // comercial em Políticas & Empreendimentos (padrão 1x a 6x).
   const minComissaoParcelas = Math.max(1, currentCond?.comissaoApartadaParcelasMin ?? 1);
