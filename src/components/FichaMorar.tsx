@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
-import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, calcularDescontoAtoPremiado, resolverTetoAtoComDesconto, resolveConditionForTorre, getConditionKind } from '../utils/calculations';
+import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, resolverDescontoEComissaoApartada, resolverTetoAtoComDesconto, resolveConditionForTorre, getConditionKind } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
 import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
 import { pdfPermissoesService } from '../services/pdfPermissoesService';
@@ -679,6 +679,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   const totalParcPos = faixasPos.reduce((acc, f) => acc + (Number(f.qtd) || 0), 0);
   const totalParcMorar = totalParcObra + totalParcPos;
 
+  // Comissão Apartada — exclusiva da condição "Sinal c/ Morar (Comissão
+  // Apartada)". A comissão sai do fluxo de Ato: os limites de risco
+  // (Pró-Soluto Global, Teto Pós-Obra) continuam calculados sobre o valor
+  // CHEIO, sem desconto de comissão — só o Ato (Imóvel) sugerido/efetivo da
+  // construtora sai líquido dela (ver atoLiquidoConstrutora mais abaixo).
+  const pctComissaoApartadaCond = currentCond?.comissaoApartadaPct ?? 0.04;
+
   // Motor Base Morar (sem ato manual) para estabelecer o padrão de piso/sugestão e risco da política
   const morarEngineBase = useMemo(() => {
     if (!hasUnitSelected || price <= 0) return null;
@@ -715,48 +722,26 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       sinalMinimo: sinalMinimoVal,
       isAtoPremiadoEnabled,
       atoITBI: itbiAtoManualFloor ?? 0,
-      atoPremiadoPct: pctAtoPremiadoCond
+      atoPremiadoPct: pctAtoPremiadoCond,
+      isComissaoApartada,
+      pctComissaoApartada: pctComissaoApartadaCond
     });
-  }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, itbiAtoManualFloor, totalParcObra, totalParcPos, serieMesesCapacidades]);
+  }, [hasUnitSelected, price, evaluation, despCartoriasEfetivas, income, maxFinanc, subsidy, fgts, currentCond, sinalMinimoVal, isAtoPremiadoEnabled, itbiAtoManualFloor, totalParcObra, totalParcPos, serieMesesCapacidades, isComissaoApartada, pctComissaoApartadaCond]);
 
   // Piso do Ato Sugerido Inicial e Saldo de Pró-Soluto padrão
   const atoSugeridoResidual = hasUnitSelected ? (morarEngineBase?.atoResidual ?? 0) : 0;
   const valorAtoEfetivo = valAtoManual !== null ? valAtoManual : atoSugeridoResidual;
 
-  // Comissão Apartada — exclusiva da condição "Sinal c/ Morar (Comissão
-  // Apartada)". A comissão sai do fluxo de Ato: os limites de risco
-  // (Pró-Soluto Global, Teto Pós-Obra) continuam calculados sobre o valor
-  // CHEIO, sem desconto de comissão — só o Ato (Imóvel) sugerido/efetivo da
-  // construtora sai líquido dela (ver atoLiquidoConstrutora mais abaixo).
-  const pctComissaoApartadaCond = currentCond?.comissaoApartadaPct ?? 0.04;
-
-  // Desconto do Ato Premiado: a base do percentual (10%) é EXCLUSIVAMENTE o
-  // Ato (Imóvel) já líquido da comissão — o valor efetivamente destinado à
-  // construtora (valAtoImovel/atoLiquidoConstrutora) — NUNCA o valor bruto
-  // que ainda embute a comissão apartada, senão o desconto sai inflado (a
-  // base cresce, o desconto de 10% cresce junto). Como a própria comissão é
-  // calculada sobre (preço - desconto do Ato Premiado), os dois se resolvem
-  // em conjunto por ponto fixo — mesmo padrão de convergência já usado em
-  // resolverTetoAtoComDescontoEComissao (calculations.ts) — que some para a
-  // condição comum (comissaoApartadaValor = 0 na 1ª volta).
-  let descontoAto = 0;
-  let comissaoApartadaValor = 0;
-  if (isComissaoApartada) {
-    for (let i = 0; i < 50; i++) {
-      const atoLiquidoIter = Math.max(0, Math.round((valorAtoEfetivo - comissaoApartadaValor) * 100) / 100);
-      const novoDesconto = isAtoPremiadoEnabled ? calcularDescontoAtoPremiado(atoLiquidoIter, pctAtoPremiadoCond) : 0;
-      const novaComissao = Math.max(0, Math.round((precoTabelaOriginal - novoDesconto) * pctComissaoApartadaCond * 100) / 100);
-      const convergiu = Math.abs(novoDesconto - descontoAto) < 0.005 && Math.abs(novaComissao - comissaoApartadaValor) < 0.005;
-      descontoAto = novoDesconto;
-      comissaoApartadaValor = novaComissao;
-      if (convergiu) break;
-    }
-  } else {
-    const descontoAtoPremiadoCalculado = calcularDescontoAtoPremiado(valorAtoEfetivo, pctAtoPremiadoCond);
-    descontoAto = isAtoPremiadoEnabled
-      ? (valAtoManual !== null ? descontoAtoPremiadoCalculado : (morarEngineBase?.atoPremiado ?? 0))
-      : 0;
-  }
+  // Desconto do Ato Premiado e Comissão Apartada — exclusiva da condição
+  // "Sinal c/ Morar (Comissão Apartada)". A base do desconto é sempre o Ato
+  // (Imóvel) já líquido da comissão (nunca o bruto), resolvida no PRÓPRIO
+  // motor de cálculo (calculateMorarFlowEngine → calcularAtoMinimoPorPreco em
+  // calculations.ts) — única fonte de verdade dessa conta, tanto para o Ato
+  // sugerido automaticamente (morarEngineBase) quanto para um Ato digitado
+  // manualmente (resolverDescontoEComissaoApartada, mesma matemática).
+  const { desconto: descontoAto, comissao: comissaoApartadaValor } = valAtoManual !== null
+    ? resolverDescontoEComissaoApartada(valorAtoEfetivo, isAtoPremiadoEnabled, pctAtoPremiadoCond, isComissaoApartada, pctComissaoApartadaCond, precoTabelaOriginal)
+    : { desconto: morarEngineBase?.atoPremiado ?? 0, comissao: morarEngineBase?.comissaoApartadaValor ?? 0 };
   // Limites de parcelas da Comissão Apartada, configuráveis por condição
   // comercial em Políticas & Empreendimentos (padrão 1x a 6x).
   const minComissaoParcelas = Math.max(1, currentCond?.comissaoApartadaParcelasMin ?? 1);
@@ -1075,7 +1060,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       sinalMinimo: sinalMinimoVal,
       atoITBI: itbiAtoManualFloor ?? 0,
       isAtoPremiadoEnabled,
-      atoPremiadoPct: pctAtoPremiadoCond
+      atoPremiadoPct: pctAtoPremiadoCond,
+      isComissaoApartada,
+      pctComissaoApartada: pctComissaoApartadaCond
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1160,7 +1147,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       atoITBI: atoITBIParam,
       isAtoPremiadoEnabled: atoPremiadoAtivo,
       atoManual: atoValor,
-      atoPremiadoPct: pctAtoPremiadoCond
+      atoPremiadoPct: pctAtoPremiadoCond,
+      isComissaoApartada,
+      pctComissaoApartada: pctComissaoApartadaCond
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1358,7 +1347,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         serieMesesCapacidades: serieMesesCapacidades,
         sinalMinimo: sinalMinimoVal,
         atoITBI: itbiAtoManualFloor ?? 0,
-        isAtoPremiadoEnabled
+        isAtoPremiadoEnabled,
+        isComissaoApartada,
+        pctComissaoApartada: pctComissaoApartadaCond
       });
 
       const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1373,7 +1364,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       setValAtoITBI(engineResult.itbiAtoSugerido);
       setItbiAtoInputText(formatCurrency(engineResult.itbiAtoSugerido));
     }
-  }, [sinalLiquidoTotalEfetivo, hasUnitSelected, isManualObra, isManualPos, valAtoManual, sinalMinimoVal, currentCond, income, despCartoriasEfetivas, itbiAtoManualFloor, price, evaluation, maxFinanc, subsidy, fgts, isAtoPremiadoEnabled]);
+  }, [sinalLiquidoTotalEfetivo, hasUnitSelected, isManualObra, isManualPos, valAtoManual, sinalMinimoVal, currentCond, income, despCartoriasEfetivas, itbiAtoManualFloor, price, evaluation, maxFinanc, subsidy, fgts, isAtoPremiadoEnabled, isComissaoApartada, pctComissaoApartadaCond]);
 
   const mesesObraPadraoPolitica = currentCond?.mesesObra ?? 33;
   const mesesPosPadraoPolitica = currentCond?.mesesPos ?? 27;
@@ -1451,7 +1442,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         sinalMinimo: sinalMinimoVal,
         atoITBI: itbiAtoManualFloor ?? 0,
         isAtoPremiadoEnabled,
-        atoManual: atoManualParam
+        atoManual: atoManualParam,
+        isComissaoApartada,
+        pctComissaoApartada: pctComissaoApartadaCond
       });
 
       const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1505,7 +1498,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         sinalMinimo: sinalMinimoVal,
         atoITBI: itbiAtoManualFloor ?? 0,
         isAtoPremiadoEnabled,
-        atoManual: atoManualParam
+        atoManual: atoManualParam,
+        isComissaoApartada,
+        pctComissaoApartada: pctComissaoApartadaCond
       });
 
       const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1572,7 +1567,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       atoITBI: itbiAtoManualFloor ?? 0,
       isAtoPremiadoEnabled,
       atoPremiadoPct: pctAtoPremiadoCond,
-      atoManual: atoManualParam
+      atoManual: atoManualParam,
+      isComissaoApartada,
+      pctComissaoApartada: pctComissaoApartadaCond
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
@@ -1670,7 +1667,9 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       atoITBI: finalVal,
       isAtoPremiadoEnabled,
       atoManual: valAtoManual !== null ? valAtoManual : undefined,
-      atoPremiadoPct: pctAtoPremiadoCond
+      atoPremiadoPct: pctAtoPremiadoCond,
+      isComissaoApartada,
+      pctComissaoApartada: pctComissaoApartadaCond
     });
 
     const mObraArr = engineResult.obraSeries.map(s => ({ qtd: s.qtd, valor: s.parcelaLiquida, serieIndex: s.serieIndex }));
