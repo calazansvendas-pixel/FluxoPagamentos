@@ -151,10 +151,23 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   }>>>({});
 
   const carregarPermissoesPadrao = async () => {
-    setPermissoesPadraoTodas(await authService.carregarPermissoesPadraoPorCargo());
+    const { dados, error } = await authService.carregarPermissoesPadraoPorCargo();
+    setPermissoesPadraoTodas(dados);
+    return error;
   };
 
-  useEffect(() => { carregarPermissoesPadrao(); }, []);
+  useEffect(() => {
+    carregarPermissoesPadrao().then(error => {
+      // Só no carregamento inicial: se a leitura falhar (o caso mais comum é
+      // a tabela `permissoes_padrao_por_cargo` ainda não ter sido criada no
+      // Supabase — ver SQL em authService.ts), avisa em vez de deixar a tela
+      // cair silenciosamente nos padrões de fábrica sem nenhuma explicação.
+      if (error) {
+        onShowToast(`Não foi possível carregar os padrões de permissão salvos no Supabase (${error}). Verifique se o SQL de "permissoes_padrao_por_cargo" já foi executado — usando os padrões de fábrica por enquanto.`);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Empreendimentos padrão por cargo — usado só quando a hierarquia chega ao
   // topo sem achar nenhuma trava manual no caminho (ver empreendimentos_liberados_efetivos

@@ -663,11 +663,18 @@ export const authService = {
    * CREATE POLICY "admin_grava_permissoes_padrao_por_cargo" ON permissoes_padrao_por_cargo
    *   FOR ALL USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));
    */
-  async carregarPermissoesPadraoPorCargo(): Promise<Partial<Record<Cargo, {
-    telasLiberadas: string[]; condicoesLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
-  }>>> {
+  // `error` só vem preenchido numa falha real de leitura (ex.: a tabela ainda
+  // não existe no Supabase porque o SQL acima não foi rodado) — nesse caso
+  // `dados` volta vazio e quem chama decide se avisa o Administrador, em vez
+  // de a tela cair nos padrões de fábrica sem explicação nenhuma.
+  async carregarPermissoesPadraoPorCargo(): Promise<{
+    dados: Partial<Record<Cargo, {
+      telasLiberadas: string[]; condicoesLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
+    }>>;
+    error?: string;
+  }> {
     const { data, error } = await supabase.from('permissoes_padrao_por_cargo').select('*');
-    if (error || !data) return {};
+    if (error) return { dados: {}, error: error.message };
     const resultado: Partial<Record<Cargo, { telasLiberadas: string[]; condicoesLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[] }>> = {};
     (data as any[]).forEach(row => {
       resultado[row.cargo as Cargo] = {
@@ -677,7 +684,7 @@ export const authService = {
         camposEditaveisEquipe: row.campos_editaveis_equipe || []
       };
     });
-    return resultado;
+    return { dados: resultado };
   },
 
   // Aplica a mesma política de permissões (telas liberadas, ver propostas da
