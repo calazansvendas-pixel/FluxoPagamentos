@@ -1,21 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  ArrowLeft, 
-  RotateCcw, 
-  KeyRound, 
-  AlertTriangle, 
-  FileSpreadsheet, 
-  Printer, 
-  Layers, 
-  Coins, 
+import {
+  RotateCcw,
+  AlertTriangle,
+  FileSpreadsheet,
+  Layers,
+  Coins,
   Receipt,
-  ChevronDown,
   FileCheck2,
   Building,
   Check,
-  PieChart,
-  Save,
-  Loader2
+  PieChart
 } from 'lucide-react';
 import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
@@ -27,6 +21,8 @@ import { telaVisibilidadeService } from '../services/telaVisibilidadeService';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { NovatoSimuladorView } from './NovatoSimuladorView';
 import { MonthStepper } from './MonthStepper';
+import { FichaMorarTopBar } from './FichaMorarTopBar';
+import { FichaMorarActionBar } from './FichaMorarActionBar';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
@@ -2001,6 +1997,14 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           product={currentProd}
           condition={currentCond}
           simulationData={simulationData}
+          products={products}
+          onSelectProduct={onSelectProduct}
+          onProductChange={handleProductDropdownChange}
+          onSelectCondition={onSelectCondition}
+          onConditionChange={handleConditionDropdownChange}
+          onLimpar={handleResetFicha}
+          onSaveSimulation={handleSaveSimulation}
+          isSavingSimulation={isSavingSimulation}
           selectedTorre={selectedTorre}
           selectedUnidade={selectedUnidade}
           availableTorres={availableTorres}
@@ -2024,7 +2028,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           sinalTotal={sinalTotalSemITBIEfetivo}
           comITBI={sinalTotalComITBIEfetivo}
           distribuido={totalDistribuido}
-          isComissaoApartada={isComissaoApartada}
           isAtoPremiadoEnabled={isAtoPremiadoEnabled}
           onToggleAtoPremiado={handleToggleAtoPremiado}
           dataAto={dataAto}
@@ -2152,107 +2155,19 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
       
-      {/* BARRA SUPERIOR DE AÇÃO E NAVEGAÇÃO */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            type="button"
-            onClick={onBackToSimulator}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Voltar</span>
-          </button>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* DROPDOWN DE EMPREENDIMENTO */}
-            {products && products.length > 1 && onSelectProduct ? (
-              <div className="relative inline-block">
-                <select
-                  value={currentProd.id}
-                  onChange={(e) => handleProductDropdownChange(e.target.value)}
-                  className="appearance-none bg-morar-50 hover:bg-morar-100 text-morar-700 font-extrabold text-xs sm:text-sm pl-3 pr-7 py-1.5 rounded-lg border border-morar-200 uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-morar-500/20"
-                >
-                  {products.map(p => (
-                    <option key={p.id} value={p.id} className="text-slate-800 font-semibold bg-white">
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-morar-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            ) : (
-              <span className="text-xs sm:text-sm font-extrabold text-morar-600 bg-morar-50 px-3 py-1 rounded-lg border border-morar-100 uppercase tracking-wide">
-                {currentProd.name}
-              </span>
-            )}
-
-            {/* DROPDOWN DE CONDIÇÃO COMERCIAL */}
-            {currentProd.conditions && currentProd.conditions.length > 0 && onSelectCondition ? (
-              <div className="relative inline-block">
-                <select
-                  value={currentCond.id}
-                  onChange={(e) => handleConditionDropdownChange(e.target.value)}
-                  className="appearance-none bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs pl-2.5 pr-6 py-1.5 rounded-lg border border-slate-200/80 cursor-pointer focus:outline-none focus:ring-2 focus:ring-morar-500/20"
-                >
-                  {currentProd.conditions.map(c => (
-                    <option key={c.id} value={c.id} className="text-slate-800 font-medium bg-white">
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-3 h-3 text-slate-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            ) : (
-              <span className="text-xs font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80">
-                {currentCond.name}
-              </span>
-            )}
-
-            {deliveryText && (
-              <span
-                id="badge-data-entrega-morar"
-                className="text-xs font-bold text-amber-800 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200 flex items-center gap-1.5"
-              >
-                <KeyRound className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>Chaves ➔ {deliveryText}</span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* BOTÕES DE AÇÃO: SALVAR SIMULAÇÃO & EXPORTAR PDF */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleSaveSimulation}
-            disabled={isSavingSimulation}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm shadow-emerald-500/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Salvar proposta/simulação no banco Supabase"
-          >
-            {isSavingSimulation ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Salvando...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-3.5 h-3.5" />
-                <span>Salvar Simulação</span>
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsPdfModalOpen(true)}
-            className="px-3.5 py-2 bg-morar-500/10 hover:bg-morar-500/20 text-morar-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
-            title="Exportar Ficha Morar em PDF / Imprimir"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Exportar PDF</span>
-          </button>
-        </div>
-      </div>
+      {/* BARRA SUPERIOR DE NAVEGAÇÃO — componente compartilhado com a tela
+          simplificada (NovatoSimuladorView), estritamente idêntico. */}
+      <FichaMorarTopBar
+        onBackToSimulator={onBackToSimulator}
+        products={products}
+        currentProd={currentProd}
+        onSelectProduct={onSelectProduct}
+        onProductChange={handleProductDropdownChange}
+        currentCond={currentCond}
+        onSelectCondition={onSelectCondition}
+        onConditionChange={handleConditionDropdownChange}
+        deliveryText={deliveryText}
+      />
 
       {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA OU VENCIDA */}
       {!hasTable && (
@@ -2285,26 +2200,14 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
       {/* CARD DO IMÓVEL E CLIENTE CENTRALIZADOS */}
       <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 w-full overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2 text-xs">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-slate-500 font-medium">
-              Cliente: <strong className="text-slate-900">{simulationData.clientName || 'Cliente Não Informado'}</strong>
-            </span>
-            <span className="text-slate-300">|</span>
-            <span className="text-slate-500 font-medium">
-              Imobiliária: <strong className="text-slate-900">{simulationData.agency?.trim() || 'Imobiliária Não Informada'}</strong>
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleResetFicha}
-            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
-            title="Limpar Ficha Morar"
-          >
-            <RotateCcw className="w-3 h-3 text-morar-600" />
-            <span>Limpar</span>
-          </button>
-        </div>
+        <FichaMorarActionBar
+          clientName={simulationData.clientName}
+          agency={simulationData.agency}
+          onLimpar={handleResetFicha}
+          onSaveSimulation={handleSaveSimulation}
+          isSavingSimulation={isSavingSimulation}
+          onOpenPdfExport={() => setIsPdfModalOpen(true)}
+        />
 
         {/* LINHA 1: TORRE, UNIDADE, FASE, TIPOLOGIA — abaixo de sm (640px) vira grid de
             2 colunas (pares empilhados), igual ao mesmo ajuste feito em DetailsView.tsx. */}
