@@ -104,3 +104,22 @@ export const TELAS_PADRAO_POR_CARGO: Record<Cargo, string[]> = {
   'Corretor': TELAS_PADRAO_BASE,
   'Corretor Novato': TELAS_PADRAO_BASE
 };
+
+export interface CondicaoApp {
+  // Mesma chave estável de TELAS_APP (gravada em PerfilUsuario.condicoesLiberadas
+  // — controle independente de telasLiberadas, ver authService.ts).
+  key: string;
+  label: string;
+  variant: ConditionKind;
+  tab: ActiveTab;
+}
+
+// Condições comerciais selecionáveis no dropdown "Selecionar Condição" (quadro
+// "3. Empreendimentos" do Simulador de Crédito, ver SimulatorView.tsx) —
+// derivada de TELAS_APP (todo item com `variant` é uma condição comercial),
+// então uma condição nova cadastrada em TELAS_APP já aparece aqui sem precisar
+// duplicar a lista. Inclui as duas variantes simplificadas ("Sinal c/ Morar**"
+// e "...Com. Apartada)**"), cada uma com seu próprio `tab` de destino.
+export const CONDICOES_APP: CondicaoApp[] = TELAS_APP
+  .filter((t): t is TelaApp & { variant: ConditionKind } => !!t.variant)
+  .map(t => ({ key: t.key, label: t.label, variant: t.variant, tab: t.tab }));

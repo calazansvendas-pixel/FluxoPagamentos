@@ -196,8 +196,16 @@ export interface PerfilUsuario {
   cargo: Cargo;
   superiorId: string | null;
   status: StatusConta;
-  // Chaves de TELAS_APP (src/config/telasApp.ts) liberadas para este usuário.
+  // Chaves de TELAS_APP (src/config/telasApp.ts) liberadas para este usuário —
+  // controla o menu lateral (Sidebar).
   telasLiberadas: string[];
+  // Chaves de CONDICOES_APP (src/config/telasApp.ts) liberadas para este
+  // usuário — controla, à parte de telasLiberadas, quais opções aparecem no
+  // dropdown "Selecionar Condição" (quadro "3. Empreendimentos" do
+  // Simulador de Crédito, ver SimulatorView.tsx). Independente do menu
+  // lateral: uma tela pode estar liberada no menu sem a condição comercial
+  // correspondente aparecer neste dropdown, e vice-versa.
+  condicoesLiberadas: string[];
   // Permissão à parte (não é uma tela): enxergar, além das próprias, as
   // propostas/simulações salvas de quem está abaixo dele na hierarquia.
   verPropostasEquipe: boolean;

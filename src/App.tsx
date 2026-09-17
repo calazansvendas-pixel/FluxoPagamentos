@@ -49,6 +49,9 @@ interface AppProps {
 export default function App({ perfil, onSair }: AppProps) {
   const ehAdministrador = perfil.cargo === 'Administrador';
   const telasLiberadas = ehAdministrador ? undefined : perfil.telasLiberadas;
+  // Controle independente de telasLiberadas — filtra o dropdown "Selecionar
+  // Condição" do Simulador (ver SimulatorView.tsx), não o menu lateral.
+  const condicoesLiberadas = ehAdministrador ? undefined : perfil.condicoesLiberadas;
 
   // Empreendimentos que este usuário pode ver/usar nas simulações, resolvidos ao
   // vivo pela hierarquia (ver empreendimentos_liberados_efetivos em authService.ts).
@@ -358,7 +361,11 @@ export default function App({ perfil, onSair }: AppProps) {
     setSelectedConditions(prev => ({ ...prev, [productId]: conditionId }));
   };
 
-  const handleAdvanceToDetails = (prod: Product, conditionId: string) => {
+  // `targetTab` vem de SimulatorView já resolvido (ver CONDICOES_APP em
+  // config/telasApp.ts) para as duas opções simplificadas ("Sinal c/ Morar**"
+  // e "...Com. Apartada)**") liberadas no dropdown "Selecionar Condição" —
+  // sem ele, cai no roteamento automático de sempre (por isComissaoApartada/kind).
+  const handleAdvanceToDetails = (prod: Product, conditionId: string, targetTab?: ActiveTab) => {
     const prodWithConds = ensureProductConditions({ ...prod });
     const cond = prodWithConds.conditions.find(c => c.id === conditionId) || prodWithConds.conditions[0];
 
@@ -371,8 +378,10 @@ export default function App({ perfil, onSair }: AppProps) {
       [prodWithConds.id]: { torre: '', unidade: '' }
     }));
 
-    // Roteamento inteligente baseado na condição selecionada
-    if (cond && isMorarCondition(cond.name)) {
+    if (targetTab) {
+      setActiveTab(targetTab);
+    } else if (cond && isMorarCondition(cond.name)) {
+      // Roteamento inteligente baseado na condição selecionada
       setActiveTab('ficha-morar');
     } else {
       setActiveTab('details');
@@ -676,6 +685,7 @@ export default function App({ perfil, onSair }: AppProps) {
               onAdvanceToDetails={handleAdvanceToDetails}
               onNavigateToPolicies={() => setActiveTab('policies')}
               onResetAll={handleResetAll}
+              condicoesLiberadas={condicoesLiberadas}
             />
           )}
 

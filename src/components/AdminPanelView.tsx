@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ShieldCheck, RefreshCw, Check, X, Pencil, Ban, PlayCircle, Trash2, Crown, ArrowLeftRight, Filter, ChevronDown, ChevronUp, Search, Building2 } from 'lucide-react';
 import { PerfilUsuario, Cargo, StatusConta, Product } from '../types';
 import { authService } from '../services/authService';
-import { TELAS_APP, CARGOS, TELAS_PADRAO_POR_CARGO, CAMPOS_EDITAVEIS_EQUIPE } from '../config/telasApp';
+import { TELAS_APP, CARGOS, TELAS_PADRAO_POR_CARGO, CAMPOS_EDITAVEIS_EQUIPE, CONDICOES_APP } from '../config/telasApp';
 
 interface AdminPanelViewProps {
   onShowToast: (message: string) => void;
@@ -113,6 +113,9 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   const [edCargo, setEdCargo] = useState<Cargo>('Corretor');
   const [edSuperiorId, setEdSuperiorId] = useState<string | null>(null);
   const [edTelas, setEdTelas] = useState<Set<string>>(new Set());
+  // Condições comerciais liberadas no dropdown "Selecionar Condição" do
+  // Simulador — controle à parte de edTelas (menu lateral), ver types.ts.
+  const [edCondicoes, setEdCondicoes] = useState<Set<string>>(new Set());
   const [edVerEquipe, setEdVerEquipe] = useState(false);
   const [edCamposEditaveis, setEdCamposEditaveis] = useState<Set<string>>(new Set());
   const [edNomeCompleto, setEdNomeCompleto] = useState('');
@@ -133,6 +136,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   const [permCargoAberto, setPermCargoAberto] = useState(false);
   const [pmCargo, setPmCargo] = useState<Cargo>('Corretor');
   const [pmTelas, setPmTelas] = useState<Set<string>>(new Set());
+  const [pmCondicoes, setPmCondicoes] = useState<Set<string>>(new Set());
   const [pmVerEquipe, setPmVerEquipe] = useState(false);
   const [pmCamposEditaveis, setPmCamposEditaveis] = useState<Set<string>>(new Set());
   const [confirmandoAplicacaoMassa, setConfirmandoAplicacaoMassa] = useState(false);
@@ -143,7 +147,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   // pendente (handleAprovar) e a pré-preenchida deste painel usam quando não
   // existe nenhuma conta daquele cargo ainda para servir de referência.
   const [permissoesPadraoTodas, setPermissoesPadraoTodas] = useState<Partial<Record<Cargo, {
-    telasLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
+    telasLiberadas: string[]; condicoesLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
   }>>>({});
 
   const carregarPermissoesPadrao = async () => {
@@ -240,6 +244,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
       cargo: ajuste.cargo,
       superiorId: ajuste.superiorId,
       telasLiberadas: padraoCargo?.telasLiberadas ?? TELAS_PADRAO_POR_CARGO[ajuste.cargo] ?? ['simulator'],
+      condicoesLiberadas: padraoCargo?.condicoesLiberadas ?? CONDICOES_APP.map(c => c.key),
       verPropostasEquipe: padraoCargo?.verPropostasEquipe ?? CARGOS_COM_EQUIPE.includes(ajuste.cargo),
       camposEditaveisEquipe: padraoCargo?.camposEditaveisEquipe ?? []
     });
@@ -273,6 +278,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     setEdCargo(u.cargo);
     setEdSuperiorId(u.superiorId);
     setEdTelas(new Set(u.telasLiberadas));
+    setEdCondicoes(new Set(u.condicoesLiberadas));
     setEdVerEquipe(u.verPropostasEquipe);
     setEdCamposEditaveis(new Set(u.camposEditaveisEquipe));
     setEdNomeCompleto(u.nomeCompleto);
@@ -295,6 +301,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
       cargo: edCargo,
       superiorId: edSuperiorId,
       telasLiberadas: Array.from(edTelas),
+      condicoesLiberadas: Array.from(edCondicoes),
       verPropostasEquipe: edVerEquipe,
       nomeCompleto: edNomeCompleto.trim(),
       telefone: edTelefone.trim(),
@@ -394,14 +401,17 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     const padraoCargo = permissoesPadraoTodas[cargo];
     if (usuarioReferencia) {
       setPmTelas(new Set(usuarioReferencia.telasLiberadas));
+      setPmCondicoes(new Set(usuarioReferencia.condicoesLiberadas));
       setPmVerEquipe(usuarioReferencia.verPropostasEquipe);
       setPmCamposEditaveis(new Set(usuarioReferencia.camposEditaveisEquipe));
     } else if (padraoCargo) {
       setPmTelas(new Set(padraoCargo.telasLiberadas));
+      setPmCondicoes(new Set(padraoCargo.condicoesLiberadas));
       setPmVerEquipe(padraoCargo.verPropostasEquipe);
       setPmCamposEditaveis(new Set(padraoCargo.camposEditaveisEquipe));
     } else {
       setPmTelas(new Set(TELAS_PADRAO_POR_CARGO[cargo] || []));
+      setPmCondicoes(new Set(CONDICOES_APP.map(c => c.key)));
       setPmVerEquipe(CARGOS_COM_EQUIPE.includes(cargo));
       setPmCamposEditaveis(new Set());
     }
@@ -412,6 +422,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     setAplicandoMassa(true);
     const res = await authService.aplicarPermissoesPorCargo(pmCargo, {
       telasLiberadas: Array.from(pmTelas),
+      condicoesLiberadas: Array.from(pmCondicoes),
       verPropostasEquipe: pmVerEquipe,
       camposEditaveisEquipe: Array.from(pmCamposEditaveis)
     });
@@ -540,6 +551,33 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                       className="w-4 h-4 accent-morar-600"
                     />
                     {t.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <p className="text-[11px] font-bold text-slate-500 mb-1">Condições Comerciais Liberadas (Dropdown)</p>
+              <p className="text-[11px] text-slate-400 mb-2">
+                Controla, à parte das telas liberadas acima, quais opções aparecem no dropdown "Selecionar Condição"
+                do Simulador de Crédito (quadro "3. Empreendimentos").
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {CONDICOES_APP.map(c => (
+                  <label key={c.key} className="flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={pmCondicoes.has(c.key)}
+                      onChange={e => {
+                        setPmCondicoes(prev => {
+                          const novo = new Set(prev);
+                          if (e.target.checked) novo.add(c.key); else novo.delete(c.key);
+                          return novo;
+                        });
+                      }}
+                      className="w-4 h-4 accent-morar-600"
+                    />
+                    {c.label}
                   </label>
                 ))}
               </div>
@@ -1015,6 +1053,33 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                       className="w-4 h-4 accent-morar-600"
                     />
                     {t.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <p className="text-[11px] font-bold text-slate-500 mb-1">Condições Comerciais Liberadas (Dropdown)</p>
+              <p className="text-[11px] text-slate-400 mb-2">
+                Controla, à parte das telas liberadas acima, quais opções aparecem no dropdown "Selecionar Condição"
+                do Simulador de Crédito (quadro "3. Empreendimentos").
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {CONDICOES_APP.map(c => (
+                  <label key={c.key} className="flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={edCondicoes.has(c.key)}
+                      onChange={e => {
+                        setEdCondicoes(prev => {
+                          const novo = new Set(prev);
+                          if (e.target.checked) novo.add(c.key); else novo.delete(c.key);
+                          return novo;
+                        });
+                      }}
+                      className="w-4 h-4 accent-morar-600"
+                    />
+                    {c.label}
                   </label>
                 ))}
               </div>
