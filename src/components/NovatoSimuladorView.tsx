@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Calendar, Pencil } from 'lucide-react';
-import logoMorar from '../assets/brand';
+import { Pencil } from 'lucide-react';
 import { CommercialCondition, PdfExportSettings, Product, SimulationData } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
@@ -8,6 +7,7 @@ import { MorarBarDatum, MorarFaixa, MorarPieDatum } from './PdfExportModalMorar'
 import { MonthStepper } from './MonthStepper';
 import { FichaMorarTopBar } from './FichaMorarTopBar';
 import { FichaMorarActionBar } from './FichaMorarActionBar';
+import { FichaMorarProdutoGrid } from './FichaMorarProdutoGrid';
 
 // Visão simplificada da Ficha Morar (tela "Sinal c/ Morar**" no menu lateral
 // — ver config/telasApp.ts e App.tsx). Mesmo "papel" (visual de folha A4) e
@@ -284,43 +284,10 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
         deliveryText={deliveryText}
       />
 
-      {/* "FOLHA" — mesmo visual da Ficha de Exportação, com affordances de edição */}
-      <div className="bg-white p-6 sm:p-7 rounded-xl shadow-md border border-slate-200 w-full text-slate-900 space-y-3.5">
-
-        {/* 1. TOPO */}
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-morar-50 border border-morar-200 flex items-center justify-center shrink-0">
-              <img src={logoMorar} alt="Morar" className="w-5 h-5 object-contain" />
-            </div>
-            <div>
-              <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
-                Simulação Comercial
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
-                <span>Empreendimento: <strong className="text-slate-900 font-bold">{product.name}</strong></span>
-                <span>•</span>
-                <span>Condição: <strong className="text-slate-900 font-bold">{condition.name}</strong></span>
-                {deliveryText && (
-                  <>
-                    <span>•</span>
-                    <span className="text-amber-700 font-bold">Chaves: {deliveryText}</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-          {pdfSettings.mostrarDataSimulacao && (
-            <div className="bg-morar-50 text-morar-700 border border-morar-200 px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap shadow-2xs shrink-0 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-morar-600 shrink-0" />
-              <span>Data da Simulação: {new Date().toLocaleDateString('pt-BR')}</span>
-            </div>
-          )}
-        </div>
-
-        {/* BARRA DE CLIENTE, IMOBILIÁRIA E AÇÕES — mesmo componente do editor
-            completo (FichaMorarActionBar), com Salvar/PDF/Limpar agrupados à
-            direita, todos no mesmo tamanho. */}
+      {/* CARD DO IMÓVEL E CLIENTE — mesmos componentes do editor completo
+          (FichaMorarActionBar + FichaMorarProdutoGrid), estritamente
+          idêntico entre as duas telas. */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 w-full overflow-hidden">
         <FichaMorarActionBar
           clientName={simulationData.clientName}
           agency={simulationData.agency}
@@ -330,71 +297,25 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
           onOpenPdfExport={onOpenPdfExport}
         />
 
-        {/* 2. RESUMO DA UNIDADE — Torre/Unidade viram seletores. UNID. é
-            visivelmente mais largo que TORRE (números de 3-4 dígitos, ex.:
-            "101", não podem ficar escondidos atrás da seta do dropdown), com
-            o espaço restante redistribuído para Fase/Tipologia via flex. */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 overflow-hidden w-full">
-          <div className="flex flex-wrap items-stretch gap-2 text-xs w-full">
-            <div className="flex-none w-24 bg-[rgba(240,249,255,0.6)] p-2 rounded-lg border border-morar-200 min-w-0 relative">
-              <span className="flex items-center gap-1 text-[9px] text-morar-700 font-bold uppercase mb-0.5 whitespace-nowrap">
-                Torre <Pencil className="w-2.5 h-2.5 shrink-0" />
-              </span>
-              <select
-                value={selectedTorre}
-                onChange={(e) => onTorreChange(e.target.value)}
-                className="w-full bg-white text-slate-900 font-bold text-xs rounded-md border border-morar-200 px-1.5 py-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-morar-300"
-              >
-                <option value="">-</option>
-                {availableTorres.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
+        <FichaMorarProdutoGrid
+          selectedTorre={selectedTorre}
+          selectedUnidade={selectedUnidade}
+          availableTorres={availableTorres}
+          filteredUnits={filteredUnits}
+          onTorreChange={onTorreChange}
+          onUnidadeChange={onUnidadeChange}
+          fase={fase}
+          tipologia={tipologia}
+          areaPriv={areaPriv}
+          areaQuintal={areaQuintal}
+          precoTabelaOriginal={precoTabelaOriginal}
+          evaluation={evaluation}
+        />
+      </div>
 
-            <div className="flex-none w-32 bg-[rgba(240,249,255,0.6)] p-2 rounded-lg border border-morar-200 min-w-0 relative">
-              <span className="flex items-center gap-1 text-[9px] text-morar-700 font-bold uppercase mb-0.5 whitespace-nowrap">
-                Unid. <Pencil className="w-2.5 h-2.5 shrink-0" />
-              </span>
-              <select
-                value={selectedUnidade}
-                onChange={(e) => onUnidadeChange(e.target.value)}
-                disabled={!selectedTorre}
-                className="w-full bg-white text-slate-900 font-bold text-xs rounded-md border border-morar-200 px-1.5 py-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-morar-300"
-              >
-                <option value="">-</option>
-                {filteredUnits.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
-            </div>
-
-            <div className="flex-1 min-w-[64px] bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center">
-              <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">Fase</span>
-              <strong className="text-slate-700 font-bold text-xs whitespace-nowrap truncate w-full">{fase || '-'}</strong>
-            </div>
-
-            <div className="flex-[2] min-w-[120px] bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center">
-              <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">Tipologia</span>
-              <strong className="text-slate-700 font-bold text-xs whitespace-nowrap truncate w-full" title={tipologia}>{tipologia || '-'}</strong>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-12 gap-2 text-xs w-full">
-            <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
-              <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">Área Privativa</span>
-              <strong className="text-slate-700 font-bold text-xs whitespace-nowrap truncate w-full">{areaPriv}</strong>
-            </div>
-            <div className="col-span-2 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
-              <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">Quintal</span>
-              <strong className="text-slate-700 font-bold text-xs whitespace-nowrap truncate w-full">{areaQuintal}</strong>
-            </div>
-            <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
-              <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">Preço de Tabela</span>
-              <strong className="text-slate-900 font-bold text-xs whitespace-nowrap truncate w-full">{fmt(precoTabelaOriginal)}</strong>
-            </div>
-            <div className="col-span-4 bg-slate-50 p-2 rounded-lg border border-[rgba(226,232,240,0.6)] flex flex-col items-center justify-center text-center min-w-0">
-              <span className="block text-[9px] text-slate-400 font-medium mb-0.5 whitespace-nowrap">Avaliação Bancária</span>
-              <strong className="text-emerald-600 font-bold text-xs whitespace-nowrap truncate w-full">{fmt(evaluation)}</strong>
-            </div>
-          </div>
-        </div>
+      {/* "FOLHA" — mesmo visual da Ficha de Exportação, com o restante do
+          conteúdo (fora do escopo do cabeçalho unificado acima). */}
+      <div className="bg-white p-6 sm:p-7 rounded-xl shadow-md border border-slate-200 w-full text-slate-900 space-y-3.5">
 
         {/* GRID PRINCIPAL: 2 COLUNAS */}
         <div className="grid grid-cols-2 gap-3.5 items-start">
