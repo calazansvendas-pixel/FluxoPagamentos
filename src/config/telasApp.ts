@@ -1,4 +1,4 @@
-import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins, FileOutput, LayoutGrid, ShieldCheck, Sparkles } from 'lucide-react';
+import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins, FileOutput, LayoutGrid, ShieldCheck, Sparkles, HandCoins } from 'lucide-react';
 import { ActiveTab, Cargo } from '../types';
 import { ConditionKind } from '../utils/calculations';
 
@@ -28,7 +28,13 @@ export const TELAS_APP: TelaApp[] = [
   // corretor que esta é uma variante (a versão guiada) da condição comercial
   // "Sinal c/ Morar", não uma tela totalmente à parte — chave interna
   // ('simulador-simplificado') mantida estável independente do rótulo exibido.
-  { key: 'simulador-simplificado', label: 'Sinal c/ Morar**', icon: Sparkles, tab: 'ficha-morar-simplificada' },
+  { key: 'simulador-simplificado', label: 'Sinal c/ Morar**', icon: Sparkles, tab: 'ficha-morar-simplificada', variant: 'sinal-morar' },
+  // Segunda versão da tela simplificada, para a condição comercial "Sinal c/
+  // Morar (Comissão Apartada)" — mesma aba ('ficha-morar-simplificada') da
+  // versão acima, diferenciada pelo variant (como já ocorre entre 'sinal-morar'
+  // e 'sinal-morar-comissao-apartada' na versão completa). Liberável pelo
+  // Administrador de forma independente da versão sem comissão apartada.
+  { key: 'simulador-simplificado-comissao-apartada', label: 'Sinal c/ Morar (Com. Apartada)**', icon: HandCoins, tab: 'ficha-morar-simplificada', variant: 'sinal-morar-comissao-apartada' },
   { key: 'banco-direto', label: 'Sinal c/ Banco Direto', icon: FileCheck2, tab: 'details', variant: 'banco-direto' },
   { key: 'sinal-morar', label: 'Sinal c/ Morar', icon: FileCheck2, tab: 'ficha-morar', variant: 'sinal-morar' },
   { key: 'parcelamento-morar', label: 'Parcelamento Morar', icon: Coins, tab: 'details', variant: 'parcelamento-morar' },
