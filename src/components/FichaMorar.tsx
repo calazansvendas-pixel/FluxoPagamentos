@@ -25,6 +25,7 @@ import { DEFAULT_TELA_VISIBILITY_SETTINGS } from '../utils/telaVisibility';
 import { pdfPermissoesService } from '../services/pdfPermissoesService';
 import { telaVisibilidadeService } from '../services/telaVisibilidadeService';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
+import { NovatoSimuladorView } from './NovatoSimuladorView';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
@@ -48,6 +49,15 @@ interface FichaMorarProps {
   // conforme a política que o Administrador definiu em "Configurar
   // Exportação de PDF" (ver pdfPermissoesService.ts).
   cargoUsuario: Cargo;
+  // true quando o usuário navegou pela aba 'ficha-morar-simplificada' (ver
+  // App.tsx e config/telasApp.ts) — troca o editor completo por
+  // NovatoSimuladorView, uma visão simplificada (visual de Ficha Exportada)
+  // com um subconjunto restrito de campos editáveis. Não depende do cargo:
+  // qualquer perfil liberado pelo Administrador para essa tela (política de
+  // "Editar cargo e permissões") pode navegar até aqui. Nenhum cálculo muda —
+  // a visão simplificada reusa os mesmos state/handlers já computados abaixo,
+  // só a apresentação (JSX) é diferente.
+  isNovato?: boolean;
 }
 
 export const FichaMorar: React.FC<FichaMorarProps> = ({
@@ -63,7 +73,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   onBackToSimulator,
   onNavigateToImport,
   onShowToast,
-  cargoUsuario
+  cargoUsuario,
+  isNovato = false
 }) => {
   // Produto e Condição atuais com fallback para o primeiro disponível
   const currentProd = useMemo(() => {
@@ -1982,6 +1993,156 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           fgts: !isFgtsValid
         }}
       />
+    );
+  }
+
+  if (isNovato) {
+    return (
+      <>
+        <NovatoSimuladorView
+          pdfSettings={pdfSettings}
+          product={currentProd}
+          condition={currentCond}
+          simulationData={simulationData}
+          selectedTorre={selectedTorre}
+          selectedUnidade={selectedUnidade}
+          availableTorres={availableTorres}
+          filteredUnits={filteredUnits}
+          onTorreChange={handleTorreChange}
+          onUnidadeChange={handleUnidadeChange}
+          fase={fase}
+          tipologia={tipologia}
+          areaPriv={areaPriv}
+          areaQuintal={areaQuintal}
+          price={price}
+          precoTabelaOriginal={precoTabelaOriginal}
+          evaluation={evaluation}
+          deliveryText={deliveryText}
+          income={income}
+          subsidy={subsidyEfetivo}
+          fgts={fgtsEfetivo}
+          desconto={descontoAto}
+          maxFinanc={maxFinancEfetivo}
+          totalNegoc={totalNegocEfetivo}
+          sinalTotal={sinalTotalSemITBIEfetivo}
+          comITBI={sinalTotalComITBIEfetivo}
+          distribuido={totalDistribuido}
+          isAtoPremiadoEnabled={isAtoPremiadoEnabled}
+          onToggleAtoPremiado={handleToggleAtoPremiado}
+          dataAto={dataAto}
+          valorAto={isComissaoApartada ? atoLiquidoConstrutora : valorAtoEfetivo}
+          valorAtoMinimo={isComissaoApartada
+            ? Math.max(0, Math.round((Math.max(sinalMinimoVal, atoSugeridoResidual) - comissaoApartadaValor) * 100) / 100)
+            : Math.max(sinalMinimoVal, atoSugeridoResidual)}
+          valorAtoMaximo={isComissaoApartada
+            ? Math.max(0, Math.round((valorAtoMaximoCalculado - comissaoApartadaValor) * 100) / 100)
+            : valorAtoMaximoCalculado}
+          onAtoChange={(novoVal) => {
+            if (novoVal === null) {
+              setValAtoManual(null);
+              setAtoInputText(formatCurrency(atoSugeridoResidual));
+              aplicarDistribuicaoOficialMorar();
+            } else {
+              const novoValBruto = isComissaoApartada
+                ? Math.round((novoVal + comissaoApartadaValor) * 100) / 100
+                : novoVal;
+              setValAtoManual(novoValBruto);
+              setAtoInputText(formatCurrency(novoValBruto));
+              recalcularSeriesParaAtoManual(novoValBruto);
+            }
+          }}
+          comissaoApartadaValor={comissaoApartadaValor}
+          comissaoApartadaParcelasQtd={comissaoApartadaParcelasQtd}
+          comissaoApartadaParcelaValor={comissaoApartadaParcelaValor}
+          dataObra={dataObra}
+          totalParcObra={totalParcObra}
+          faixasObra={faixasObra}
+          onObraTotalChange={handleTotalObraParcelasChange}
+          dataPos={dataPos}
+          totalParcPos={totalParcPos}
+          faixasPos={faixasPos}
+          onPosTotalChange={handleTotalPosParcelasChange}
+          dataITBI={dataITBI}
+          valorITBI={despCartoriasEfetivas}
+          itbiObraQtd={itbiObraTotalMeses}
+          itbiObraValor={itbiParcelaObraValor}
+          itbiPosQtd={itbiPosTotalMeses}
+          itbiPosValor={itbiParcelaPosValor}
+          baseLiquidaComITBI={baseLiquidaComITBI}
+          baseRendaInformada={baseRendaInformada}
+          limiteMaximoRiscoRenda={limiteMaximoRiscoRenda}
+          limiteMaximoProSoluto={limiteMaximoProSoluto}
+          pctRiscoParcelaRenda={pctRiscoParcelaRenda}
+          valorRiscoParcela={valorRiscoParcela}
+          pctRiscoProSoluto={pctRiscoProSoluto}
+          valorRiscoProSoluto={valorRiscoProSoluto}
+          pieDataPct={pieData1}
+          pieDataValor={pieData2}
+          barData={barData}
+          onShowToast={onShowToast}
+          onBackToSimulator={onBackToSimulator}
+          onOpenPdfExport={() => setIsPdfModalOpen(true)}
+        />
+
+        {isPdfModalOpen && (
+          <PdfExportModalMorar
+            isOpen={isPdfModalOpen}
+            onClose={() => setIsPdfModalOpen(false)}
+            pdfSettings={pdfSettings}
+            product={currentProd}
+            condition={currentCond}
+            simulationData={simulationData}
+            selectedTorre={selectedTorre}
+            selectedUnidade={selectedUnidade}
+            fase={fase}
+            tipologia={tipologia}
+            areaPriv={areaPriv}
+            areaQuintal={areaQuintal}
+            price={price}
+            precoTabelaOriginal={precoTabelaOriginal}
+            evaluation={evaluation}
+            deliveryText={deliveryText}
+            income={income}
+            subsidy={subsidyEfetivo}
+            fgts={fgtsEfetivo}
+            desconto={descontoAto}
+            maxFinanc={maxFinancEfetivo}
+            totalNegoc={totalNegocEfetivo}
+            sinalTotal={sinalTotalSemITBIEfetivo}
+            comITBI={sinalTotalComITBIEfetivo}
+            distribuido={totalDistribuido}
+            dataAto={dataAto}
+            valorAto={isComissaoApartada ? atoLiquidoConstrutora : valorAtoEfetivo}
+            comissaoApartadaValor={comissaoApartadaValor}
+            comissaoApartadaParcelasQtd={comissaoApartadaParcelasQtd}
+            comissaoApartadaParcelaValor={comissaoApartadaParcelaValor}
+            dataObra={dataObra}
+            totalParcObra={totalParcObra}
+            faixasObra={faixasObra}
+            dataPos={dataPos}
+            totalParcPos={totalParcPos}
+            faixasPos={faixasPos}
+            dataITBI={dataITBI}
+            valorITBI={despCartoriasEfetivas}
+            itbiObraQtd={itbiObraTotalMeses}
+            itbiObraValor={itbiParcelaObraValor}
+            itbiPosQtd={itbiPosTotalMeses}
+            itbiPosValor={itbiParcelaPosValor}
+            isAtoPremiadoEnabled={isAtoPremiadoEnabled}
+            baseLiquidaComITBI={baseLiquidaComITBI}
+            baseRendaInformada={baseRendaInformada}
+            limiteMaximoRiscoRenda={limiteMaximoRiscoRenda}
+            limiteMaximoProSoluto={limiteMaximoProSoluto}
+            pctRiscoParcelaRenda={pctRiscoParcelaRenda}
+            valorRiscoParcela={valorRiscoParcela}
+            pctRiscoProSoluto={pctRiscoProSoluto}
+            valorRiscoProSoluto={valorRiscoProSoluto}
+            pieDataPct={pieData1}
+            pieDataValor={pieData2}
+            barData={barData}
+          />
+        )}
+      </>
     );
   }
 
