@@ -12,6 +12,7 @@ import { PdfExportModal } from './PdfExportModal';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
 import { PmCampoEditavel } from './PmCampoEditavel';
+import { MonthStepper } from './MonthStepper';
 import { imoveisService } from '../services/imoveisService';
 
 interface DetailsViewProps {
@@ -2425,7 +2426,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                     <PmCampoEditavel
                       label="Qtd. Meses"
                       tipo="inteiro"
-                      suffix="X"
                       maximo={pmMesesObraAuto}
                       value={pmMesesObraQtd}
                       onCommit={setPmMesesObraManual}
@@ -2576,7 +2576,6 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                       <PmCampoEditavel
                         label="Qtd. Meses"
                         tipo="inteiro"
-                        suffix="X"
                         value={pmPosObraQtd}
                         onCommit={setPmQtdPosObraManual}
                         onShowToast={onShowToast}
@@ -2644,43 +2643,14 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
                     Qtd. Mensais
                   </label>
-                  <div className="relative flex items-center justify-center">
-                    <input
-                      type="number"
-                      value={(qtdMensais > 0 || (qtdMensais === 0 && parcelasMinimasCond === 0)) ? qtdMensais : ''}
+                  <div className="flex items-center justify-center">
+                    <MonthStepper
+                      total={qtdMensais}
+                      onChange={setQtdMensais}
                       min={parcelasMinimasCond}
                       max={limiteMaximoParcelas}
-                      onChange={(e) => {
-                        const rawVal = e.target.value;
-                        if (rawVal === '') {
-                          setQtdMensais(parcelasMinimasCond === 0 ? 0 : parcelasMinimasCond);
-                          return;
-                        }
-                        const val = parseInt(rawVal, 10);
-                        if (isNaN(val)) return;
-
-                        if (val > limiteMaximoParcelas) {
-                          setQtdMensais(limiteMaximoParcelas);
-                          alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
-                          return;
-                        }
-                        if (val < parcelasMinimasCond) {
-                          setQtdMensais(parcelasMinimasCond);
-                          return;
-                        }
-                        setQtdMensais(val);
-                      }}
-                      onBlur={() => {
-                        if (qtdMensais < parcelasMinimasCond) {
-                          setQtdMensais(parcelasMinimasCond);
-                        } else if (qtdMensais > limiteMaximoParcelas) {
-                          setQtdMensais(limiteMaximoParcelas);
-                          alert(`O limite máximo para este produto é ${limiteMaximoParcelas}x`);
-                        }
-                      }}
-                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-morar-600 text-center focus:outline-none focus:border-morar-600 text-xs"
+                      colorClass="bg-white border-morar-200 text-morar-600"
                     />
-                    <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
                   </div>
                 </div>
 
@@ -2765,30 +2735,15 @@ export const DetailsView: React.FC<DetailsViewProps> = ({
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
                     Qtd. Parcelas
                   </label>
-                  <div className="relative flex items-center justify-center">
-                    <input
-                      type="number"
-                      value={comissaoApartadaParcelasQtd > 0 ? comissaoApartadaParcelasQtd : ''}
+                  <div className="flex items-center justify-center">
+                    <MonthStepper
+                      total={comissaoApartadaParcelasQtd}
+                      onChange={setComissaoParcelasManual}
                       min={minComissaoParcelas}
                       max={maxComissaoParcelas}
-                      onChange={(e) => {
-                        const rawVal = e.target.value;
-                        if (rawVal === '') {
-                          setComissaoParcelasManual(minComissaoParcelas);
-                          return;
-                        }
-                        const val = parseInt(rawVal, 10);
-                        if (isNaN(val)) return;
-                        setComissaoParcelasManual(Math.min(maxComissaoParcelas, Math.max(minComissaoParcelas, val)));
-                      }}
-                      onBlur={() => {
-                        if (!comissaoApartadaParcelasQtd || comissaoApartadaParcelasQtd < minComissaoParcelas || comissaoApartadaParcelasQtd > maxComissaoParcelas) {
-                          setComissaoParcelasManual(Math.min(maxComissaoParcelas, Math.max(minComissaoParcelas, comissaoApartadaParcelasQtd || minComissaoParcelas)));
-                        }
-                      }}
-                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-fuchsia-700 text-center focus:outline-none focus:border-fuchsia-600 text-xs"
+                      unitLabel="parcela"
+                      colorClass="bg-white border-fuchsia-200 text-fuchsia-700"
                     />
-                    <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
                   </div>
                   <p className="text-[9px] text-slate-400 font-medium mt-1">
                     Permitido de {minComissaoParcelas} a {maxComissaoParcelas} parcelas

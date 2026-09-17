@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Calendar, Download, Pencil, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, Calendar, Download, Pencil } from 'lucide-react';
 import logoMorar from '../assets/brand';
 import { CommercialCondition, PdfExportSettings, Product, SimulationData } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { MorarBarDatum, MorarFaixa, MorarPieDatum } from './PdfExportModalMorar';
+import { MonthStepper } from './MonthStepper';
 
 // Visão simplificada da Ficha Morar (tela "Sinal c/ Morar**" no menu lateral
 // — ver config/telasApp.ts e App.tsx). Mesmo "papel" (visual de folha A4) e
@@ -61,16 +62,28 @@ interface NovatoSimuladorViewProps {
   comissaoApartadaValor?: number;
   comissaoApartadaParcelasQtd?: number;
   comissaoApartadaParcelaValor?: number;
+  // Teto/piso de parcelas da Comissão Apartada, configuráveis por política em
+  // Políticas & Empreendimentos (currentCond.comissaoApartadaParcelasMin/Max)
+  // — o stepper do card "Comissão Apartada" respeita esses limites, com o "+"
+  // desabilitado ao alcançar o teto.
+  minComissaoParcelas?: number;
+  maxComissaoParcelas?: number;
+  onComissaoParcelasChange?: (novoTotal: number) => void;
 
   dataObra: string;
   totalParcObra: number;
   faixasObra: MorarFaixa[];
   onObraTotalChange: (newTotal: number) => void;
+  // Teto de meses de Obra/Pós-Obra previsto pela política de crédito
+  // (currentCond.mesesObra/mesesPos) — o "+" do stepper desabilita ao
+  // alcançar o teto, mesmo limite já aplicado no editor completo.
+  maxParcObra?: number;
 
   dataPos: string;
   totalParcPos: number;
   faixasPos: MorarFaixa[];
   onPosTotalChange: (newTotal: number) => void;
+  maxParcPos?: number;
 
   dataITBI: string;
   valorITBI: number;
@@ -95,37 +108,6 @@ interface NovatoSimuladorViewProps {
   onBackToSimulator: () => void;
   onOpenPdfExport: () => void;
 }
-
-// Stepper interativo `[ - Nx + ]` reutilizado pelos quadros de Correção
-// Obra/Pós-Obra — clicar em "+"/"-" altera o total de meses da fase e já
-// dispara o recálculo do fluxo (via onChange, que é handleTotalObraParcelasChange
-// ou handleTotalPosParcelasChange, já existentes e inalterados em FichaMorar.tsx).
-const MonthStepper: React.FC<{
-  total: number;
-  onChange: (novoTotal: number) => void;
-  colorClass: string;
-}> = ({ total, onChange, colorClass }) => (
-  <div className={`flex items-center gap-1 border rounded-lg px-1 py-0.5 ${colorClass}`}>
-    <button
-      type="button"
-      onClick={() => onChange(total - 1)}
-      disabled={total <= 0}
-      className="w-5 h-5 flex items-center justify-center rounded bg-white border border-current/30 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5 cursor-pointer"
-      title="Diminuir 1 mês"
-    >
-      <Minus className="w-3 h-3" />
-    </button>
-    <span className="text-[11px] font-extrabold w-9 text-center tabular-nums">{total}X</span>
-    <button
-      type="button"
-      onClick={() => onChange(total + 1)}
-      className="w-5 h-5 flex items-center justify-center rounded bg-white border border-current/30 hover:bg-black/5 cursor-pointer"
-      title="Aumentar 1 mês"
-    >
-      <Plus className="w-3 h-3" />
-    </button>
-  </div>
-);
 
 export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   pdfSettings,
@@ -165,14 +147,19 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   comissaoApartadaValor = 0,
   comissaoApartadaParcelasQtd = 0,
   comissaoApartadaParcelaValor = 0,
+  minComissaoParcelas = 1,
+  maxComissaoParcelas,
+  onComissaoParcelasChange,
   dataObra,
   totalParcObra,
   faixasObra,
   onObraTotalChange,
+  maxParcObra,
   dataPos,
   totalParcPos,
   faixasPos,
   onPosTotalChange,
+  maxParcPos,
   dataITBI,
   valorITBI,
   itbiObraQtd,
@@ -546,9 +533,19 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                 </p>
 
                 {comissaoApartadaValor > 0 && (
-                  <div className="flex items-center justify-between bg-fuchsia-50 px-3 py-2 rounded-lg border border-fuchsia-100 text-xs">
-                    <span className="font-bold text-fuchsia-700">Comissão Apartada ({comissaoApartadaParcelasQtd}x):</span>
-                    <strong className="text-fuchsia-800 font-black text-xs sm:text-sm">
+                  <div className="flex items-center justify-between bg-fuchsia-50 px-3 py-2 rounded-lg border border-fuchsia-100 text-xs gap-2">
+                    <span className="font-bold text-fuchsia-700 shrink-0">Comissão Apartada:</span>
+                    {onComissaoParcelasChange && (
+                      <MonthStepper
+                        total={comissaoApartadaParcelasQtd}
+                        onChange={onComissaoParcelasChange}
+                        min={minComissaoParcelas}
+                        max={maxComissaoParcelas}
+                        unitLabel="parcela"
+                        colorClass="bg-white border-fuchsia-200 text-fuchsia-700"
+                      />
+                    )}
+                    <strong className="text-fuchsia-800 font-black text-xs sm:text-sm text-right">
                       {fmt(comissaoApartadaValor)} <span className="font-semibold">({fmt(comissaoApartadaParcelaValor)}/mês)</span>
                     </strong>
                   </div>
@@ -565,6 +562,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                     <MonthStepper
                       total={totalParcObra}
                       onChange={onObraTotalChange}
+                      max={maxParcObra}
                       colorClass="bg-morar-50 border-morar-200 text-morar-700"
                     />
                   </div>
@@ -593,6 +591,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                       <MonthStepper
                         total={totalParcPos}
                         onChange={onPosTotalChange}
+                        max={maxParcPos}
                         colorClass="bg-indigo-50 border-indigo-200 text-indigo-700"
                       />
                     </div>
