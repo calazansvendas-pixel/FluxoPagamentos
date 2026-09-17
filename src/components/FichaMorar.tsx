@@ -2353,6 +2353,137 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           </div>
           )}
 
+          {/* CORREÇÃO IGPM+1% (TAXAS E REGISTRO / ITBI INTERATIVO) — layout
+              exclusivo do "Sinal c/ Morar" (e sua variante Comissão Apartada,
+              únicas condições comerciais que renderizam este componente):
+              posicionado logo abaixo dos Dados da Aprovação de Crédito, na
+              mesma coluna, em vez de junto ao Fluxo de Entrada c/ Construtora
+              (coluna da direita). Nenhuma mudança de regra de negócio/cálculo
+              — mesmo card, mesmo estado, só a posição no grid. Continua
+              respeitando a visibilidade de "Bloco 3" (mesma seção lógica de
+              antes na configuração de Visibilidade dos Quadros). */}
+          {telaSettings.mostrarBloco3 && (
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+                  <Receipt className="w-4 h-4" />
+                </div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Correção IGPM+1% (Taxas e Registro)
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleFirstHome}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                    isFirstHomeLocal
+                      ? 'bg-morar-50 text-morar-700 border-morar-100 hover:bg-morar-100'
+                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                  }`}
+                  title="Alternar entre Com Desconto e Sem Desconto no ITBI"
+                >
+                  {isFirstHomeLocal ? '1º Imóvel (Com Desc.)' : '2º Imóvel (Sem Desc.)'}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              {/* ITBI / REGISTRO TOTAL */}
+              <div className="flex justify-between items-center bg-emerald-50/60 hover:bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 transition-colors">
+                <div>
+                  <span className="text-xs font-bold text-emerald-900 block">ITBI / Registro Total:</span>
+                  <div className="flex items-center gap-1 text-[10px] text-emerald-700 font-medium mt-0.5">
+                    <span>A partir de:</span>
+                    <input
+                      type="text"
+                      value={dataITBI}
+                      onChange={(e) => setDataITBI(e.target.value)}
+                      className="morar-input bg-transparent hover:bg-white/60 focus:bg-white border-b border-dashed border-emerald-300 font-bold text-emerald-900 px-1 py-0.5 text-[10px] w-24 text-center focus:outline-none"
+                      placeholder="Data início"
+                    />
+                  </div>
+                </div>
+                <div className="w-36 text-right">
+                  <div
+                    className="w-full bg-emerald-50 px-2 py-1 rounded border border-emerald-100 font-black text-emerald-800 text-right text-xs sm:text-sm cursor-not-allowed"
+                    title="Valor calculado automaticamente a partir do preço/tabela — não editável."
+                  >
+                    {despCartoriasEfetivas > 0 ? formatCurrency(despCartoriasEfetivas) : 'R$ 0,00'}
+                  </div>
+                </div>
+              </div>
+
+              {/* DISCRIMINAÇÃO: ITBI NO ATO E SALDO RESTANTE */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50/90 p-2.5 rounded-lg border border-slate-200/80">
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-[11px] font-medium text-slate-600">ITBI Pago no Ato:</span>
+                  <strong className="text-xs font-bold text-emerald-700">
+                    {atoITBIValidado > 0 ? formatCurrency(atoITBIValidado) : 'R$ 0,00'}
+                  </strong>
+                </div>
+                <div className="flex justify-between items-center px-1 border-t sm:border-t-0 sm:border-l border-slate-200 pt-1.5 sm:pt-0 sm:pl-2.5">
+                  <span className="text-[11px] font-medium text-slate-600">Saldo Restante a Parcelar:</span>
+                  <strong className="text-xs font-bold text-slate-900">
+                    {saldoITBI > 0 ? formatCurrency(saldoITBI) : 'R$ 0,00'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* DISTRIBUIÇÃO DAS PARCELAS RESTANTES: OBRA E PÓS-OBRA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* OBRA */}
+                <div className="bg-slate-50 hover:bg-slate-50/90 p-2.5 rounded-lg border border-slate-200/80 space-y-1.5 text-center transition-colors">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Obra:</span>
+                    <span className="text-[10px] text-slate-400 font-medium">{itbiObraTotalMeses} meses</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <div
+                      className="w-10 bg-slate-100 px-1 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-center text-xs cursor-not-allowed"
+                      title="Sempre igual à quantidade de parcelas de Obra — não editável."
+                    >
+                      {itbiObraTotalMeses}
+                    </div>
+                    <span className="text-xs font-bold text-slate-600">X de</span>
+                    <div
+                      className="w-24 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                      title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                    >
+                      {itbiParcelaObraValor > 0 ? formatCurrency(itbiParcelaObraValor) : 'R$ 0,00'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* PÓS OBRA */}
+                <div className="bg-slate-50 hover:bg-slate-50/90 p-2.5 rounded-lg border border-slate-200/80 space-y-1.5 text-center transition-colors">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Pós Obra:</span>
+                    <span className="text-[10px] text-slate-400 font-medium">{itbiPosTotalMeses} meses</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <div
+                      className="w-10 bg-slate-100 px-1 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-center text-xs cursor-not-allowed"
+                      title="Sempre igual à quantidade de parcelas de Pós-Obra — não editável."
+                    >
+                      {itbiPosTotalMeses}
+                    </div>
+                    <span className="text-xs font-bold text-slate-600">X de</span>
+                    <div
+                      className="w-24 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
+                      title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
+                    >
+                      {itbiParcelaPosValor > 0 ? formatCurrency(itbiParcelaPosValor) : 'R$ 0,00'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          )}
+
           {/* BLOCO 4: INDICADORES DE RISCO / COMPROMETIMENTO */}
           {telaSettings.mostrarBloco4 && (
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
@@ -2903,127 +3034,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               <div className="flex justify-between items-center px-2 pt-1 text-[11px] text-slate-500 font-medium border-t border-slate-100 mt-1">
                 <span>Total Fase Pós-Obra (c/ ITBI):</span>
                 <strong className="text-slate-900 font-bold">{formatCurrency(totalFasePosComITBI)}</strong>
-              </div>
-            </div>
-          </div>
-
-          {/* CARD 4: CORREÇÃO IGPM+1% (TAXAS E REGISTRO / ITBI INTERATIVO) */}
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
-                  <Receipt className="w-4 h-4" />
-                </div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Correção IGPM+1% (Taxas e Registro)
-                </h3>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleToggleFirstHome}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors cursor-pointer ${
-                    isFirstHomeLocal
-                      ? 'bg-morar-50 text-morar-700 border-morar-100 hover:bg-morar-100'
-                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                  }`}
-                  title="Alternar entre Com Desconto e Sem Desconto no ITBI"
-                >
-                  {isFirstHomeLocal ? '1º Imóvel (Com Desc.)' : '2º Imóvel (Sem Desc.)'}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2.5 text-xs">
-              {/* ITBI / REGISTRO TOTAL */}
-              <div className="flex justify-between items-center bg-emerald-50/60 hover:bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 transition-colors">
-                <div>
-                  <span className="text-xs font-bold text-emerald-900 block">ITBI / Registro Total:</span>
-                  <div className="flex items-center gap-1 text-[10px] text-emerald-700 font-medium mt-0.5">
-                    <span>A partir de:</span>
-                    <input
-                      type="text"
-                      value={dataITBI}
-                      onChange={(e) => setDataITBI(e.target.value)}
-                      className="morar-input bg-transparent hover:bg-white/60 focus:bg-white border-b border-dashed border-emerald-300 font-bold text-emerald-900 px-1 py-0.5 text-[10px] w-24 text-center focus:outline-none"
-                      placeholder="Data início"
-                    />
-                  </div>
-                </div>
-                <div className="w-36 text-right">
-                  <div
-                    className="w-full bg-emerald-50 px-2 py-1 rounded border border-emerald-100 font-black text-emerald-800 text-right text-xs sm:text-sm cursor-not-allowed"
-                    title="Valor calculado automaticamente a partir do preço/tabela — não editável."
-                  >
-                    {despCartoriasEfetivas > 0 ? formatCurrency(despCartoriasEfetivas) : 'R$ 0,00'}
-                  </div>
-                </div>
-              </div>
-
-              {/* DISCRIMINAÇÃO: ITBI NO ATO E SALDO RESTANTE */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50/90 p-2.5 rounded-lg border border-slate-200/80">
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-[11px] font-medium text-slate-600">ITBI Pago no Ato:</span>
-                  <strong className="text-xs font-bold text-emerald-700">
-                    {atoITBIValidado > 0 ? formatCurrency(atoITBIValidado) : 'R$ 0,00'}
-                  </strong>
-                </div>
-                <div className="flex justify-between items-center px-1 border-t sm:border-t-0 sm:border-l border-slate-200 pt-1.5 sm:pt-0 sm:pl-2.5">
-                  <span className="text-[11px] font-medium text-slate-600">Saldo Restante a Parcelar:</span>
-                  <strong className="text-xs font-bold text-slate-900">
-                    {saldoITBI > 0 ? formatCurrency(saldoITBI) : 'R$ 0,00'}
-                  </strong>
-                </div>
-              </div>
-
-              {/* DISTRIBUIÇÃO DAS PARCELAS RESTANTES: OBRA E PÓS-OBRA */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {/* OBRA */}
-                <div className="bg-slate-50 hover:bg-slate-50/90 p-2.5 rounded-lg border border-slate-200/80 space-y-1.5 text-center transition-colors">
-                  <div className="flex justify-between items-center px-1">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Obra:</span>
-                    <span className="text-[10px] text-slate-400 font-medium">{itbiObraTotalMeses} meses</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-1.5">
-                    <div
-                      className="w-10 bg-slate-100 px-1 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-center text-xs cursor-not-allowed"
-                      title="Sempre igual à quantidade de parcelas de Obra — não editável."
-                    >
-                      {itbiObraTotalMeses}
-                    </div>
-                    <span className="text-xs font-bold text-slate-600">X de</span>
-                    <div
-                      className="w-24 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
-                      title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
-                    >
-                      {itbiParcelaObraValor > 0 ? formatCurrency(itbiParcelaObraValor) : 'R$ 0,00'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* PÓS OBRA */}
-                <div className="bg-slate-50 hover:bg-slate-50/90 p-2.5 rounded-lg border border-slate-200/80 space-y-1.5 text-center transition-colors">
-                  <div className="flex justify-between items-center px-1">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Pós Obra:</span>
-                    <span className="text-[10px] text-slate-400 font-medium">{itbiPosTotalMeses} meses</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-1.5">
-                    <div
-                      className="w-10 bg-slate-100 px-1 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-center text-xs cursor-not-allowed"
-                      title="Sempre igual à quantidade de parcelas de Pós-Obra — não editável."
-                    >
-                      {itbiPosTotalMeses}
-                    </div>
-                    <span className="text-xs font-bold text-slate-600">X de</span>
-                    <div
-                      className="w-24 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-slate-700 text-right text-xs cursor-not-allowed"
-                      title="Valor calculado automaticamente pelo aplicativo — não editável. Para mudar, ajuste a quantidade de parcelas."
-                    >
-                      {itbiParcelaPosValor > 0 ? formatCurrency(itbiParcelaPosValor) : 'R$ 0,00'}
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

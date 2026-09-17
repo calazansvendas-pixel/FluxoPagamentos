@@ -526,6 +526,48 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                 </div>
                 )}
 
+                {/* CORREÇÃO IGPM+1% (TAXAS E REGISTRO / ITBI) — layout exclusivo
+                    do "Sinal c/ Morar" (e da variante Comissão Apartada, únicas
+                    condições que usam este template): posicionado logo abaixo
+                    dos Dados da Aprovação de Crédito, na mesma coluna, em vez de
+                    junto aos demais blocos de pagamento (coluna da direita).
+                    Mesmo card/dados de antes, só a posição — continua
+                    respeitando a visibilidade de "Bloco 3" (mesma seção lógica
+                    de antes em Configurar Exportação de PDF). */}
+                {pdfSettings.mostrarBloco3 && (
+                <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                      Correção IGPM+1% (Taxas e Registro)
+                    </h3>
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      A partir de: <strong className="text-slate-800">{dataITBI}</strong>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center bg-[rgba(236,253,245,0.5)] px-2.5 py-1 rounded-lg border border-emerald-100">
+                      <span className="text-emerald-900 font-semibold text-[11px]">ITBI / Registro Total:</span>
+                      <strong className="text-emerald-800 font-bold">{fmt(valorITBI)}</strong>
+                    </div>
+
+                    <div className={`grid ${itbiPosQtd > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 text-[11px]`}>
+                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
+                        <span className="text-slate-500 font-medium block text-[10px]">Obra ({itbiObraQtd}X)</span>
+                        <strong className="text-slate-900 font-bold block">{fmt(itbiObraValor)}</strong>
+                      </div>
+                      {itbiPosQtd > 0 && (
+                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
+                          <span className="text-slate-500 font-medium block text-[10px]">Pós Obra ({itbiPosQtd}X)</span>
+                          <strong className="text-slate-900 font-bold block">{fmt(itbiPosValor)}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                )}
+
                 {/* GRÁFICO: COMPROMETIMENTO POR SÉRIE (PARCELA / RENDA) */}
                 {pdfSettings.mostrarBloco2 && (
                 <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
@@ -637,38 +679,6 @@ export const PdfExportModalMorar: React.FC<PdfExportModalMorarProps> = ({
                   </div>
                 )}
 
-                {/* CARD 4: CORREÇÃO IGPM+1% (TAXAS E REGISTRO / ITBI) */}
-                <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                      Correção IGPM+1% (Taxas e Registro)
-                    </h3>
-                    <span className="text-[10px] font-semibold text-slate-500">
-                      A partir de: <strong className="text-slate-800">{dataITBI}</strong>
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between items-center bg-[rgba(236,253,245,0.5)] px-2.5 py-1 rounded-lg border border-emerald-100">
-                      <span className="text-emerald-900 font-semibold text-[11px]">ITBI / Registro Total:</span>
-                      <strong className="text-emerald-800 font-bold">{fmt(valorITBI)}</strong>
-                    </div>
-
-                    <div className={`grid ${itbiPosQtd > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 text-[11px]`}>
-                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
-                        <span className="text-slate-500 font-medium block text-[10px]">Obra ({itbiObraQtd}X)</span>
-                        <strong className="text-slate-900 font-bold block">{fmt(itbiObraValor)}</strong>
-                      </div>
-                      {itbiPosQtd > 0 && (
-                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
-                          <span className="text-slate-500 font-medium block text-[10px]">Pós Obra ({itbiPosQtd}X)</span>
-                          <strong className="text-slate-900 font-bold block">{fmt(itbiPosValor)}</strong>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
                 </>)}
 
               </div>
