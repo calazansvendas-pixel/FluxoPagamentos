@@ -731,6 +731,7 @@ export default function App({ perfil, onSair }: AppProps) {
               }}
               onShowToast={showToast}
               cargoUsuario={perfil.cargo}
+              isNovato={perfil.cargo === 'Corretor Novato'}
             />
           )}
 

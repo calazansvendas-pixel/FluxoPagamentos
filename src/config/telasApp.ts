@@ -61,7 +61,8 @@ export const CARGOS: Cargo[] = [
   'Analista de Crédito',
   'Assistente de Vendas',
   'Assistente de Crédito',
-  'Corretor'
+  'Corretor',
+  'Corretor Novato'
 ];
 
 // Sugestão inicial de telas liberadas por cargo, usada só para pré-preencher a
@@ -83,5 +84,6 @@ export const TELAS_PADRAO_POR_CARGO: Record<Cargo, string[]> = {
   'Analista de Crédito': TELAS_PADRAO_BASE,
   'Assistente de Vendas': TELAS_PADRAO_BASE,
   'Assistente de Crédito': TELAS_PADRAO_BASE,
-  'Corretor': TELAS_PADRAO_BASE
+  'Corretor': TELAS_PADRAO_BASE,
+  'Corretor Novato': TELAS_PADRAO_BASE
 };
