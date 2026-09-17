@@ -1,6 +1,11 @@
 import { supabase } from '../lib/supabaseClient';
 import { Cargo, PdfConditionKind, TelaVisibilitySettings, TelaVisibilitySettingsByKind } from '../types';
-import { DEFAULT_TELA_VISIBILITY_SETTINGS, DEFAULT_TELA_VISIBILITY_SETTINGS_BY_KIND } from '../utils/telaVisibility';
+import {
+  DEFAULT_TELA_VISIBILITY_SETTINGS,
+  DEFAULT_TELA_VISIBILITY_SETTINGS_BY_KIND,
+  cadeiaHierarquicaDeCargos,
+  aplicarHerancaHierarquicaDeVisibilidade
+} from '../utils/telaVisibility';
 
 /*
  * SQL DE CRIAÇÃO DO BANCO DE DADOS — VISIBILIDADE DOS QUADROS NA TELA POR CARGO
@@ -54,15 +59,42 @@ function rowParaSettings(row: TelaVisibilityRow): TelaVisibilitySettings {
 export const telaVisibilidadeService = {
   // Usado ao abrir a tela de simulação: o que este cargo pode ver nos
   // quadros desta condição. Sem linha configurada ainda, mostra tudo.
+  //
+  // Cargos com um superior mapeado em CARGO_SUPERIOR_HIERARQUICO (hoje,
+  // Corretor e Corretor Novato — ambos sob Gerente) têm a própria
+  // configuração restringida em cascata pela do superior: a permissão do
+  // Gerente atua como teto (ver aplicarHerancaHierarquicaDeVisibilidade).
+  // Cargos sem superior mapeado (Gerente incluso) seguem o comportamento
+  // de sempre — só a própria configuração.
   async carregarConfiguracaoParaTela(cargo: Cargo, condicao: PdfConditionKind): Promise<TelaVisibilitySettings> {
+    const cadeia = cadeiaHierarquicaDeCargos(cargo);
+
+    if (cadeia.length === 1) {
+      const { data, error } = await supabase
+        .from('tela_visibilidade_por_cargo')
+        .select('*')
+        .eq('cargo', cargo)
+        .eq('condicao', condicao)
+        .maybeSingle();
+      if (error || !data) return { ...DEFAULT_TELA_VISIBILITY_SETTINGS };
+      return rowParaSettings(data as TelaVisibilityRow);
+    }
+
+    // Busca a configuração de todos os cargos da cadeia (o próprio + cada
+    // superior) numa única consulta.
     const { data, error } = await supabase
       .from('tela_visibilidade_por_cargo')
       .select('*')
-      .eq('cargo', cargo)
-      .eq('condicao', condicao)
-      .maybeSingle();
-    if (error || !data) return { ...DEFAULT_TELA_VISIBILITY_SETTINGS };
-    return rowParaSettings(data as TelaVisibilityRow);
+      .in('cargo', cadeia)
+      .eq('condicao', condicao);
+    if (error) return { ...DEFAULT_TELA_VISIBILITY_SETTINGS };
+
+    const configsPorCargo: Partial<Record<Cargo, TelaVisibilitySettings>> = {};
+    ((data || []) as TelaVisibilityRow[]).forEach(row => {
+      configsPorCargo[row.cargo] = rowParaSettings(row);
+    });
+
+    return aplicarHerancaHierarquicaDeVisibilidade(configsPorCargo, cadeia);
   },
 
   // Usado na tela "Configurar Visibilidade dos Quadros": todas as
