@@ -417,6 +417,20 @@ import { Cargo, PerfilUsuario, StatusConta } from '../types';
  * -- Atenção: simulações salvas ANTES desta migração não têm criado_por (ficam
  * -- NULL) — elas continuam visíveis só para o Administrador até lá.
  *
+ * -- 6g) Condições comerciais liberadas no dropdown "Selecionar Condição" do
+ * --     Simulador de Crédito (ver CONDICOES_APP em src/config/telasApp.ts) —
+ * --     controle independente de `telas_liberadas` (o menu lateral): uma tela
+ * --     pode estar liberada no menu sem a condição aparecer neste dropdown, e
+ * --     vice-versa. Backfill com TODAS as condições para não tirar acesso de
+ * --     ninguém que já usa o app hoje — o Administrador restringe depois, cargo
+ * --     a cargo ou pessoa a pessoa, pela nova seção "Condições Comerciais
+ * --     Liberadas (Dropdown)" no Painel do Administrador.
+ * ALTER TABLE perfis ADD COLUMN IF NOT EXISTS condicoes_liberadas TEXT[] NOT NULL DEFAULT ARRAY[
+ *   'sinal-morar', 'simulador-simplificado', 'sinal-morar-comissao-apartada',
+ *   'simulador-simplificado-comissao-apartada', 'banco-direto',
+ *   'banco-direto-comissao-apartada', 'parcelamento-morar'
+ * ]::TEXT[];
+ *
  * -- 8) Trava as tabelas de empreendimentos/unidades para exigir login (hoje
  * --    qualquer pessoa com a chave pública do projeto conseguia ler/gravar
  * --    direto, sem passar pelo app). Deixamos a checagem fina de "quem edita
@@ -442,6 +456,7 @@ interface PerfilRow {
   superior_id: string | null;
   status: StatusConta;
   telas_liberadas: string[] | null;
+  condicoes_liberadas: string[] | null;
   ver_propostas_equipe: boolean | null;
   campos_editaveis_equipe: string[] | null;
   empreendimentos_liberados: string[] | null;
@@ -462,6 +477,7 @@ function rowParaPerfil(row: PerfilRow): PerfilUsuario {
     superiorId: row.superior_id,
     status: row.status,
     telasLiberadas: row.telas_liberadas || [],
+    condicoesLiberadas: row.condicoes_liberadas || [],
     verPropostasEquipe: !!row.ver_propostas_equipe,
     camposEditaveisEquipe: row.campos_editaveis_equipe || [],
     empreendimentosLiberados: row.empreendimentos_liberados,
@@ -569,12 +585,15 @@ export const authService = {
 
   // Aprova um cadastro pendente, já definindo cargo/superior/telas confirmados
   // pelo Administrador (que pode corrigir o que a pessoa indicou no cadastro).
-  async aprovarUsuario(id: string, ajustes: { cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; verPropostasEquipe: boolean }) {
+  async aprovarUsuario(id: string, ajustes: {
+    cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; condicoesLiberadas: string[]; verPropostasEquipe: boolean;
+  }) {
     const { error } = await supabase.from('perfis').update({
       status: 'ativo',
       cargo: ajustes.cargo,
       superior_id: ajustes.superiorId,
       telas_liberadas: ajustes.telasLiberadas,
+      condicoes_liberadas: ajustes.condicoesLiberadas,
       ver_propostas_equipe: ajustes.verPropostasEquipe
     }).eq('id', id);
     return { success: !error, error: error?.message };
@@ -586,7 +605,7 @@ export const authService = {
   },
 
   async editarCargoEPermissoes(id: string, ajustes: {
-    cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; verPropostasEquipe: boolean;
+    cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; condicoesLiberadas: string[]; verPropostasEquipe: boolean;
     nomeCompleto: string; telefone: string; cpf: string; imobiliaria: string; creci?: string;
     camposEditaveisEquipe: string[]; empreendimentosLiberados: string[] | null;
   }) {
@@ -594,6 +613,7 @@ export const authService = {
       cargo: ajustes.cargo,
       superior_id: ajustes.superiorId,
       telas_liberadas: ajustes.telasLiberadas,
+      condicoes_liberadas: ajustes.condicoesLiberadas,
       ver_propostas_equipe: ajustes.verPropostasEquipe,
       nome_completo: ajustes.nomeCompleto,
       telefone: ajustes.telefone,
@@ -613,10 +633,11 @@ export const authService = {
   // entram aqui, só ficam mesmo na edição individual. Retorna quantas contas
   // foram de fato afetadas.
   async aplicarPermissoesPorCargo(cargo: Cargo, ajustes: {
-    telasLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
+    telasLiberadas: string[]; condicoesLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
   }): Promise<{ success: boolean; error?: string; afetados?: number }> {
     const { data, error } = await supabase.from('perfis').update({
       telas_liberadas: ajustes.telasLiberadas,
+      condicoes_liberadas: ajustes.condicoesLiberadas,
       ver_propostas_equipe: ajustes.verPropostasEquipe,
       campos_editaveis_equipe: ajustes.camposEditaveisEquipe
     }).eq('cargo', cargo).in('status', ['ativo', 'pausado']).select('id');

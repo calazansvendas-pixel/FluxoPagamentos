@@ -10,9 +10,10 @@ import {
   Sparkles,
   RotateCcw
 } from 'lucide-react';
-import { Product, SimulationData } from '../types';
+import { ActiveTab, Product, SimulationData } from '../types';
 import { formatCurrency, formatDeliveryText, parseCurrency, formatForEdit } from '../utils/formatters';
-import { ensureProductConditions } from '../utils/calculations';
+import { ensureProductConditions, getConditionKind } from '../utils/calculations';
+import { CONDICOES_APP } from '../config/telasApp';
 
 interface SimulatorViewProps {
   simulationData: SimulationData;
@@ -20,9 +21,13 @@ interface SimulatorViewProps {
   products: Product[];
   selectedConditions: Record<string, string>;
   onSelectCondition: (productId: string, conditionId: string) => void;
-  onAdvanceToDetails: (product: Product, conditionId: string) => void;
+  onAdvanceToDetails: (product: Product, conditionId: string, targetTab?: ActiveTab) => void;
   onNavigateToPolicies: () => void;
   onResetAll?: () => void;
+  // Chaves de CONDICOES_APP liberadas para o usuário logado — controla, à
+  // parte do menu lateral, o que aparece no dropdown "Selecionar Condição"
+  // abaixo (ver types.ts). undefined = sem restrição (Administrador).
+  condicoesLiberadas?: string[];
 }
 
 export const SimulatorView: React.FC<SimulatorViewProps> = ({
@@ -33,7 +38,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
   onSelectCondition,
   onAdvanceToDetails,
   onNavigateToPolicies,
-  onResetAll
+  onResetAll,
+  condicoesLiberadas
 }) => {
   // Fallback seguro caso simulationData venha undefined
   const safeSimulationData: SimulationData = simulationData || {
@@ -395,7 +401,31 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                 }
 
                 const prodWithConds = ensureProductConditions({ ...p });
-                const selectedCondId = (selectedConditions || {})[p.id] || '';
+                const selectedCondValue = (selectedConditions || {})[p.id] || '';
+
+                // Opções do dropdown: cada condição comercial real do produto
+                // (ensureProductConditions) cruzada com as entradas de
+                // CONDICOES_APP liberadas para o usuário logado cujo `variant`
+                // bate com o kind daquela condição (getConditionKind) — uma
+                // mesma condição pode gerar duas opções (ex.: "Sinal c/ Morar"
+                // e "Sinal c/ Morar**"), cada uma levando a um `targetTab`
+                // diferente. O valor do <option> combina id da condição real +
+                // chave do item (separados por "__") para decodificar os dois
+                // de volta no onClick de "Avançar", sem precisar de um estado à parte.
+                const condicoesPermitidas = CONDICOES_APP.filter(
+                  item => !condicoesLiberadas || condicoesLiberadas.includes(item.key)
+                );
+                const opcoesCondicao = condicoesPermitidas.flatMap(item =>
+                  prodWithConds.conditions
+                    .filter(c => getConditionKind(c.name) === item.variant)
+                    .map(c => ({
+                      value: `${c.id}__${item.key}`,
+                      label: item.tab === 'ficha-morar-simplificada' ? item.label : c.name,
+                      condicaoId: c.id,
+                      targetTab: item.tab
+                    }))
+                );
+                const opcaoSelecionada = opcoesCondicao.find(o => o.value === selectedCondValue);
 
                 const borderBg = p.isFeatured ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200 bg-white';
                 const badgeDot = p.isFeatured ? 'bg-amber-500' : 'bg-morar-600';
@@ -421,24 +451,24 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
 
                     <div className="flex gap-2 w-full">
                       <select
-                        value={selectedCondId}
+                        value={selectedCondValue}
                         onChange={(e) => onSelectCondition(p.id, e.target.value)}
                         className="flex-1 min-w-0 py-2 px-3 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-morar-600 cursor-pointer font-medium shadow-2xs"
                       >
                         <option value="">-- Selecionar Condição --</option>
-                        {prodWithConds.conditions.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
+                        {opcoesCondicao.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
                           </option>
                         ))}
                       </select>
 
                       <button
                         type="button"
-                        disabled={!selectedCondId}
-                        onClick={() => onAdvanceToDetails(prodWithConds, selectedCondId)}
+                        disabled={!opcaoSelecionada}
+                        onClick={() => opcaoSelecionada && onAdvanceToDetails(prodWithConds, opcaoSelecionada.condicaoId, opcaoSelecionada.targetTab)}
                         className={`shrink-0 px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 border ${
-                          selectedCondId
+                          opcaoSelecionada
                             ? 'bg-morar-600 hover:bg-morar-700 text-white border-morar-600 cursor-pointer shadow-md'
                             : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
                         }`}
