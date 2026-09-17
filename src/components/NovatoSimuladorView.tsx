@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Calendar, Download, Pencil } from 'lucide-react';
+import { Calendar, Pencil } from 'lucide-react';
 import logoMorar from '../assets/brand';
 import { CommercialCondition, PdfExportSettings, Product, SimulationData } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { MorarBarDatum, MorarFaixa, MorarPieDatum } from './PdfExportModalMorar';
 import { MonthStepper } from './MonthStepper';
+import { FichaMorarTopBar } from './FichaMorarTopBar';
+import { FichaMorarActionBar } from './FichaMorarActionBar';
 
 // Visão simplificada da Ficha Morar (tela "Sinal c/ Morar**" no menu lateral
 // — ver config/telasApp.ts e App.tsx). Mesmo "papel" (visual de folha A4) e
@@ -19,6 +21,20 @@ interface NovatoSimuladorViewProps {
   product: Product;
   condition: CommercialCondition;
   simulationData: SimulationData;
+
+  // Cabeçalho de navegação (FichaMorarTopBar) — mesmos props do editor
+  // completo, para o dropdown de Empreendimento/Condição funcionar aqui
+  // também e o cabeçalho ficar estritamente idêntico entre as duas telas.
+  products?: Product[];
+  onSelectProduct?: (product: Product, conditionId: string) => void;
+  onProductChange: (prodId: string) => void;
+  onSelectCondition?: (condition: CommercialCondition) => void;
+  onConditionChange: (condId: string) => void;
+
+  // Barra de ação (FichaMorarActionBar) — Salvar/PDF/Limpar.
+  onLimpar: () => void;
+  onSaveSimulation: () => void;
+  isSavingSimulation: boolean;
 
   selectedTorre: string;
   selectedUnidade: string;
@@ -45,11 +61,6 @@ interface NovatoSimuladorViewProps {
   sinalTotal: number;
   comITBI: number;
   distribuido: number;
-
-  // Diferencia o badge de navegação e o rótulo do card de comissão entre as
-  // duas versões da tela simplificada — ver telasApp.ts (variant 'sinal-morar'
-  // vs 'sinal-morar-comissao-apartada', ambas na mesma aba 'ficha-morar-simplificada').
-  isComissaoApartada?: boolean;
 
   isAtoPremiadoEnabled: boolean;
   onToggleAtoPremiado: (ativo: boolean) => void;
@@ -114,6 +125,14 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   product,
   condition,
   simulationData,
+  products,
+  onSelectProduct,
+  onProductChange,
+  onSelectCondition,
+  onConditionChange,
+  onLimpar,
+  onSaveSimulation,
+  isSavingSimulation,
   selectedTorre,
   selectedUnidade,
   availableTorres,
@@ -136,7 +155,6 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   sinalTotal,
   comITBI,
   distribuido,
-  isComissaoApartada = false,
   isAtoPremiadoEnabled,
   onToggleAtoPremiado,
   dataAto,
@@ -252,30 +270,19 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   return (
     <div className="space-y-4 max-w-4xl mx-auto pb-12">
 
-      {/* BARRA SUPERIOR — modo simplificado */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            type="button"
-            onClick={onBackToSimulator}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Voltar
-          </button>
-          <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold uppercase tracking-wide">
-            {isComissaoApartada ? 'Sinal c/ Morar (Com. Apartada)**' : 'Sinal c/ Morar**'}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onOpenPdfExport}
-          className="px-3.5 py-1.5 bg-morar-600 hover:bg-morar-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-        >
-          <Download className="w-3.5 h-3.5" />
-          Exportar Ficha PDF
-        </button>
-      </div>
+      {/* BARRA SUPERIOR DE NAVEGAÇÃO — mesmo componente do editor completo
+          (FichaMorarTopBar), estritamente idêntico entre as duas telas. */}
+      <FichaMorarTopBar
+        onBackToSimulator={onBackToSimulator}
+        products={products}
+        currentProd={product}
+        onSelectProduct={onSelectProduct}
+        onProductChange={onProductChange}
+        currentCond={condition}
+        onSelectCondition={onSelectCondition}
+        onConditionChange={onConditionChange}
+        deliveryText={deliveryText}
+      />
 
       {/* "FOLHA" — mesmo visual da Ficha de Exportação, com affordances de edição */}
       <div className="bg-white p-6 sm:p-7 rounded-xl shadow-md border border-slate-200 w-full text-slate-900 space-y-3.5">
@@ -311,23 +318,17 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
           )}
         </div>
 
-        {/* BARRA DE CLIENTE E IMOBILIÁRIA */}
-        {(pdfSettings.mostrarCliente || pdfSettings.mostrarImobiliaria) && (
-          <div className="bg-[rgba(248,250,252,0.9)] px-3.5 py-2 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between text-xs gap-2">
-            <div className="flex items-center justify-between w-full flex-wrap gap-2">
-              {pdfSettings.mostrarCliente && (
-                <span className="text-slate-600 font-medium">
-                  Cliente: <strong className="text-slate-900 font-bold">{simulationData.clientName || 'Cliente Não Informado'}</strong>
-                </span>
-              )}
-              {pdfSettings.mostrarImobiliaria && (
-                <span className="text-slate-600 font-medium">
-                  Imobiliária: <strong className="text-slate-900 font-bold">{simulationData.agency?.trim() || 'Imobiliária Não Informada'}</strong>
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+        {/* BARRA DE CLIENTE, IMOBILIÁRIA E AÇÕES — mesmo componente do editor
+            completo (FichaMorarActionBar), com Salvar/PDF/Limpar agrupados à
+            direita, todos no mesmo tamanho. */}
+        <FichaMorarActionBar
+          clientName={simulationData.clientName}
+          agency={simulationData.agency}
+          onLimpar={onLimpar}
+          onSaveSimulation={onSaveSimulation}
+          isSavingSimulation={isSavingSimulation}
+          onOpenPdfExport={onOpenPdfExport}
+        />
 
         {/* 2. RESUMO DA UNIDADE — Torre/Unidade viram seletores. UNID. é
             visivelmente mais largo que TORRE (números de 3-4 dígitos, ex.:
