@@ -17,7 +17,9 @@ export interface TelaApp {
 // nova só precisa ser adicionada aqui para aparecer automaticamente nos dois
 // lugares, liberável para qualquer cargo pelo Administrador.
 export const TELAS_APP: TelaApp[] = [
+  { key: 'policies', label: 'Políticas & Empreendimentos', icon: Building2, tab: 'policies' },
   { key: 'simulator', label: 'Simulador de Crédito', icon: Calculator, tab: 'simulator' },
+  { key: 'sinal-morar', label: 'Sinal c/ Morar', icon: FileCheck2, tab: 'ficha-morar', variant: 'sinal-morar' },
   // Versão simplificada (visual de Ficha Exportada, com um subconjunto restrito
   // de campos editáveis) da Ficha Morar — pensada para corretores iniciantes,
   // mas liberável pelo Administrador para QUALQUER cargo (não é hardcoded para
@@ -29,6 +31,7 @@ export const TELAS_APP: TelaApp[] = [
   // "Sinal c/ Morar", não uma tela totalmente à parte — chave interna
   // ('simulador-simplificado') mantida estável independente do rótulo exibido.
   { key: 'simulador-simplificado', label: 'Sinal c/ Morar**', icon: Sparkles, tab: 'ficha-morar-simplificada', variant: 'sinal-morar' },
+  { key: 'sinal-morar-comissao-apartada', label: 'Sinal c/ Morar (Comissão Apartada)', icon: FileCheck2, tab: 'ficha-morar', variant: 'sinal-morar-comissao-apartada' },
   // Segunda versão da tela simplificada, para a condição comercial "Sinal c/
   // Morar (Comissão Apartada)" — mesma aba ('ficha-morar-simplificada') da
   // versão acima, diferenciada pelo variant (como já ocorre entre 'sinal-morar'
@@ -36,11 +39,8 @@ export const TELAS_APP: TelaApp[] = [
   // Administrador de forma independente da versão sem comissão apartada.
   { key: 'simulador-simplificado-comissao-apartada', label: 'Sinal c/ Morar (Com. Apartada)**', icon: HandCoins, tab: 'ficha-morar-simplificada', variant: 'sinal-morar-comissao-apartada' },
   { key: 'banco-direto', label: 'Sinal c/ Banco Direto', icon: FileCheck2, tab: 'details', variant: 'banco-direto' },
-  { key: 'sinal-morar', label: 'Sinal c/ Morar', icon: FileCheck2, tab: 'ficha-morar', variant: 'sinal-morar' },
-  { key: 'parcelamento-morar', label: 'Parcelamento Morar', icon: Coins, tab: 'details', variant: 'parcelamento-morar' },
   { key: 'banco-direto-comissao-apartada', label: 'Sinal c/ Banco Direto (Comissão Apartada)', icon: FileCheck2, tab: 'details', variant: 'banco-direto-comissao-apartada' },
-  { key: 'sinal-morar-comissao-apartada', label: 'Sinal c/ Morar (Comissão Apartada)', icon: FileCheck2, tab: 'ficha-morar', variant: 'sinal-morar-comissao-apartada' },
-  { key: 'policies', label: 'Políticas & Empreendimentos', icon: Building2, tab: 'policies' },
+  { key: 'parcelamento-morar', label: 'Parcelamento Morar', icon: Coins, tab: 'details', variant: 'parcelamento-morar' },
   { key: 'pdf-settings', label: 'Configurar Exportação PDF', icon: FileOutput, tab: 'pdf-settings' },
   { key: 'tela-settings', label: 'Configurar Visibilidade dos Quadros', icon: LayoutGrid, tab: 'tela-settings' },
   { key: 'import-table', label: 'Importar Tabela (Excel)', icon: FileSpreadsheet, tab: 'import-table' },
