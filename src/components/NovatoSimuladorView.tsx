@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Pencil } from 'lucide-react';
-import { CommercialCondition, PdfExportSettings, Product, SimulationData } from '../types';
+import { CommercialCondition, PdfExportSettings, Product, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { MorarBarDatum, MorarFaixa, MorarPieDatum } from './PdfExportModalMorar';
@@ -17,7 +17,17 @@ import { FichaMorarProdutoGrid } from './FichaMorarProdutoGrid';
 // Obra/Pós-Obra). Nenhuma conta é refeita aqui: cada affordance chama de
 // volta os mesmos handlers já usados pelo editor completo.
 interface NovatoSimuladorViewProps {
+  // O que este cargo pode ver no PDF exportado (Configurar Exportação de
+  // PDF) — usado aqui só para mascarar valores (fmt/mostrarValores), já que
+  // esta tela É a própria ficha visual, e para a config repassada ao abrir
+  // o modal de exportação. NÃO decide o que aparece NA TELA — isso é
+  // `telaSettings`, abaixo.
   pdfSettings: PdfExportSettings;
+  // O que este cargo pode ver NA TELA (Configurar Visibilidade dos Quadros),
+  // independente do PDF — mesmo papel que telaSettings tem no editor
+  // completo (FichaMorar.tsx), aqui aplicado aos 3 blocos desta versão
+  // simplificada (não há Bloco 2 nesta tela).
+  telaSettings: TelaVisibilitySettings;
   product: Product;
   condition: CommercialCondition;
   simulationData: SimulationData;
@@ -122,6 +132,7 @@ interface NovatoSimuladorViewProps {
 
 export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   pdfSettings,
+  telaSettings,
   product,
   condition,
   simulationData,
@@ -322,7 +333,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
 
           {/* ================= COLUNA DA ESQUERDA ================= */}
           <div className="space-y-3">
-            {pdfSettings.mostrarBloco1 && (
+            {telaSettings.mostrarBloco1 && (
               <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-morar-600" />
@@ -387,7 +398,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
             )}
 
             {/* CORREÇÃO IGPM+1% (TAXAS E REGISTRO / ITBI) */}
-            {pdfSettings.mostrarBloco3 && (
+            {telaSettings.mostrarBloco3 && (
               <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -422,7 +433,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
 
           {/* ================= COLUNA DA DIREITA ================= */}
           <div className="space-y-3">
-            {pdfSettings.mostrarBloco3 && (<>
+            {telaSettings.mostrarBloco3 && (<>
               {/* CARD: PERÍODO DE PAGAMENTOS (ATO) — valor editável */}
               <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
@@ -536,7 +547,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
         </div>
 
         {/* 3. INDICADORES DE RISCO / COMPROMETIMENTO (GRÁFICOS NO RODAPÉ) */}
-        {pdfSettings.mostrarBloco4 && (
+        {telaSettings.mostrarBloco4 && (
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-1.5 gap-1">
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">

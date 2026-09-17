@@ -11,7 +11,7 @@ import {
   Check,
   PieChart
 } from 'lucide-react';
-import { Cargo, CommercialCondition, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
+import { Cargo, CommercialCondition, PdfConditionKind, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, resolverDescontoEComissaoApartada, resolverTetoAtoComDesconto, resolveConditionForTorre, getConditionKind } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
@@ -123,32 +123,35 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   ], [currentCond]);
   const [selectedUnidade, setSelectedUnidade] = useState<string>('');
 
+  // Chave de configuração (PdfConditionKind) usada para buscar tanto o PDF
+  // quanto a visibilidade na tela — a versão simplificada (isNovato) tem suas
+  // PRÓPRIAS chaves ('simulador-simplificado'/'...-comissao-apartada'),
+  // configuráveis pelo Administrador independente da tela completa, mesmo
+  // usando a mesma condição comercial por trás (ver types.ts/PdfConditionKind).
+  const condicaoKindParaConfig: PdfConditionKind = isNovato
+    ? (isComissaoApartada ? 'simulador-simplificado-comissao-apartada' : 'simulador-simplificado')
+    : (isComissaoApartada ? 'sinal-morar-comissao-apartada' : 'sinal-morar');
+
   // O que este cargo pode ver no PDF exportado — definido pelo Administrador
   // em "Configurar Exportação de PDF". Começa mostrando tudo até a busca
   // terminar, pra nunca travar a exportação.
   const [pdfSettings, setPdfSettings] = useState<PdfExportSettings>(DEFAULT_PDF_EXPORT_SETTINGS);
   useEffect(() => {
     let cancelado = false;
-    pdfPermissoesService.carregarConfiguracaoParaExportar(
-      cargoUsuario,
-      isComissaoApartada ? 'sinal-morar-comissao-apartada' : 'sinal-morar'
-    )
+    pdfPermissoesService.carregarConfiguracaoParaExportar(cargoUsuario, condicaoKindParaConfig)
       .then(settings => { if (!cancelado) setPdfSettings(settings); });
     return () => { cancelado = true; };
-  }, [cargoUsuario, isComissaoApartada]);
+  }, [cargoUsuario, condicaoKindParaConfig]);
 
   // O que este cargo pode ver NA TELA (independente do PDF) — definido pelo
   // Administrador em "Configurar Visibilidade dos Quadros".
   const [telaSettings, setTelaSettings] = useState<TelaVisibilitySettings>(DEFAULT_TELA_VISIBILITY_SETTINGS);
   useEffect(() => {
     let cancelado = false;
-    telaVisibilidadeService.carregarConfiguracaoParaTela(
-      cargoUsuario,
-      isComissaoApartada ? 'sinal-morar-comissao-apartada' : 'sinal-morar'
-    )
+    telaVisibilidadeService.carregarConfiguracaoParaTela(cargoUsuario, condicaoKindParaConfig)
       .then(settings => { if (!cancelado) setTelaSettings(settings); });
     return () => { cancelado = true; };
-  }, [cargoUsuario, isComissaoApartada]);
+  }, [cargoUsuario, condicaoKindParaConfig]);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isFirstHomeLocal, setIsFirstHomeLocal] = useState<boolean>(simulationData.isFirstHome ?? true);
 
@@ -1865,6 +1868,11 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     empreendimento_nome: currentProd?.name || '',
     condicao_id: currentCond?.id || '',
     condicao_nome: currentCond?.name || '',
+    // Qual das duas telas (completa ou simplificada) gerou esta simulação —
+    // usado só ao reabrir por "Simulações Salvas" (handleEditSimulation em
+    // App.tsx), pra devolver a pessoa pra mesma versão da ficha em que ela
+    // salvou, em vez de sempre cair na completa.
+    origem_tela: isNovato ? 'ficha-morar-simplificada' : 'ficha-morar',
     torre: selectedTorre || 'Não Selecionada',
     unidade: selectedUnidade || 'Não Selecionada',
     tipologia: hasUnitSelected ? tipologia : null,
@@ -1995,6 +2003,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       <>
         <NovatoSimuladorView
           pdfSettings={pdfSettings}
+          telaSettings={telaSettings}
           product={currentProd}
           condition={currentCond}
           simulationData={simulationData}

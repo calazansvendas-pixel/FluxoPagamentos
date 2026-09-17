@@ -137,7 +137,7 @@ export const TelaVisibilitySettingsView: React.FC<TelaVisibilitySettingsViewProp
       </div>
 
       {/* SELETOR DE CONDIÇÃO COMERCIAL */}
-      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex gap-2">
+      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap gap-2">
         {KIND_META.map(meta => {
           const Icon = meta.icon;
           const isActive = meta.kind === activeKind;
@@ -146,7 +146,7 @@ export const TelaVisibilitySettingsView: React.FC<TelaVisibilitySettingsViewProp
               key={meta.kind}
               type="button"
               onClick={() => trocarCondicao(meta.kind)}
-              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 isActive
                   ? 'bg-morar-50 text-morar-700 border border-morar-200 shadow-2xs'
                   : 'text-slate-500 hover:bg-slate-50 border border-transparent'

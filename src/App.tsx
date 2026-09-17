@@ -423,7 +423,11 @@ export default function App({ perfil, onSair }: AppProps) {
     }
 
     if (cond && isMorarCondition(cond.name)) {
-      setActiveTab('ficha-morar');
+      // `origem_tela` (gravado por FichaMorar.tsx.montarDadosCompletos) diz
+      // se a simulação foi feita na versão completa ou na simplificada —
+      // simulações salvas antes dessa gravação existir (origem_tela ausente)
+      // continuam abrindo na completa, como sempre.
+      setActiveTab(dados.origem_tela === 'ficha-morar-simplificada' ? 'ficha-morar-simplificada' : 'ficha-morar');
     } else {
       setActiveTab('details');
     }
@@ -442,7 +446,13 @@ export default function App({ perfil, onSair }: AppProps) {
       }));
     }
     if (isMorarCondition(cond.name)) {
-      if (activeTab !== 'ficha-morar') {
+      // Trocar de condição dentro do próprio dropdown do cabeçalho da ficha
+      // (FichaMorarTopBar) não deve "ejetar" quem está na versão simplificada
+      // de volta para o editor completo — 'sinal-morar' e
+      // 'sinal-morar-comissao-apartada' têm cada uma as duas variantes de
+      // tela (completa/simplificada) e a troca deve preservar qual delas
+      // estava ativa, só atualizando a condição em si.
+      if (activeTab !== 'ficha-morar' && activeTab !== 'ficha-morar-simplificada') {
         setActiveTab('ficha-morar');
         window.scrollTo(0, 0);
       }
