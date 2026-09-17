@@ -707,7 +707,7 @@ export default function App({ perfil, onSair }: AppProps) {
             />
           )}
 
-          {activeTab === 'ficha-morar' && (
+          {(activeTab === 'ficha-morar' || activeTab === 'ficha-morar-simplificada') && (
             <FichaMorar
               product={activeAnalysisProduct}
               condition={activeAnalysisCondition}
@@ -731,6 +731,7 @@ export default function App({ perfil, onSair }: AppProps) {
               }}
               onShowToast={showToast}
               cargoUsuario={perfil.cargo}
+              isNovato={activeTab === 'ficha-morar-simplificada'}
             />
           )}
 
