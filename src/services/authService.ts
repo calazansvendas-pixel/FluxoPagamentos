@@ -569,13 +569,17 @@ export const authService = {
 
   // Aprova um cadastro pendente, já definindo cargo/superior/telas confirmados
   // pelo Administrador (que pode corrigir o que a pessoa indicou no cadastro).
-  async aprovarUsuario(id: string, ajustes: { cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; verPropostasEquipe: boolean }) {
+  async aprovarUsuario(id: string, ajustes: {
+    cargo: Cargo; superiorId: string | null; telasLiberadas: string[]; verPropostasEquipe: boolean;
+    camposEditaveisEquipe?: string[];
+  }) {
     const { error } = await supabase.from('perfis').update({
       status: 'ativo',
       cargo: ajustes.cargo,
       superior_id: ajustes.superiorId,
       telas_liberadas: ajustes.telasLiberadas,
-      ver_propostas_equipe: ajustes.verPropostasEquipe
+      ver_propostas_equipe: ajustes.verPropostasEquipe,
+      campos_editaveis_equipe: ajustes.camposEditaveisEquipe ?? []
     }).eq('id', id);
     return { success: !error, error: error?.message };
   },
@@ -606,21 +610,81 @@ export const authService = {
     return { success: !error, error: error?.message };
   },
 
+  /*
+   * SQL DE CRIAÇÃO DO BANCO DE DADOS — PERMISSÕES PADRÃO POR CARGO
+   * ================================================================================
+   * Execute no SQL Editor do seu projeto Supabase — seguro rodar a qualquer
+   * momento (só cria uma tabela nova, isolada das demais). Guarda o que o
+   * Administrador configurou em "Editar permissões por cargo" (telas
+   * liberadas, ver propostas da equipe, campos editáveis da equipe) como o
+   * PADRÃO do cargo — independente de quantas contas esse cargo tem hoje.
+   * É o que faz "Salvar" funcionar mesmo com 0 usuários vinculados: antes,
+   * sem esta tabela, aplicarPermissoesPorCargo só dava UPDATE nas contas já
+   * existentes daquele cargo — com 0 contas, o clique não persistia nada em
+   * lugar nenhum. Agora ele grava aqui sempre, e é daqui que a aprovação de
+   * um cadastro pendente (handleAprovar em AdminPanelView.tsx) e a
+   * pré-preenchida do próprio painel de permissões passam a ler o padrão do
+   * cargo, em vez do array TELAS_PADRAO_POR_CARGO fixo no código-fonte
+   * (config/telasApp.ts, que continua servindo só de último fallback,
+   * quando nem esta tabela nem nenhuma conta existente têm nada configurado).
+   * CREATE TABLE IF NOT EXISTS permissoes_padrao_por_cargo (
+   *   cargo TEXT PRIMARY KEY,
+   *   telas_liberadas TEXT[] NOT NULL DEFAULT '{}',
+   *   ver_propostas_equipe BOOLEAN NOT NULL DEFAULT false,
+   *   campos_editaveis_equipe TEXT[] NOT NULL DEFAULT '{}',
+   *   atualizado_em TIMESTAMPTZ DEFAULT now()
+   * );
+   * ALTER TABLE permissoes_padrao_por_cargo ENABLE ROW LEVEL SECURITY;
+   * CREATE POLICY "logados_leem_permissoes_padrao_por_cargo" ON permissoes_padrao_por_cargo
+   *   FOR SELECT USING (auth.role() = 'authenticated');
+   * CREATE POLICY "admin_grava_permissoes_padrao_por_cargo" ON permissoes_padrao_por_cargo
+   *   FOR ALL USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));
+   */
+  async carregarPermissoesPadraoPorCargo(): Promise<Partial<Record<Cargo, {
+    telasLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
+  }>>> {
+    const { data, error } = await supabase.from('permissoes_padrao_por_cargo').select('*');
+    if (error || !data) return {};
+    const resultado: Partial<Record<Cargo, { telasLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[] }>> = {};
+    (data as any[]).forEach(row => {
+      resultado[row.cargo as Cargo] = {
+        telasLiberadas: row.telas_liberadas || [],
+        verPropostasEquipe: !!row.ver_propostas_equipe,
+        camposEditaveisEquipe: row.campos_editaveis_equipe || []
+      };
+    });
+    return resultado;
+  },
+
   // Aplica a mesma política de permissões (telas liberadas, ver propostas da
   // equipe, campos editáveis da equipe) para TODO MUNDO que tem este cargo
   // hoje (ativo ou pausado) — sobrescrevendo qualquer ajuste individual que
-  // essas pessoas já tivessem. Dados pessoais (nome, CPF, superior etc.) não
-  // entram aqui, só ficam mesmo na edição individual. Retorna quantas contas
-  // foram de fato afetadas.
+  // essas pessoas já tivessem — E grava a mesma configuração como o padrão
+  // deste cargo em permissoes_padrao_por_cargo, para que cadastros futuros
+  // aprovados com este cargo já nasçam com essas regras. As duas gravações
+  // sempre acontecem juntas, mesmo quando não há NENHUMA conta com o cargo
+  // hoje (afetados = 0): é assim que o botão "Salvar" continua fazendo
+  // sentido nesse caso — a configuração é o padrão do cargo, não uma edição
+  // que precisa de alguém para "cair em cima". Dados pessoais (nome, CPF,
+  // superior etc.) não entram aqui, só ficam mesmo na edição individual.
   async aplicarPermissoesPorCargo(cargo: Cargo, ajustes: {
     telasLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
   }): Promise<{ success: boolean; error?: string; afetados?: number }> {
-    const { data, error } = await supabase.from('perfis').update({
-      telas_liberadas: ajustes.telasLiberadas,
-      ver_propostas_equipe: ajustes.verPropostasEquipe,
-      campos_editaveis_equipe: ajustes.camposEditaveisEquipe
-    }).eq('cargo', cargo).in('status', ['ativo', 'pausado']).select('id');
-    return { success: !error, error: error?.message, afetados: data?.length ?? 0 };
+    const [{ data, error }, { error: errorPadrao }] = await Promise.all([
+      supabase.from('perfis').update({
+        telas_liberadas: ajustes.telasLiberadas,
+        ver_propostas_equipe: ajustes.verPropostasEquipe,
+        campos_editaveis_equipe: ajustes.camposEditaveisEquipe
+      }).eq('cargo', cargo).in('status', ['ativo', 'pausado']).select('id'),
+      supabase.from('permissoes_padrao_por_cargo').upsert({
+        cargo,
+        telas_liberadas: ajustes.telasLiberadas,
+        ver_propostas_equipe: ajustes.verPropostasEquipe,
+        campos_editaveis_equipe: ajustes.camposEditaveisEquipe,
+        atualizado_em: new Date().toISOString()
+      }, { onConflict: 'cargo' })
+    ]);
+    return { success: !error && !errorPadrao, error: error?.message || errorPadrao?.message, afetados: data?.length ?? 0 };
   },
 
   // --- Edição do cadastro da equipe (Diretor/Gerente autorizado) -----------

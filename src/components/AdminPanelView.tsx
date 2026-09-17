@@ -138,6 +138,20 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
   const [confirmandoAplicacaoMassa, setConfirmandoAplicacaoMassa] = useState(false);
   const [aplicandoMassa, setAplicandoMassa] = useState(false);
 
+  // Permissões padrão já salvas por cargo (permissoes_padrao_por_cargo no
+  // banco — ver SQL em authService.ts) — o que a aprovação de um cadastro
+  // pendente (handleAprovar) e a pré-preenchida deste painel usam quando não
+  // existe nenhuma conta daquele cargo ainda para servir de referência.
+  const [permissoesPadraoTodas, setPermissoesPadraoTodas] = useState<Partial<Record<Cargo, {
+    telasLiberadas: string[]; verPropostasEquipe: boolean; camposEditaveisEquipe: string[];
+  }>>>({});
+
+  const carregarPermissoesPadrao = async () => {
+    setPermissoesPadraoTodas(await authService.carregarPermissoesPadraoPorCargo());
+  };
+
+  useEffect(() => { carregarPermissoesPadrao(); }, []);
+
   // Empreendimentos padrão por cargo — usado só quando a hierarquia chega ao
   // topo sem achar nenhuma trava manual no caminho (ver empreendimentos_liberados_efetivos
   // no SQL de authService.ts). Um cargo ausente de `empPadraoTodos` está "sem
@@ -215,12 +229,19 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
 
   const handleAprovar = async (u: PerfilUsuario) => {
     const ajuste = ajustePendente[u.id] || { cargo: u.cargo, superiorId: null };
+    // Prioridade do padrão herdado por um cadastro recém-aprovado: (1) o que o
+    // Administrador já salvou para este cargo em "Editar permissões por
+    // cargo" (permissoesPadraoTodas, gravado mesmo com 0 contas — ver
+    // authService.aplicarPermissoesPorCargo); (2) só na ausência disso, o
+    // fallback fixo no código (TELAS_PADRAO_POR_CARGO/CARGOS_COM_EQUIPE).
+    const padraoCargo = permissoesPadraoTodas[ajuste.cargo];
     setProcessandoId(u.id);
     const res = await authService.aprovarUsuario(u.id, {
       cargo: ajuste.cargo,
       superiorId: ajuste.superiorId,
-      telasLiberadas: TELAS_PADRAO_POR_CARGO[ajuste.cargo] || ['simulator'],
-      verPropostasEquipe: CARGOS_COM_EQUIPE.includes(ajuste.cargo)
+      telasLiberadas: padraoCargo?.telasLiberadas ?? TELAS_PADRAO_POR_CARGO[ajuste.cargo] ?? ['simulator'],
+      verPropostasEquipe: padraoCargo?.verPropostasEquipe ?? CARGOS_COM_EQUIPE.includes(ajuste.cargo),
+      camposEditaveisEquipe: padraoCargo?.camposEditaveisEquipe ?? []
     });
     setProcessandoId(null);
     if (res.success) {
@@ -365,13 +386,20 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     // de sempre voltar para o padrão de fábrica) — sem isso, reabrir o painel
     // depois de aplicar dava a falsa impressão de que nada tinha sido salvo,
     // porque os quadradinhos voltavam desmarcados mesmo já estando gravados no
-    // banco. Só cai no padrão de fábrica quando ainda não existe ninguém com
-    // esse cargo para servir de referência.
+    // banco. Sem ninguém com esse cargo para servir de referência, cai no
+    // padrão já salvo para o cargo (permissoesPadraoTodas — grava mesmo com 0
+    // contas, ver authService.aplicarPermissoesPorCargo); só na ausência de
+    // ambos é que usa o fallback fixo no código-fonte.
     const usuarioReferencia = ativos.find(u => u.cargo === cargo);
+    const padraoCargo = permissoesPadraoTodas[cargo];
     if (usuarioReferencia) {
       setPmTelas(new Set(usuarioReferencia.telasLiberadas));
       setPmVerEquipe(usuarioReferencia.verPropostasEquipe);
       setPmCamposEditaveis(new Set(usuarioReferencia.camposEditaveisEquipe));
+    } else if (padraoCargo) {
+      setPmTelas(new Set(padraoCargo.telasLiberadas));
+      setPmVerEquipe(padraoCargo.verPropostasEquipe);
+      setPmCamposEditaveis(new Set(padraoCargo.camposEditaveisEquipe));
     } else {
       setPmTelas(new Set(TELAS_PADRAO_POR_CARGO[cargo] || []));
       setPmVerEquipe(CARGOS_COM_EQUIPE.includes(cargo));
@@ -390,8 +418,14 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
     setAplicandoMassa(false);
     setConfirmandoAplicacaoMassa(false);
     if (res.success) {
-      onShowToast(`Permissões aplicadas para ${res.afetados ?? 0} conta${res.afetados === 1 ? '' : 's'} com o cargo ${pmCargo}.`);
+      const afetados = res.afetados ?? 0;
+      onShowToast(
+        afetados > 0
+          ? `Permissões aplicadas para ${afetados} conta${afetados === 1 ? '' : 's'} com o cargo ${pmCargo} e salvas como padrão do cargo.`
+          : `Nenhuma conta com o cargo ${pmCargo} no momento — permissões salvas como padrão do cargo para futuros cadastros.`
+      );
       carregar();
+      carregarPermissoesPadrao();
     } else {
       onShowToast(`Erro ao aplicar em massa: ${res.error || 'erro desconhecido'}`);
     }
@@ -479,6 +513,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
               <p className="text-[11px] text-slate-400 mt-1.5">
                 {usuariosDoCargoEmMassa.length} conta{usuariosDoCargoEmMassa.length === 1 ? '' : 's'} com o cargo {pmCargo} hoje (ativas ou pausadas).
                 {usuariosDoCargoEmMassa.length > 1 && ' Os quadradinhos abaixo mostram o que já está gravado para o primeiro deles — se estiverem diferentes entre si, ao aplicar todos passam a ficar iguais ao que está marcado aqui.'}
+                {usuariosDoCargoEmMassa.length === 0 && ' Sem ninguém com este cargo ainda, mas você pode salvar mesmo assim: fica gravado como o padrão do cargo, e todo cadastro aprovado com esse cargo a partir de agora já nasce com essas regras.'}
               </p>
             </div>
 
@@ -536,11 +571,12 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
             <div className="flex justify-end pt-3 border-t border-slate-100">
               <button
                 type="button"
-                disabled={usuariosDoCargoEmMassa.length === 0}
                 onClick={() => setConfirmandoAplicacaoMassa(true)}
-                className="px-4 py-2 text-xs font-bold text-white bg-morar-600 hover:bg-morar-700 rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-xs font-bold text-white bg-morar-600 hover:bg-morar-700 rounded-xl cursor-pointer"
               >
-                Aplicar a todos os {pmCargo} ({usuariosDoCargoEmMassa.length})
+                {usuariosDoCargoEmMassa.length > 0
+                  ? `Aplicar a todos os ${pmCargo} (${usuariosDoCargoEmMassa.length})`
+                  : `Salvar como padrão do cargo ${pmCargo}`}
               </button>
             </div>
           </div>
@@ -1079,10 +1115,22 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Aplicar permissões para todo o cargo {pmCargo}?</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {usuariosDoCargoEmMassa.length > 0
+                    ? `Aplicar permissões para todo o cargo ${pmCargo}?`
+                    : `Salvar como padrão do cargo ${pmCargo}?`}
+                </h3>
                 <p className="text-xs text-slate-500">
-                  Isso vai sobrescrever as telas liberadas, "ver equipe" e "editar cadastro da equipe" de{' '}
-                  <strong>{usuariosDoCargoEmMassa.length} conta{usuariosDoCargoEmMassa.length === 1 ? '' : 's'}</strong> com o cargo {pmCargo} — inclusive quem já tiver algum ajuste individual diferente. Dados pessoais e o cargo de cada um não mudam.
+                  {usuariosDoCargoEmMassa.length > 0 ? (
+                    <>
+                      Isso vai sobrescrever as telas liberadas, "ver equipe" e "editar cadastro da equipe" de{' '}
+                      <strong>{usuariosDoCargoEmMassa.length} conta{usuariosDoCargoEmMassa.length === 1 ? '' : 's'}</strong> com o cargo {pmCargo} — inclusive quem já tiver algum ajuste individual diferente. Dados pessoais e o cargo de cada um não mudam. A configuração também fica salva como o padrão deste cargo para futuros cadastros.
+                    </>
+                  ) : (
+                    <>
+                      Ninguém tem o cargo {pmCargo} no momento, então nada muda para nenhuma conta agora. A configuração fica salva como o padrão deste cargo — todo cadastro aprovado com o cargo {pmCargo} a partir de agora já nasce com essas telas liberadas, "ver equipe" e "editar cadastro da equipe".
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -1096,7 +1144,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onShowToast, usu
                 onClick={confirmarAplicacaoMassa}
                 className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {aplicandoMassa ? 'Aplicando...' : 'Sim, aplicar a todos'}
+                {aplicandoMassa ? 'Salvando...' : (usuariosDoCargoEmMassa.length > 0 ? 'Sim, aplicar a todos' : 'Sim, salvar como padrão')}
               </button>
             </div>
           </div>
