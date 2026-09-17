@@ -1,4 +1,4 @@
-import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins, FileOutput, LayoutGrid, ShieldCheck } from 'lucide-react';
+import { Calculator, FileCheck2, Building2, FileSpreadsheet, ClipboardList, Coins, FileOutput, LayoutGrid, ShieldCheck, Sparkles } from 'lucide-react';
 import { ActiveTab, Cargo } from '../types';
 import { ConditionKind } from '../utils/calculations';
 
@@ -18,6 +18,17 @@ export interface TelaApp {
 // lugares, liberável para qualquer cargo pelo Administrador.
 export const TELAS_APP: TelaApp[] = [
   { key: 'simulator', label: 'Simulador de Crédito', icon: Calculator, tab: 'simulator' },
+  // Versão simplificada (visual de Ficha Exportada, com um subconjunto restrito
+  // de campos editáveis) da Ficha Morar — pensada para corretores iniciantes,
+  // mas liberável pelo Administrador para QUALQUER cargo (não é hardcoded para
+  // "Corretor Novato"). Aba própria ('ficha-morar-simplificada'), separada de
+  // 'ficha-morar', para que a liberação desta tela seja independente da tela
+  // "Sinal c/ Morar" tradicional — ver FichaMorar.tsx (prop isNovato). O rótulo
+  // "Sinal c/ Morar**" (com os dois asteriscos) é proposital: sinaliza ao
+  // corretor que esta é uma variante (a versão guiada) da condição comercial
+  // "Sinal c/ Morar", não uma tela totalmente à parte — chave interna
+  // ('simulador-simplificado') mantida estável independente do rótulo exibido.
+  { key: 'simulador-simplificado', label: 'Sinal c/ Morar**', icon: Sparkles, tab: 'ficha-morar-simplificada' },
   { key: 'banco-direto', label: 'Sinal c/ Banco Direto', icon: FileCheck2, tab: 'details', variant: 'banco-direto' },
   { key: 'sinal-morar', label: 'Sinal c/ Morar', icon: FileCheck2, tab: 'ficha-morar', variant: 'sinal-morar' },
   { key: 'parcelamento-morar', label: 'Parcelamento Morar', icon: Coins, tab: 'details', variant: 'parcelamento-morar' },
@@ -61,7 +72,8 @@ export const CARGOS: Cargo[] = [
   'Analista de Crédito',
   'Assistente de Vendas',
   'Assistente de Crédito',
-  'Corretor'
+  'Corretor',
+  'Corretor Novato'
 ];
 
 // Sugestão inicial de telas liberadas por cargo, usada só para pré-preencher a
@@ -83,5 +95,6 @@ export const TELAS_PADRAO_POR_CARGO: Record<Cargo, string[]> = {
   'Analista de Crédito': TELAS_PADRAO_BASE,
   'Assistente de Vendas': TELAS_PADRAO_BASE,
   'Assistente de Crédito': TELAS_PADRAO_BASE,
-  'Corretor': TELAS_PADRAO_BASE
+  'Corretor': TELAS_PADRAO_BASE,
+  'Corretor Novato': TELAS_PADRAO_BASE
 };

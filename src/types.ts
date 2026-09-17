@@ -161,7 +161,7 @@ export interface SelectedUnit {
   unidade: string;
 }
 
-export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'policies' | 'import-table' | 'saved-simulations' | 'pdf-settings' | 'tela-settings' | 'admin-panel';
+export type ActiveTab = 'simulator' | 'details' | 'ficha-morar' | 'ficha-morar-simplificada' | 'policies' | 'import-table' | 'saved-simulations' | 'pdf-settings' | 'tela-settings' | 'admin-panel';
 
 // ---------------------------------------------------------------------------
 // Acesso & Permissões (login, cadastro, hierarquia e Painel do Administrador)
@@ -176,7 +176,8 @@ export type Cargo =
   | 'Analista de Crédito'
   | 'Assistente de Vendas'
   | 'Assistente de Crédito'
-  | 'Corretor';
+  | 'Corretor'
+  | 'Corretor Novato';
 
 export type StatusConta = 'pendente' | 'ativo' | 'pausado';
 
