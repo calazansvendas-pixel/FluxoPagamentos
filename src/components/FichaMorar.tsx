@@ -2027,6 +2027,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           sinalTotal={sinalTotalSemITBIEfetivo}
           comITBI={sinalTotalComITBIEfetivo}
           distribuido={totalDistribuido}
+          isComissaoApartada={isComissaoApartada}
           isAtoPremiadoEnabled={isAtoPremiadoEnabled}
           onToggleAtoPremiado={handleToggleAtoPremiado}
           dataAto={dataAto}

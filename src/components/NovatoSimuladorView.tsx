@@ -45,6 +45,11 @@ interface NovatoSimuladorViewProps {
   comITBI: number;
   distribuido: number;
 
+  // Diferencia o badge de navegação e o rótulo do card de comissão entre as
+  // duas versões da tela simplificada — ver telasApp.ts (variant 'sinal-morar'
+  // vs 'sinal-morar-comissao-apartada', ambas na mesma aba 'ficha-morar-simplificada').
+  isComissaoApartada?: boolean;
+
   isAtoPremiadoEnabled: boolean;
   onToggleAtoPremiado: (ativo: boolean) => void;
 
@@ -149,6 +154,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   sinalTotal,
   comITBI,
   distribuido,
+  isComissaoApartada = false,
   isAtoPremiadoEnabled,
   onToggleAtoPremiado,
   dataAto,
@@ -271,7 +277,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
             Voltar
           </button>
           <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold uppercase tracking-wide">
-            Sinal c/ Morar**
+            {isComissaoApartada ? 'Sinal c/ Morar (Com. Apartada)**' : 'Sinal c/ Morar**'}
           </span>
         </div>
         <button
