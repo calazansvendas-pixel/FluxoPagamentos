@@ -26,6 +26,7 @@ import { pdfPermissoesService } from '../services/pdfPermissoesService';
 import { telaVisibilidadeService } from '../services/telaVisibilidadeService';
 import { PdfExportModalMorar, MorarFaixa } from './PdfExportModalMorar';
 import { NovatoSimuladorView } from './NovatoSimuladorView';
+import { MonthStepper } from './MonthStepper';
 import { EmptySimulationNotice } from './EmptySimulationNotice';
 import { FluxoEntradaConstrutora } from './FluxoEntradaConstrutora';
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
@@ -194,8 +195,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     { qtd: 9, valor: 0 },
     { qtd: 0, valor: 0 }
   ]);
-  const [obraQtdText, setObraQtdText] = useState<string>('');
-  const [isEditingObraTotal, setIsEditingObraTotal] = useState<boolean>(false);
   const [isManualObra, setIsManualObra] = useState<boolean>(false);
 
   // Faixas de Pós-Obra (IPCA+1%) - Padrão Morar: 3x, 12x, 12x, 0x (Total 27 meses)
@@ -206,8 +205,6 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     { qtd: 12, valor: 0 },
     { qtd: 0, valor: 0 }
   ]);
-  const [posQtdText, setPosQtdText] = useState<string>('');
-  const [isEditingPosTotal, setIsEditingPosTotal] = useState<boolean>(false);
   const [isManualPos, setIsManualPos] = useState<boolean>(false);
 
   // Taxas e Registro (IGPM+1%) — o total de ITBI não é editável pela tela,
@@ -2055,14 +2052,19 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           comissaoApartadaValor={comissaoApartadaValor}
           comissaoApartadaParcelasQtd={comissaoApartadaParcelasQtd}
           comissaoApartadaParcelaValor={comissaoApartadaParcelaValor}
+          minComissaoParcelas={minComissaoParcelas}
+          maxComissaoParcelas={maxComissaoParcelas}
+          onComissaoParcelasChange={setComissaoParcelasManual}
           dataObra={dataObra}
           totalParcObra={totalParcObra}
           faixasObra={faixasObra}
           onObraTotalChange={handleTotalObraParcelasChange}
+          maxParcObra={mesesObraPadraoPolitica}
           dataPos={dataPos}
           totalParcPos={totalParcPos}
           faixasPos={faixasPos}
           onPosTotalChange={handleTotalPosParcelasChange}
+          maxParcPos={mesesPosPadraoPolitica}
           dataITBI={dataITBI}
           valorITBI={despCartoriasEfetivas}
           itbiObraQtd={itbiObraTotalMeses}
@@ -2927,44 +2929,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                     Correção INCC - Obra
                   </h3>
-                  <div className="flex items-center bg-morar-50 px-1.5 py-0.5 rounded-md border border-morar-100">
-                    <input
-                      type="number"
-                      min="0"
-                      max={mesesObraPadraoPolitica}
-                      value={isEditingObraTotal ? obraQtdText : totalParcObra}
-                      onFocus={() => {
-                        setIsEditingObraTotal(true);
-                        setObraQtdText(String(totalParcObra));
-                      }}
-                      onChange={(e) => {
-                        // Recalcula a cada mudança (clique nas setinhas ou dígito
-                        // digitado) — não espera o campo perder o foco, mesmo
-                        // padrão já usado no "X de" de cada série logo abaixo.
-                        const raw = e.target.value;
-                        setObraQtdText(raw);
-                        const val = parseInt(raw, 10);
-                        if (!isNaN(val) && val >= 0) {
-                          handleTotalObraParcelasChange(val);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        setIsEditingObraTotal(false);
-                        const val = parseInt(e.target.value, 10);
-                        if (!isNaN(val) && val >= 0) {
-                          handleTotalObraParcelasChange(val);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      className="morar-input w-8 bg-transparent text-center font-black text-morar-700 text-[11px] focus:outline-none"
-                      title="Total de Parcelas da Fase de Obra"
-                    />
-                    <span className="text-[11px] font-black text-morar-700">X</span>
-                  </div>
+                  <MonthStepper
+                    total={totalParcObra}
+                    onChange={handleTotalObraParcelasChange}
+                    max={mesesObraPadraoPolitica}
+                    colorClass="bg-morar-50 border-morar-100 text-morar-700"
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -3056,41 +3026,12 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                     Correção IPCA+1% - Pós
                   </h3>
-                  <div className="flex items-center bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100">
-                    <input
-                      type="number"
-                      min="0"
-                      max={mesesPosPadraoPolitica}
-                      value={isEditingPosTotal ? posQtdText : totalParcPos}
-                      onFocus={() => {
-                        setIsEditingPosTotal(true);
-                        setPosQtdText(String(totalParcPos));
-                      }}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        setPosQtdText(raw);
-                        const val = parseInt(raw, 10);
-                        if (!isNaN(val) && val >= 0) {
-                          handleTotalPosParcelasChange(val);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        setIsEditingPosTotal(false);
-                        const val = parseInt(e.target.value, 10);
-                        if (!isNaN(val) && val >= 0) {
-                          handleTotalPosParcelasChange(val);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      className="morar-input w-8 bg-transparent text-center font-black text-indigo-700 text-[11px] focus:outline-none"
-                      title="Total de Parcelas da Fase Pós-Obra"
-                    />
-                    <span className="text-[11px] font-black text-indigo-700">X</span>
-                  </div>
+                  <MonthStepper
+                    total={totalParcPos}
+                    onChange={handleTotalPosParcelasChange}
+                    max={mesesPosPadraoPolitica}
+                    colorClass="bg-indigo-50 border-indigo-100 text-indigo-700"
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -3224,30 +3165,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
                   <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
                     Qtd. Parcelas
                   </label>
-                  <div className="relative flex items-center justify-center">
-                    <input
-                      type="number"
-                      value={comissaoApartadaParcelasQtd > 0 ? comissaoApartadaParcelasQtd : ''}
+                  <div className="flex items-center justify-center">
+                    <MonthStepper
+                      total={comissaoApartadaParcelasQtd}
+                      onChange={setComissaoParcelasManual}
                       min={minComissaoParcelas}
                       max={maxComissaoParcelas}
-                      onChange={(e) => {
-                        const rawVal = e.target.value;
-                        if (rawVal === '') {
-                          setComissaoParcelasManual(minComissaoParcelas);
-                          return;
-                        }
-                        const val = parseInt(rawVal, 10);
-                        if (isNaN(val)) return;
-                        setComissaoParcelasManual(Math.min(maxComissaoParcelas, Math.max(minComissaoParcelas, val)));
-                      }}
-                      onBlur={() => {
-                        if (!comissaoApartadaParcelasQtd || comissaoApartadaParcelasQtd < minComissaoParcelas || comissaoApartadaParcelasQtd > maxComissaoParcelas) {
-                          setComissaoParcelasManual(Math.min(maxComissaoParcelas, Math.max(minComissaoParcelas, comissaoApartadaParcelasQtd || minComissaoParcelas)));
-                        }
-                      }}
-                      className="w-full bg-white px-2 py-1 rounded-md border border-slate-200 font-bold text-fuchsia-700 text-center focus:outline-none focus:border-fuchsia-600 text-xs"
+                      unitLabel="parcela"
+                      colorClass="bg-white border-fuchsia-200 text-fuchsia-700"
                     />
-                    <span className="absolute right-2 text-xs font-extrabold text-slate-400 pointer-events-none">X</span>
                   </div>
                   <p className="text-[9px] text-slate-400 font-medium mt-1">
                     Permitido de {minComissaoParcelas} a {maxComissaoParcelas} parcelas
