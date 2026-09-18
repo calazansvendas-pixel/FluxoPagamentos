@@ -2089,6 +2089,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           faixasPos={faixasPos}
           onPosTotalChange={handleTotalPosParcelasChange}
           maxParcPos={mesesPosPadraoPolitica}
+          saldoProSolutoRestante={saldoProSolutoRestante}
           dataITBI={dataITBI}
           valorITBI={despCartoriasEfetivas}
           itbiObraQtd={itbiObraTotalMeses}
