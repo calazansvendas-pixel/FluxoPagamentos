@@ -11,7 +11,7 @@ import {
   Check,
   PieChart
 } from 'lucide-react';
-import { Cargo, CommercialCondition, PdfConditionKind, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
+import { ActiveTab, Cargo, CommercialCondition, PdfConditionKind, PdfExportSettings, Product, SelectedUnit, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, formatM2, formatArea, parseCurrency, formatDeliveryText, formatForEdit, isTabelaVencida, formatDateBr } from '../utils/formatters';
 import { calculatePolicyRiskValues, ensureProductConditions, decomposeMorarMonths, calculateMorarFlowEngine, resolverDescontoEComissaoApartada, resolverTetoAtoComDesconto, resolveConditionForTorre, getConditionKind } from '../utils/calculations';
 import { DEFAULT_PDF_EXPORT_SETTINGS } from '../utils/pdfExport';
@@ -36,7 +36,10 @@ interface FichaMorarProps {
   products?: Product[];
   currentDate?: string;
   onSelectProduct?: (product: Product, conditionId: string) => void;
-  onSelectCondition?: (condition: CommercialCondition) => void;
+  // targetTab (opcional) é resolvido pelo próprio dropdown de condição do
+  // cabeçalho (FichaMorarTopBar) quando a opção escolhida é uma variante
+  // "**" — ver handleConditionDropdownChange abaixo e CONDICOES_APP.
+  onSelectCondition?: (condition: CommercialCondition, targetTab?: ActiveTab) => void;
   simulationData: SimulationData;
   selectedUnits: Record<string, SelectedUnit>;
   onUnitSelectChange: (productId: string, unit: SelectedUnit) => void;
@@ -56,6 +59,12 @@ interface FichaMorarProps {
   // a visão simplificada reusa os mesmos state/handlers já computados abaixo,
   // só a apresentação (JSX) é diferente.
   isNovato?: boolean;
+  // Condições comerciais liberadas para o dropdown do usuário logado (ver
+  // CONDICOES_APP em config/telasApp.ts) — repassado ao FichaMorarTopBar
+  // para filtrar as opções do seletor de condição do cabeçalho, mesma regra
+  // já aplicada ao dropdown "Selecionar Condição" do Simulador. `undefined`
+  // = sem restrição (Administrador).
+  condicoesLiberadas?: string[];
 }
 
 export const FichaMorar: React.FC<FichaMorarProps> = ({
@@ -72,7 +81,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
   onNavigateToImport,
   onShowToast,
   cargoUsuario,
-  isNovato = false
+  isNovato = false,
+  condicoesLiberadas
 }) => {
   // Produto e Condição atuais com fallback para o primeiro disponível
   const currentProd = useMemo(() => {
@@ -508,10 +518,10 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     }
   };
 
-  const handleConditionDropdownChange = (condId: string) => {
+  const handleConditionDropdownChange = (condId: string, targetTab?: ActiveTab) => {
     const targetCond = currentProd.conditions.find(c => c.id === condId);
     if (targetCond && onSelectCondition) {
-      onSelectCondition(targetCond);
+      onSelectCondition(targetCond, targetTab);
     }
   };
 
@@ -2004,6 +2014,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         <NovatoSimuladorView
           pdfSettings={pdfSettings}
           telaSettings={telaSettings}
+          condicoesLiberadas={condicoesLiberadas}
           product={currentProd}
           condition={currentCond}
           simulationData={simulationData}
@@ -2177,6 +2188,8 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
         onSelectCondition={onSelectCondition}
         onConditionChange={handleConditionDropdownChange}
         deliveryText={deliveryText}
+        condicoesLiberadas={condicoesLiberadas}
+        isSimplificado={false}
       />
 
       {/* ALERTA: TABELA DE VENDAS NÃO IMPORTADA OU VENCIDA */}

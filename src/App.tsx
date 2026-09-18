@@ -435,23 +435,36 @@ export default function App({ perfil, onSair }: AppProps) {
     showToast(`Simulação de ${dados.cliente_nome || sim.cliente_nome || 'cliente'} reaberta para edição.`);
   };
 
-  // Handler para troca de condição comercial com redirecionamento/roteamento inteligente
-  const handleSelectConditionWithRouting = (cond: CommercialCondition) => {
+  // Handler para troca de condição comercial com redirecionamento/roteamento
+  // inteligente. `targetTab` (opcional) vem do próprio dropdown do cabeçalho
+  // da ficha (FichaMorarTopBar) já resolvido via CONDICOES_APP quando a opção
+  // escolhida é uma das variantes "**" — nesse caso o roteamento não é mais
+  // "inteligente" por isComissaoApartada/kind, é a tela exata que a opção pede.
+  const handleSelectConditionWithRouting = (cond: CommercialCondition, targetTab?: ActiveTab) => {
+    // Reset da unidade ativa só quando a condição comercial MUDA de verdade
+    // (id diferente) — trocar apenas a variante de tela (completa <->
+    // simplificada) da MESMA condição via targetTab preserva Torre/Unidade e
+    // o restante da simulação intactos, como pedido.
+    const condicaoMudou = activeAnalysisCondition?.id !== cond.id;
     setActiveAnalysisCondition(cond);
-    // Reset da unidade ativa ao trocar política comercial
-    if (activeAnalysisProduct) {
+    if (condicaoMudou && activeAnalysisProduct) {
       setSelectedUnits(prev => ({
         ...prev,
         [activeAnalysisProduct.id]: { torre: '', unidade: '' }
       }));
     }
+    if (targetTab) {
+      if (activeTab !== targetTab) {
+        setActiveTab(targetTab);
+        window.scrollTo(0, 0);
+      }
+      return;
+    }
     if (isMorarCondition(cond.name)) {
-      // Trocar de condição dentro do próprio dropdown do cabeçalho da ficha
-      // (FichaMorarTopBar) não deve "ejetar" quem está na versão simplificada
-      // de volta para o editor completo — 'sinal-morar' e
+      // Sem targetTab explícito (ex.: troca de empreendimento), preserva a
+      // variante de tela em que a pessoa já está — 'sinal-morar' e
       // 'sinal-morar-comissao-apartada' têm cada uma as duas variantes de
-      // tela (completa/simplificada) e a troca deve preservar qual delas
-      // estava ativa, só atualizando a condição em si.
+      // tela (completa/simplificada) e a troca não deve "ejetar" ninguém.
       if (activeTab !== 'ficha-morar' && activeTab !== 'ficha-morar-simplificada') {
         setActiveTab('ficha-morar');
         window.scrollTo(0, 0);
@@ -752,6 +765,7 @@ export default function App({ perfil, onSair }: AppProps) {
               onShowToast={showToast}
               cargoUsuario={perfil.cargo}
               isNovato={activeTab === 'ficha-morar-simplificada'}
+              condicoesLiberadas={condicoesLiberadas}
             />
           )}
 

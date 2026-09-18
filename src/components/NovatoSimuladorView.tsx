@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Pencil } from 'lucide-react';
-import { CommercialCondition, PdfExportSettings, Product, SimulationData, TelaVisibilitySettings } from '../types';
+import { ActiveTab, CommercialCondition, PdfExportSettings, Product, SimulationData, TelaVisibilitySettings } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { MorarBarDatum, MorarFaixa, MorarPieDatum } from './PdfExportModalMorar';
@@ -31,6 +31,10 @@ interface NovatoSimuladorViewProps {
   product: Product;
   condition: CommercialCondition;
   simulationData: SimulationData;
+  // Condições comerciais liberadas para o dropdown do cabeçalho (ver
+  // CONDICOES_APP em config/telasApp.ts) — repassado direto ao
+  // FichaMorarTopBar. `undefined` = sem restrição (Administrador).
+  condicoesLiberadas?: string[];
 
   // Cabeçalho de navegação (FichaMorarTopBar) — mesmos props do editor
   // completo, para o dropdown de Empreendimento/Condição funcionar aqui
@@ -38,8 +42,8 @@ interface NovatoSimuladorViewProps {
   products?: Product[];
   onSelectProduct?: (product: Product, conditionId: string) => void;
   onProductChange: (prodId: string) => void;
-  onSelectCondition?: (condition: CommercialCondition) => void;
-  onConditionChange: (condId: string) => void;
+  onSelectCondition?: (condition: CommercialCondition, targetTab?: ActiveTab) => void;
+  onConditionChange: (condId: string, targetTab?: ActiveTab) => void;
 
   // Barra de ação (FichaMorarActionBar) — Salvar/PDF/Limpar.
   onLimpar: () => void;
@@ -133,6 +137,7 @@ interface NovatoSimuladorViewProps {
 export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   pdfSettings,
   telaSettings,
+  condicoesLiberadas,
   product,
   condition,
   simulationData,
@@ -293,6 +298,8 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
         onSelectCondition={onSelectCondition}
         onConditionChange={onConditionChange}
         deliveryText={deliveryText}
+        condicoesLiberadas={condicoesLiberadas}
+        isSimplificado={true}
       />
 
       {/* CARD DO IMÓVEL E CLIENTE — mesmos componentes do editor completo
