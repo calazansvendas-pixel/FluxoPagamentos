@@ -861,6 +861,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
     return acc + ((Number(f.qtd) || 0) * valLiq);
   }, 0);
   const somaTotalParceladoMorar = Math.round((somaTotalObra + somaTotalPos) * 100) / 100;
+  // Mesmos totais por fase acima, arredondados — usados pela tela
+  // simplificada (NovatoSimuladorView) nas linhas "Total Fase Obra"/"Total
+  // Fase Pós-Obra", que exibem só as parcelas do imóvel, SEM o rateio de
+  // ITBI/Registro (diferente de totalFaseObraComITBI/totalFasePosComITBI
+  // abaixo, usados pelo editor completo e pelos indicadores de risco).
+  const totalFaseObraSemITBI = Math.round(somaTotalObra * 100) / 100;
+  const totalFasePosSemITBI = Math.round(somaTotalPos * 100) / 100;
 
   // SOMA TOTAL DO ITBI PARCELADO E TOTAIS POR FASE C/ ITBI
   // A parcela mensal é sempre um valor arredondado (ex.: R$ 594,25); somando
@@ -2094,13 +2101,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           faixasObra={faixasObra}
           onObraTotalChange={handleTotalObraParcelasChange}
           maxParcObra={mesesObraPadraoPolitica}
-          totalFaseObraComITBI={totalFaseObraComITBI}
+          totalFaseObraSemITBI={totalFaseObraSemITBI}
           dataPos={dataPos}
           totalParcPos={totalParcPos}
           faixasPos={faixasPos}
           onPosTotalChange={handleTotalPosParcelasChange}
           maxParcPos={mesesPosPadraoPolitica}
-          totalFasePosComITBI={totalFasePosComITBI}
+          totalFasePosSemITBI={totalFasePosSemITBI}
           saldoProSolutoRestante={saldoProSolutoRestante}
           onLimparFluxo={limparFluxoPagamento}
           dataITBI={dataITBI}

@@ -464,6 +464,16 @@ interface PerfilRow {
   created_at?: string;
 }
 
+// O cargo "Corretor Novato" foi renomeado para "Corretor Parceiro" só no
+// código (types.ts/telasApp.ts) — linhas já gravadas no Supabase antes dessa
+// mudança continuam com a string antiga até alguém rodar um UPDATE manual na
+// tabela `perfis`. Normaliza aqui, na fronteira leitura-do-banco, para que a
+// label exibida (cabeçalho, listagens de equipe etc.) já saia corrigida
+// mesmo antes dessa migração de dados.
+function normalizarCargoLegado(cargo: Cargo): Cargo {
+  return (cargo as string) === 'Corretor Novato' ? 'Corretor Parceiro' : cargo;
+}
+
 function rowParaPerfil(row: PerfilRow): PerfilUsuario {
   return {
     id: row.id,
@@ -473,7 +483,7 @@ function rowParaPerfil(row: PerfilRow): PerfilUsuario {
     cpf: row.cpf,
     imobiliaria: row.imobiliaria,
     creci: row.creci || undefined,
-    cargo: row.cargo,
+    cargo: normalizarCargoLegado(row.cargo),
     superiorId: row.superior_id,
     status: row.status,
     telasLiberadas: row.telas_liberadas || [],
@@ -737,7 +747,7 @@ export const authService = {
         cpf: row.cpf,
         imobiliaria: row.imobiliaria,
         creci: row.creci || undefined,
-        cargo: row.cargo,
+        cargo: normalizarCargoLegado(row.cargo),
         superiorId: row.superior_id,
         telasLiberadas: row.telas_liberadas || [],
         empreendimentosLiberados: row.empreendimentos_liberados

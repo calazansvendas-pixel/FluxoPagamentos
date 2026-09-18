@@ -113,17 +113,20 @@ interface NovatoSimuladorViewProps {
   // (currentCond.mesesObra/mesesPos) — o "+" do stepper desabilita ao
   // alcançar o teto, mesmo limite já aplicado no editor completo.
   maxParcObra?: number;
-  // Totalizador final da Fase Obra (parcelas líquidas + ITBI rateado) já
-  // calculado pelo motor em FichaMorar.tsx — exibido abaixo da lista de
-  // parcelas, sem recriar a lógica de soma aqui.
-  totalFaseObraComITBI: number;
+  // Totalizador final da Fase Obra já calculado pelo motor em
+  // FichaMorar.tsx (somaTotalObra) — exibido abaixo da lista de parcelas,
+  // sem recriar a lógica de soma aqui. Só as parcelas do imóvel: SEM o
+  // rateio de ITBI/Registro (diferente do "Total com ITBI" do editor
+  // completo — nesta tela simplificada o totalizador é sempre líquido de
+  // ITBI, por pedido explícito).
+  totalFaseObraSemITBI: number;
 
   dataPos: string;
   totalParcPos: number;
   faixasPos: MorarFaixa[];
   onPosTotalChange: (newTotal: number) => void;
   maxParcPos?: number;
-  totalFasePosComITBI: number;
+  totalFasePosSemITBI: number;
   // Saldo do Pró-Soluto ainda não coberto pelo Ato (Imóvel) — mesmo cálculo
   // do editor completo (ver FichaMorar.tsx). `faixasObra`/`faixasPos` podem
   // carregar um resíduo do motor que não chega a ser exatamente zero; o
@@ -223,13 +226,13 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   faixasObra,
   onObraTotalChange,
   maxParcObra,
-  totalFaseObraComITBI,
+  totalFaseObraSemITBI,
   dataPos,
   totalParcPos,
   faixasPos,
   onPosTotalChange,
   maxParcPos,
-  totalFasePosComITBI,
+  totalFasePosSemITBI,
   saldoProSolutoRestante,
   onLimparFluxo,
   dataITBI,
@@ -526,11 +529,11 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                     <button
                       type="button"
                       onClick={onLimparFluxo}
-                      className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md text-[10px] font-semibold transition-all flex items-center gap-1 cursor-pointer border border-slate-200/80"
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-600"
                       title="Restaurar Ato, ITBI no Ato e correções para a sugestão original da unidade, mantendo Torre e Unidade"
                     >
-                      <RotateCcw className="w-2.5 h-2.5 text-slate-500" />
-                      <span>Limpar Fluxo</span>
+                      <RotateCcw className="w-3 h-3 text-morar-600" />
+                      <span>Limpar</span>
                     </button>
                   </div>
                 </div>
@@ -641,7 +644,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                 </div>
                 <div className="flex justify-between items-center bg-morar-50 px-2.5 py-1.5 rounded-lg border border-morar-100 mt-1.5">
                   <span className="text-[11px] font-bold text-slate-700">Total Fase Obra:</span>
-                  <strong className="text-xs font-black text-morar-700">{fmt(totalFaseObraComITBI)}</strong>
+                  <strong className="text-xs font-black text-morar-700">{fmt(totalFaseObraSemITBI)}</strong>
                 </div>
               </div>
 
@@ -677,7 +680,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                   </div>
                   <div className="flex justify-between items-center bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-100 mt-1.5">
                     <span className="text-[11px] font-bold text-slate-700">Total Fase Pós-Obra:</span>
-                    <strong className="text-xs font-black text-indigo-700">{fmt(totalFasePosComITBI)}</strong>
+                    <strong className="text-xs font-black text-indigo-700">{fmt(totalFasePosSemITBI)}</strong>
                   </div>
                 </div>
               )}
