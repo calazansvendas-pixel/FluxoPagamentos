@@ -551,7 +551,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                       onChange={(e) => setAtoInputText(e.target.value)}
                       onBlur={(e) => handleFinishAtoEdit(e.target.value)}
                       placeholder={formatCurrency(valorAtoMinimo)}
-                      className="text-right bg-white text-slate-900 font-black text-xs sm:text-sm rounded-md border border-morar-200 px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-morar-300"
+                      className="text-right bg-white text-slate-900 font-normal text-xs sm:text-sm rounded-md border border-morar-200 px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-morar-300"
                     />
                   </div>
 
@@ -585,7 +585,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                       onChange={(e) => setItbiInputText(e.target.value)}
                       onBlur={(e) => handleFinishITBIEdit(e.target.value)}
                       placeholder="R$ 0,00"
-                      className="text-right bg-white text-morar-900 font-black text-xs sm:text-sm rounded-md border border-slate-200 px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-morar-300"
+                      className="text-right bg-white text-morar-900 font-normal text-xs sm:text-sm rounded-md border border-slate-200 px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-morar-300"
                     />
                   </div>
                 </div>
@@ -606,7 +606,7 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                         colorClass="bg-white border-fuchsia-200 text-fuchsia-700"
                       />
                     )}
-                    <strong className="text-fuchsia-800 font-black text-xs sm:text-sm text-right">
+                    <strong className="text-fuchsia-800 font-normal text-xs sm:text-sm text-right">
                       {fmt(comissaoApartadaValor)} <span className="font-semibold">({fmt(comissaoApartadaParcelaValor)}/mês)</span>
                     </strong>
                   </div>
