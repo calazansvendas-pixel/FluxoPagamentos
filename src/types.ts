@@ -177,7 +177,7 @@ export type Cargo =
   | 'Assistente de Vendas'
   | 'Assistente de Crédito'
   | 'Corretor'
-  | 'Corretor Novato';
+  | 'Corretor Parceiro';
 
 export type StatusConta = 'pendente' | 'ativo' | 'pausado';
 

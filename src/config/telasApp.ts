@@ -23,7 +23,7 @@ export const TELAS_APP: TelaApp[] = [
   // Versão simplificada (visual de Ficha Exportada, com um subconjunto restrito
   // de campos editáveis) da Ficha Morar — pensada para corretores iniciantes,
   // mas liberável pelo Administrador para QUALQUER cargo (não é hardcoded para
-  // "Corretor Novato"). Aba própria ('ficha-morar-simplificada'), separada de
+  // "Corretor Parceiro"). Aba própria ('ficha-morar-simplificada'), separada de
   // 'ficha-morar', para que a liberação desta tela seja independente da tela
   // "Sinal c/ Morar" tradicional — ver FichaMorar.tsx (prop isNovato). O rótulo
   // "Sinal c/ Morar**" (com os dois asteriscos) é proposital: sinaliza ao
@@ -79,7 +79,7 @@ export const CARGOS: Cargo[] = [
   'Assistente de Vendas',
   'Assistente de Crédito',
   'Corretor',
-  'Corretor Novato'
+  'Corretor Parceiro'
 ];
 
 // Sugestão inicial de telas liberadas por cargo, usada só para pré-preencher a
@@ -102,7 +102,7 @@ export const TELAS_PADRAO_POR_CARGO: Record<Cargo, string[]> = {
   'Assistente de Vendas': TELAS_PADRAO_BASE,
   'Assistente de Crédito': TELAS_PADRAO_BASE,
   'Corretor': TELAS_PADRAO_BASE,
-  'Corretor Novato': TELAS_PADRAO_BASE
+  'Corretor Parceiro': TELAS_PADRAO_BASE
 };
 
 export interface CondicaoApp {

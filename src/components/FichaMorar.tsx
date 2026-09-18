@@ -2073,6 +2073,16 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               recalcularSeriesParaAtoManual(novoValBruto);
             }
           }}
+          valAtoITBI={valAtoITBI}
+          valorTotalITBI={valorTotalITBI}
+          isFirstHome={isFirstHomeLocal}
+          onToggleFirstHome={handleToggleFirstHome}
+          onITBIChange={(novoVal) => {
+            setValAtoITBI(novoVal);
+            setItbiAtoManualFloor(novoVal > 0 ? novoVal : null);
+            setItbiObraValorManual(null);
+            setItbiPosValorManual(null);
+          }}
           comissaoApartadaValor={comissaoApartadaValor}
           comissaoApartadaParcelasQtd={comissaoApartadaParcelasQtd}
           comissaoApartadaParcelaValor={comissaoApartadaParcelaValor}
@@ -2084,12 +2094,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           faixasObra={faixasObra}
           onObraTotalChange={handleTotalObraParcelasChange}
           maxParcObra={mesesObraPadraoPolitica}
+          totalFaseObraComITBI={totalFaseObraComITBI}
           dataPos={dataPos}
           totalParcPos={totalParcPos}
           faixasPos={faixasPos}
           onPosTotalChange={handleTotalPosParcelasChange}
           maxParcPos={mesesPosPadraoPolitica}
+          totalFasePosComITBI={totalFasePosComITBI}
           saldoProSolutoRestante={saldoProSolutoRestante}
+          onLimparFluxo={limparFluxoPagamento}
           dataITBI={dataITBI}
           valorITBI={despCartoriasEfetivas}
           itbiObraQtd={itbiObraTotalMeses}

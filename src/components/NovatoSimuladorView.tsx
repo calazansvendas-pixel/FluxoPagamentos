@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Pencil } from 'lucide-react';
+import { Pencil, RotateCcw } from 'lucide-react';
 import { ActiveTab, CommercialCondition, PdfExportSettings, Product, SimulationData, TelaVisibilitySettings } from '../types';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
+import { formatCurrency, formatForEdit, parseCurrency } from '../utils/formatters';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Bar, LabelList } from 'recharts';
 import { MorarBarDatum, MorarFaixa, MorarPieDatum } from './PdfExportModalMorar';
 import { MonthStepper } from './MonthStepper';
@@ -84,6 +84,16 @@ interface NovatoSimuladorViewProps {
   valorAtoMinimo: number;
   valorAtoMaximo: number;
   onAtoChange: (novoValor: number | null) => void;
+  // ITBI no Ato — mesmo bloco/comportamento do editor completo (ver
+  // FluxoEntradaConstrutora.tsx, Card 2): valor já pago do ITBI/Registro
+  // adiantado no Ato, com alternador "Com Desc./Sem Desc." (1º x 2º imóvel)
+  // e teto no total de ITBI da unidade. Estado global (valAtoITBI em
+  // FichaMorar.tsx), a mesma trava de piso/teto do editor completo.
+  valAtoITBI: number;
+  valorTotalITBI: number;
+  isFirstHome: boolean;
+  onToggleFirstHome: () => void;
+  onITBIChange: (novoValor: number) => void;
   comissaoApartadaValor?: number;
   comissaoApartadaParcelasQtd?: number;
   comissaoApartadaParcelaValor?: number;
@@ -103,12 +113,17 @@ interface NovatoSimuladorViewProps {
   // (currentCond.mesesObra/mesesPos) — o "+" do stepper desabilita ao
   // alcançar o teto, mesmo limite já aplicado no editor completo.
   maxParcObra?: number;
+  // Totalizador final da Fase Obra (parcelas líquidas + ITBI rateado) já
+  // calculado pelo motor em FichaMorar.tsx — exibido abaixo da lista de
+  // parcelas, sem recriar a lógica de soma aqui.
+  totalFaseObraComITBI: number;
 
   dataPos: string;
   totalParcPos: number;
   faixasPos: MorarFaixa[];
   onPosTotalChange: (newTotal: number) => void;
   maxParcPos?: number;
+  totalFasePosComITBI: number;
   // Saldo do Pró-Soluto ainda não coberto pelo Ato (Imóvel) — mesmo cálculo
   // do editor completo (ver FichaMorar.tsx). `faixasObra`/`faixasPos` podem
   // carregar um resíduo do motor que não chega a ser exatamente zero; o
@@ -116,6 +131,13 @@ interface NovatoSimuladorViewProps {
   // contra este saldo antes de mostrar a parcela (saldoProSolutoRestante
   // <= 0 → exibe R$ 0,00). Essa tela precisa da mesma trava.
   saldoProSolutoRestante: number;
+  // "Limpar Fluxo" (reset parcial) — mesma função já usada pelo botão
+  // "Limpar" do card "Fluxo de Entrada c/ Construtora" no editor completo
+  // (limparFluxoPagamento em FichaMorar.tsx): restaura Ato, ITBI no Ato,
+  // Ato Premiado e overrides manuais de Obra/Pós para a sugestão original
+  // da unidade, SEM tocar em Torre/Unidade (isso é o botão "Limpar" de
+  // cima, onLimpar/handleResetFicha).
+  onLimparFluxo: () => void;
 
   dataITBI: string;
   valorITBI: number;
@@ -185,6 +207,11 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   valorAtoMinimo,
   valorAtoMaximo,
   onAtoChange,
+  valAtoITBI,
+  valorTotalITBI,
+  isFirstHome,
+  onToggleFirstHome,
+  onITBIChange,
   comissaoApartadaValor = 0,
   comissaoApartadaParcelasQtd = 0,
   comissaoApartadaParcelaValor = 0,
@@ -196,12 +223,15 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
   faixasObra,
   onObraTotalChange,
   maxParcObra,
+  totalFaseObraComITBI,
   dataPos,
   totalParcPos,
   faixasPos,
   onPosTotalChange,
   maxParcPos,
+  totalFasePosComITBI,
   saldoProSolutoRestante,
+  onLimparFluxo,
   dataITBI,
   valorITBI,
   itbiObraQtd,
@@ -276,6 +306,39 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
 
     onAtoChange(parsed);
     setAtoInputText(formatCurrency(parsed));
+  };
+
+  // Edição do ITBI no Ato: mesma trava do editor completo (ver
+  // FluxoEntradaConstrutora.handleFinishITBIEdit) — nunca deixa exceder o
+  // total de ITBI/Registro da unidade.
+  const [isEditingITBI, setIsEditingITBI] = useState<boolean>(false);
+  const [itbiInputText, setItbiInputText] = useState<string>('');
+
+  useEffect(() => {
+    if (!isEditingITBI) {
+      setItbiInputText(valAtoITBI > 0 ? formatCurrency(valAtoITBI) : '');
+    }
+  }, [valAtoITBI, isEditingITBI]);
+
+  const handleFinishITBIEdit = (rawText: string) => {
+    setIsEditingITBI(false);
+    const parsed = parseFlexible(rawText);
+
+    if (rawText.trim() === '' || parsed <= 0) {
+      onITBIChange(0);
+      setItbiInputText('');
+      return;
+    }
+
+    if (valorTotalITBI > 0 && parsed > valorTotalITBI + 0.01) {
+      onITBIChange(valorTotalITBI);
+      setItbiInputText(formatCurrency(valorTotalITBI));
+      onShowToast(`O pagamento de ITBI no Ato não pode exceder o total de ${formatCurrency(valorTotalITBI)}.`);
+      return;
+    }
+
+    onITBIChange(parsed);
+    setItbiInputText(formatCurrency(parsed));
   };
 
   const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, payload }: any) => {
@@ -449,32 +512,79 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
           {/* ================= COLUNA DA DIREITA ================= */}
           <div className="space-y-3">
             {telaSettings.mostrarBloco3 && (<>
-              {/* CARD: PERÍODO DE PAGAMENTOS (ATO) — valor editável */}
+              {/* CARD: PERÍODO DE PAGAMENTOS (ATO + ITBI NO ATO) — valores editáveis */}
               <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                   <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-morar-600" />
                     Período de Pagamentos
                   </h3>
-                  <span className="text-[10px] font-semibold text-slate-500">
-                    A partir de: <strong className="text-slate-800">{dataAto}</strong>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      A partir de: <strong className="text-slate-800">{dataAto}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onLimparFluxo}
+                      className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md text-[10px] font-semibold transition-all flex items-center gap-1 cursor-pointer border border-slate-200/80"
+                      title="Restaurar Ato, ITBI no Ato e correções para a sugestão original da unidade, mantendo Torre e Unidade"
+                    >
+                      <RotateCcw className="w-2.5 h-2.5 text-slate-500" />
+                      <span>Limpar Fluxo</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg border border-morar-200 text-xs">
-                  <span className="font-bold text-slate-700 flex items-center gap-1">
-                    Ato: <Pencil className="w-2.5 h-2.5 text-morar-600" />
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={atoInputText}
-                    onFocus={() => setIsEditingAto(true)}
-                    onChange={(e) => setAtoInputText(e.target.value)}
-                    onBlur={(e) => handleFinishAtoEdit(e.target.value)}
-                    placeholder={formatCurrency(valorAtoMinimo)}
-                    className="text-right bg-white text-slate-900 font-black text-xs sm:text-sm rounded-md border border-morar-200 px-2 py-1 w-32 focus:outline-none focus:ring-2 focus:ring-morar-300"
-                  />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-slate-50 px-2.5 py-2 rounded-lg border border-morar-200 text-xs flex flex-col gap-1">
+                    <span className="font-bold text-slate-700 flex items-center gap-1">
+                      Ato: <Pencil className="w-2.5 h-2.5 text-morar-600" />
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={atoInputText}
+                      onFocus={() => setIsEditingAto(true)}
+                      onChange={(e) => setAtoInputText(e.target.value)}
+                      onBlur={(e) => handleFinishAtoEdit(e.target.value)}
+                      placeholder={formatCurrency(valorAtoMinimo)}
+                      className="text-right bg-white text-slate-900 font-black text-xs sm:text-sm rounded-md border border-morar-200 px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-morar-300"
+                    />
+                  </div>
+
+                  <div className="bg-slate-50 px-2.5 py-2 rounded-lg border border-slate-200 text-xs flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-morar-800 flex items-center gap-1">
+                        ITBI no Ato: <Pencil className="w-2.5 h-2.5 text-morar-600" />
+                      </span>
+                      <button
+                        type="button"
+                        onClick={onToggleFirstHome}
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer shrink-0 ${
+                          isFirstHome
+                            ? 'bg-morar-50 text-morar-700 border-morar-100 hover:bg-morar-100'
+                            : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                        }`}
+                        title="Alternar entre Com Desconto e Sem Desconto no ITBI"
+                      >
+                        {isFirstHome ? 'Com Desc.' : 'Sem Desc.'}
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={itbiInputText}
+                      onFocus={(e) => {
+                        setIsEditingITBI(true);
+                        setItbiInputText(valAtoITBI > 0 ? formatForEdit(valAtoITBI) : '');
+                        e.target.select();
+                      }}
+                      onChange={(e) => setItbiInputText(e.target.value)}
+                      onBlur={(e) => handleFinishITBIEdit(e.target.value)}
+                      placeholder="R$ 0,00"
+                      className="text-right bg-white text-morar-900 font-black text-xs sm:text-sm rounded-md border border-slate-200 px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-morar-300"
+                    />
+                  </div>
                 </div>
                 <p className="text-[10px] text-slate-400 px-1">
                   Sinal Mínimo Sugerido: <strong className="text-slate-500">{formatCurrency(valorAtoMinimo)}</strong>
@@ -529,6 +639,10 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                       </div>
                     ))}
                 </div>
+                <div className="flex justify-between items-center bg-morar-50 px-2.5 py-1.5 rounded-lg border border-morar-100 mt-1.5">
+                  <span className="text-[11px] font-bold text-slate-700">Total Fase Obra:</span>
+                  <strong className="text-xs font-black text-morar-700">{fmt(totalFaseObraComITBI)}</strong>
+                </div>
               </div>
 
               {/* CARD: CORREÇÃO IPCA+1% - PÓS — stepper `[ - Nx + ]` */}
@@ -560,6 +674,10 @@ export const NovatoSimuladorView: React.FC<NovatoSimuladorViewProps> = ({
                           <strong className="text-slate-900 font-bold text-xs">{fmt(f.valor)}</strong>
                         </div>
                       ))}
+                  </div>
+                  <div className="flex justify-between items-center bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-100 mt-1.5">
+                    <span className="text-[11px] font-bold text-slate-700">Total Fase Pós-Obra:</span>
+                    <strong className="text-xs font-black text-indigo-700">{fmt(totalFasePosComITBI)}</strong>
                   </div>
                 </div>
               )}

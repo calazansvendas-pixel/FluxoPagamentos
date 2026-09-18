@@ -61,7 +61,7 @@ export const telaVisibilidadeService = {
   // quadros desta condição. Sem linha configurada ainda, mostra tudo.
   //
   // Cargos com um superior mapeado em CARGO_SUPERIOR_HIERARQUICO (hoje,
-  // Corretor e Corretor Novato — ambos sob Gerente) têm a própria
+  // Corretor e Corretor Parceiro — ambos sob Gerente) têm a própria
   // configuração restringida em cascata pela do superior: a permissão do
   // Gerente atua como teto (ver aplicarHerancaHierarquicaDeVisibilidade).
   // Cargos sem superior mapeado (Gerente incluso) seguem o comportamento

@@ -31,7 +31,7 @@ export const DEFAULT_TELA_VISIBILITY_SETTINGS_BY_KIND: TelaVisibilitySettingsByK
 // abaixo dele: um quadro só aparece para o subordinado se TODOS os cargos da
 // cadeia (o próprio cargo + cada superior mapeado) o liberarem.
 //   - Regra do NÃO: Gerente com o bloco oculto => oculto para Corretor e
-//     Corretor Novato, mesmo que a configuração individual deles diga "visível".
+//     Corretor Parceiro, mesmo que a configuração individual deles diga "visível".
 //   - Regra do SIM INDIVIDUAL: Gerente com o bloco visível => prevalece a
 //     configuração individual do próprio cargo (pode ser visível ou oculta).
 //
@@ -40,7 +40,7 @@ export const DEFAULT_TELA_VISIBILITY_SETTINGS_BY_KIND: TelaVisibilitySettingsByK
 // tem um único elemento e a herança não se aplica.
 export const CARGO_SUPERIOR_HIERARQUICO: Partial<Record<Cargo, Cargo>> = {
   'Corretor': 'Gerente',
-  'Corretor Novato': 'Gerente',
+  'Corretor Parceiro': 'Gerente',
 };
 
 // Monta a cadeia [cargo, superior imediato, superior do superior, ...],

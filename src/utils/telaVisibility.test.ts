@@ -16,8 +16,8 @@ describe('cadeiaHierarquicaDeCargos', () => {
     expect(cadeiaHierarquicaDeCargos('Corretor')).toEqual(['Corretor', 'Gerente']);
   });
 
-  it('Corretor Novato sobe até Gerente', () => {
-    expect(cadeiaHierarquicaDeCargos('Corretor Novato')).toEqual(['Corretor Novato', 'Gerente']);
+  it('Corretor Parceiro sobe até Gerente', () => {
+    expect(cadeiaHierarquicaDeCargos('Corretor Parceiro')).toEqual(['Corretor Parceiro', 'Gerente']);
   });
 
   it('Gerente não tem superior mapeado (topo desta cadeia)', () => {
@@ -31,7 +31,7 @@ describe('cadeiaHierarquicaDeCargos', () => {
 
 describe('aplicarHerancaHierarquicaDeVisibilidade', () => {
   const cadeiaCorretor: Cargo[] = ['Corretor', 'Gerente'];
-  const cadeiaNovato: Cargo[] = ['Corretor Novato', 'Gerente'];
+  const cadeiaParceiro: Cargo[] = ['Corretor Parceiro', 'Gerente'];
 
   it('Regra do SIM INDIVIDUAL: Gerente Vê + Corretor Vê -> Corretor vê', () => {
     const efetivo = aplicarHerancaHierarquicaDeVisibilidade(
@@ -66,24 +66,24 @@ describe('aplicarHerancaHierarquicaDeVisibilidade', () => {
     expect(efetivo.mostrarBloco1).toBe(false);
   });
 
-  it('Regra do NÃO também vale para Corretor Novato', () => {
+  it('Regra do NÃO também vale para Corretor Parceiro', () => {
     const efetivo = aplicarHerancaHierarquicaDeVisibilidade(
       {
-        'Corretor Novato': vis({ mostrarBloco2: true }),
+        'Corretor Parceiro': vis({ mostrarBloco2: true }),
         'Gerente': vis({ mostrarBloco2: false })
       },
-      cadeiaNovato
+      cadeiaParceiro
     );
     expect(efetivo.mostrarBloco2).toBe(false);
   });
 
-  it('Regra do SIM INDIVIDUAL também vale para Corretor Novato (Gerente vê, Novato não vê -> oculto)', () => {
+  it('Regra do SIM INDIVIDUAL também vale para Corretor Parceiro (Gerente vê, Parceiro não vê -> oculto)', () => {
     const efetivo = aplicarHerancaHierarquicaDeVisibilidade(
       {
-        'Corretor Novato': vis({ mostrarBloco3: false }),
+        'Corretor Parceiro': vis({ mostrarBloco3: false }),
         'Gerente': vis({ mostrarBloco3: true })
       },
-      cadeiaNovato
+      cadeiaParceiro
     );
     expect(efetivo.mostrarBloco3).toBe(false);
   });
