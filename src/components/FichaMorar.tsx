@@ -1049,7 +1049,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
 
   // CURVA OFICIAL MORAR DE DISTRIBUIÇÃO AUTOMÁTICA
   // Calcula dinamicamente as séries por teto de renda, extração do ITBI e fechamento do ato residual
-  const aplicarDistribuicaoOficialMorar = () => {
+  const aplicarDistribuicaoOficialMorar = (overrides?: { atoITBI?: number }) => {
     if (!hasUnitSelected || (sinalTotalSemITBIEfetivo <= 0 && price <= 0)) return;
 
     const mesesObraPadrao = currentCond?.mesesObra ?? 33;
@@ -1083,7 +1083,7 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
       globalSeriesPct: globalPct,
       serieMesesCapacidades: serieMesesCapacidades,
       sinalMinimo: sinalMinimoVal,
-      atoITBI: itbiAtoManualFloor ?? 0,
+      atoITBI: overrides?.atoITBI !== undefined ? overrides.atoITBI : (itbiAtoManualFloor ?? 0),
       isAtoPremiadoEnabled,
       atoPremiadoPct: pctAtoPremiadoCond,
       isComissaoApartada,
@@ -2087,15 +2087,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
           onITBIChange={(novoVal) => {
             setValAtoITBI(novoVal);
             setItbiAtoManualFloor(novoVal > 0 ? novoVal : null);
-            setItbiObraValorManual(null);
-            setItbiPosValorManual(null);
             // Reavalia imediatamente o risco (comprometimento de renda) com o
-            // novo ITBI pago no Ato: como o ITBI parcelado restante diminui, a
-            // mesma função de auto-correção usada quando o Ato é digitado acima
-            // do limite recalcula/otimiza o Ato e as séries (S1/S2/S3) para a
-            // nova margem de risco. `novoVal` é passado via override porque o
-            // state (itbiAtoManualFloor) ainda não foi commitado neste tick.
-            recalcularSeriesParaAtoManual(valorAtoEfetivo, undefined, { atoITBI: novoVal });
+            // novo ITBI pago no Ato invocando a MESMA rotina global de
+            // distribuição automática usada para reequilibrar uma proposta
+            // fora do limite — ela recalcula e sobrescreve o Ato (Imóvel)
+            // (valAtoManual/atoInputText) para o novo valor otimizado, além
+            // das séries S1/S2/S3, em vez de só elevar o Ato quando estourava
+            // o teto. `novoVal` é passado via override porque o state
+            // (itbiAtoManualFloor) ainda não foi commitado neste tick.
+            aplicarDistribuicaoOficialMorar({ atoITBI: novoVal });
           }}
           comissaoApartadaValor={comissaoApartadaValor}
           comissaoApartadaParcelasQtd={comissaoApartadaParcelasQtd}
@@ -2754,19 +2754,15 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               // recalculagens (ex.: ao mudar a Qtd. Meses) partem dele, nunca
               // de zero, mas também nunca de uma sugestão automática anterior.
               setItbiAtoManualFloor(novoVal > 0 ? novoVal : null);
-              // Zera os valores "travados" da parcela de ITBI (obra/pós) para que
-              // recalculem a partir do saldoITBI atualizado (saldoITBI já reage ao
-              // novo "ITBI no Ato" sozinho, mas itbiObraValorManual/itbiPosValorManual
-              // ficam presos no valor da última vez que a série foi recalculada).
-              setItbiObraValorManual(null);
-              setItbiPosValorManual(null);
               // Reavalia imediatamente o risco (comprometimento de renda) com o
-              // novo ITBI pago no Ato: como o ITBI parcelado restante diminui, a
-              // mesma função de auto-correção usada quando o Ato é digitado acima
-              // do limite recalcula/otimiza o Ato e as séries (S1/S2/S3) para a
-              // nova margem de risco. `novoVal` é passado via override porque o
-              // state (itbiAtoManualFloor) ainda não foi commitado neste tick.
-              recalcularSeriesParaAtoManual(valorAtoEfetivo, undefined, { atoITBI: novoVal });
+              // novo ITBI pago no Ato invocando a MESMA rotina global de
+              // distribuição automática usada para reequilibrar uma proposta
+              // fora do limite — ela recalcula e sobrescreve o Ato (Imóvel)
+              // (valAtoManual/atoInputText) para o novo valor otimizado, além
+              // das séries S1/S2/S3, em vez de só elevar o Ato quando estourava
+              // o teto. `novoVal` é passado via override porque o state
+              // (itbiAtoManualFloor) ainda não foi commitado neste tick.
+              aplicarDistribuicaoOficialMorar({ atoITBI: novoVal });
             }}
             descontoAto={descontoAto}
             isAtoPremiadoActive={isAtoPremiadoEnabled}
