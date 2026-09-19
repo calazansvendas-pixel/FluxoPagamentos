@@ -2089,6 +2089,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
             setItbiAtoManualFloor(novoVal > 0 ? novoVal : null);
             setItbiObraValorManual(null);
             setItbiPosValorManual(null);
+            // Reavalia imediatamente o risco (comprometimento de renda) com o
+            // novo ITBI pago no Ato: como o ITBI parcelado restante diminui, a
+            // mesma função de auto-correção usada quando o Ato é digitado acima
+            // do limite recalcula/otimiza o Ato e as séries (S1/S2/S3) para a
+            // nova margem de risco. `novoVal` é passado via override porque o
+            // state (itbiAtoManualFloor) ainda não foi commitado neste tick.
+            recalcularSeriesParaAtoManual(valorAtoEfetivo, undefined, { atoITBI: novoVal });
           }}
           comissaoApartadaValor={comissaoApartadaValor}
           comissaoApartadaParcelasQtd={comissaoApartadaParcelasQtd}
@@ -2753,6 +2760,13 @@ export const FichaMorar: React.FC<FichaMorarProps> = ({
               // ficam presos no valor da última vez que a série foi recalculada).
               setItbiObraValorManual(null);
               setItbiPosValorManual(null);
+              // Reavalia imediatamente o risco (comprometimento de renda) com o
+              // novo ITBI pago no Ato: como o ITBI parcelado restante diminui, a
+              // mesma função de auto-correção usada quando o Ato é digitado acima
+              // do limite recalcula/otimiza o Ato e as séries (S1/S2/S3) para a
+              // nova margem de risco. `novoVal` é passado via override porque o
+              // state (itbiAtoManualFloor) ainda não foi commitado neste tick.
+              recalcularSeriesParaAtoManual(valorAtoEfetivo, undefined, { atoITBI: novoVal });
             }}
             descontoAto={descontoAto}
             isAtoPremiadoActive={isAtoPremiadoEnabled}
