@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
 interface MonthStepperProps {
@@ -32,6 +32,32 @@ export const MonthStepper: React.FC<MonthStepperProps> = ({
   const atMin = disabled || total <= min;
   const atMax = disabled || (max !== undefined && total >= max);
 
+  // Estado de edição do valor central — o mesmo padrão de digitação livre +
+  // confirmação no blur/Enter usado nos demais campos numéricos do app,
+  // adaptado a um inteiro em vez de moeda.
+  const [isEditing, setIsEditing] = useState(false);
+  const [inputText, setInputText] = useState(String(total));
+
+  useEffect(() => {
+    if (!isEditing) setInputText(String(total));
+  }, [total, isEditing]);
+
+  const clamp = (valor: number): number => {
+    let v = Math.max(min, Math.round(valor));
+    if (max !== undefined) v = Math.min(max, v);
+    return v;
+  };
+
+  const handleFinishEdit = (rawText: string) => {
+    setIsEditing(false);
+    const parsed = parseInt(rawText, 10);
+    // Digitação inválida ou vazia: volta para o valor vigente, sem disparar
+    // recálculo nenhum.
+    const novoTotal = isNaN(parsed) ? total : clamp(parsed);
+    setInputText(String(novoTotal));
+    if (novoTotal !== total) onChange(novoTotal);
+  };
+
   return (
     <div className={`flex items-center gap-1 border rounded-lg px-1 py-0.5 ${colorClass}`}>
       <button
@@ -43,7 +69,33 @@ export const MonthStepper: React.FC<MonthStepperProps> = ({
       >
         <Minus className="w-3 h-3" />
       </button>
-      <span className="text-[11px] font-extrabold w-9 text-center tabular-nums">{total}X</span>
+      <span className="flex items-center justify-center w-9">
+        <input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          step={1}
+          disabled={disabled}
+          value={isEditing ? inputText : total}
+          onFocus={(e) => {
+            setIsEditing(true);
+            setInputText(String(total));
+            e.target.select();
+          }}
+          onChange={(e) => setInputText(e.target.value)}
+          onBlur={(e) => handleFinishEdit(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleFinishEdit(inputText);
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          title="Digitar a quantidade diretamente"
+          className="min-w-0 flex-1 bg-transparent border-none p-0 text-[11px] font-extrabold text-center tabular-nums focus:outline-none disabled:cursor-not-allowed appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+        />
+        <span className="text-[11px] font-extrabold shrink-0">X</span>
+      </span>
       <button
         type="button"
         onClick={() => onChange(max !== undefined ? Math.min(max, total + 1) : total + 1)}
