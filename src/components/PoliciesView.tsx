@@ -22,7 +22,31 @@ import {
 } from 'lucide-react';
 import { CommercialCondition, Product, SelectedUnit, SimulationData } from '../types';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
-import { calculatePresentValue, ensureProductConditions, calculatePolicyRiskValues, decomposeMorarMonths, getConditionKind } from '../utils/calculations';
+import { calculatePresentValue, ensureProductConditions, calculatePolicyRiskValues, decomposeMorarMonths, getConditionKind, ConditionKind } from '../utils/calculations';
+
+// Par "condição base -> condição com Comissão Apartada" dentro do mesmo
+// empreendimento (ver blocosMeta.ts e o comentário de comissaoApartadaPct em
+// types.ts). "Parcelamento Morar" não tem par de comissão apartada. As telas
+// simplificadas ("**"/"Com. Apartada)**") não entram aqui: usam o MESMO
+// ConditionKind das versões completas (getConditionKind não distingue
+// completa de simplificada), então já ficam sincronizadas automaticamente.
+const PAR_COMISSAO_APARTADA: Partial<Record<ConditionKind, ConditionKind>> = {
+  'sinal-morar': 'sinal-morar-comissao-apartada',
+  'banco-direto': 'banco-direto-comissao-apartada',
+};
+
+// Parâmetros que NUNCA são propagados da condição base para o par de Comissão
+// Apartada: as regras específicas da própria comissão (dedução e parcelamento
+// dela) e o texto descritivo da política, que referencia o nome de cada
+// condição — tudo o mais (prazos, taxas, limites de risco, travas de
+// aprovação) deve ficar idêntico entre as duas.
+const CAMPOS_EXCLUSIVOS_COMISSAO_APARTADA: (keyof CommercialCondition)[] = [
+  'comissaoApartadaPct',
+  'comissaoApartadaParcelas',
+  'comissaoApartadaParcelasMin',
+  'comissaoApartadaParcelasMax',
+  'policy',
+];
 
 interface PoliciesViewProps {
   products: Product[];
@@ -569,12 +593,50 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     });
   };
 
+  // Mesma aplicação de `applyParamsToCondition`, mas também propaga (herda)
+  // automaticamente os parâmetros da política para a condição-par de Comissão
+  // Apartada do mesmo empreendimento, quando `condId` for uma condição base
+  // com par (ver PAR_COMISSAO_APARTADA) — sem tocar nas regras próprias de
+  // comissão nem no texto da política do par (CAMPOS_EXCLUSIVOS_COMISSAO_APARTADA).
+  // Usada em todo ponto que persiste edições de política (salvar explícito ou
+  // salvamento preventivo ao trocar de condição/fase), garantindo que a aba de
+  // Comissão Apartada nunca fique com regras desatualizadas em relação à base.
+  const applyParamsWithApartadaSync = (
+    conditions: CommercialCondition[],
+    condId: string,
+    params: Partial<CommercialCondition>,
+    fase: '1' | '2'
+  ): CommercialCondition[] => {
+    const updated = applyParamsToCondition(conditions, condId, params, fase);
+
+    const sourceCond = conditions.find(c => c.id === condId);
+    const pairKind = PAR_COMISSAO_APARTADA[getConditionKind(sourceCond?.name)];
+    if (!pairKind) return updated;
+
+    const syncedParams: Partial<CommercialCondition> = { ...params };
+    CAMPOS_EXCLUSIVOS_COMISSAO_APARTADA.forEach(key => {
+      delete syncedParams[key];
+    });
+
+    return updated.map(c => {
+      if (c.id === condId) return c;
+      if (getConditionKind(c.name) !== pairKind) return c;
+      if (fase === '2') {
+        return {
+          ...c,
+          fase2Params: { ...(c.fase2Params || {}), ...syncedParams }
+        };
+      }
+      return { ...c, ...syncedParams };
+    });
+  };
+
   const handleSelectCondition = (condId: string) => {
     if (!prodWithConds) return;
 
     // Salva preventivamente o estado atual da condição (na fase que estava sendo editada) antes de trocar
     const params = buildCurrentParamsObject();
-    const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, params, editingFase);
+    const updatedConditions = applyParamsWithApartadaSync(prodWithConds.conditions || [], activeConditionId, params, editingFase);
 
     const updatedProd: Product = {
       ...prodWithConds,
@@ -606,7 +668,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
     }
 
     const params = buildCurrentParamsObject();
-    const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, params, editingFase);
+    const updatedConditions = applyParamsWithApartadaSync(prodWithConds.conditions || [], activeConditionId, params, editingFase);
 
     const updatedProd: Product = {
       ...prodWithConds,
@@ -663,7 +725,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
 
     // Salvar as edições atuais da condição em tela (na fase que estava sendo editada)
     const params = buildCurrentParamsObject();
-    const currentConditionsUpdated = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, params, editingFase);
+    const currentConditionsUpdated = applyParamsWithApartadaSync(prodWithConds.conditions || [], activeConditionId, params, editingFase);
 
     const updatedProd: Product = {
       ...prodWithConds,
@@ -857,7 +919,7 @@ export const PoliciesView: React.FC<PoliciesViewProps> = ({
       descontoAVistaPct: parsedDescontoAVista,
       policy: policyText
     };
-    const updatedConditions = applyParamsToCondition(prodWithConds.conditions || [], activeConditionId, savedParams, editingFase);
+    const updatedConditions = applyParamsWithApartadaSync(prodWithConds.conditions || [], activeConditionId, savedParams, editingFase);
 
     const updatedProd: Product = {
       ...prodWithConds,
